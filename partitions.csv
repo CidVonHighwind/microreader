@@ -1,0 +1,3 @@
+# Name,   Type, SubType, Offset,  Size
+nvs,      data, nvs,     0x9000,  20K
+factory,  app,  factory, 0x10000, 15M
