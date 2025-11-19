@@ -46,6 +46,10 @@ class EInk426_BW : public EInk_Base {
   static const uint8_t TEMP_SENSOR_INTERNAL = 0x80;  // Use internal temperature sensor
   static const uint8_t TEMP_SENSOR_EXTERNAL = 0x48;  // Use external temperature sensor
 
+  // Voltage Control Commands
+  static const uint8_t CMD_GATE_VOLTAGE = 0x03;    // VGH setting
+  static const uint8_t CMD_SOURCE_VOLTAGE = 0x04;  // VSH1, VSH2, VSL setting
+
   // attributes
   static const uint16_t WIDTH = 800;  // source, max 960
   static const uint16_t WIDTH_VISIBLE = WIDTH;
@@ -107,10 +111,17 @@ class EInk426_BW : public EInk_Base {
   void powerOff();   // turns off generation of panel driving voltages, avoids screen fading over time
   void hibernate();  // turns powerOff() and sets controller to deep sleep for minimum power use, ONLY if wakeable by
                      // RST (rst >= 0)
-  void setFastPartialUpdate(bool enabled);  // enable/disable fast LUT for partial updates
+  void setCustomLUT(bool enabled);  // Enable or disable custom LUT (loads LUT when enabled, resets when disabled)
+  void resetDisplay();              // Reset display to default settings (call after custom LUT testing)
+  uint16_t calculateLUTRefreshTime(const uint8_t* lut);  // Calculate refresh time from LUT timing parameters
+  uint16_t getCustomLUTRefreshTime() const {
+    return _custom_lut_refresh_time;
+  }  // Get calculated refresh time for active custom LUT
 
  private:
-  static const unsigned char lut_partial_fast[];
+  static const unsigned char lut_custom_test[];
+  bool _custom_lut_active = false;        // Track if custom LUT is loaded
+  uint16_t _custom_lut_refresh_time = 0;  // Calculated refresh time for custom LUT
   void _writeScreenBuffer(uint8_t command, uint8_t value);
   void _writeImage(uint8_t command, const uint8_t bitmap[], int16_t x, int16_t y, int16_t w, int16_t h,
                    bool invert = false, bool mirror_y = false, bool pgm = false);
@@ -123,6 +134,7 @@ class EInk426_BW : public EInk_Base {
   void _InitDisplay();
   void _Update_Full();
   void _Update_Part();
+  void _LoadCustomLUT();  // Load custom LUT with voltage initialization
 };
 
 #endif

@@ -117,7 +117,7 @@ class EInk_Base {
 
  protected:
   void _reset();
-  void _waitWhileBusy(const char* comment = 0, uint16_t busy_time = 5000);
+  unsigned long _waitWhileBusy(const char* comment = 0, uint16_t busy_time = 5000);
   void _writeCommand(uint8_t c);
   void _writeData(uint8_t d);
   void _writeData(const uint8_t* data, uint16_t n);

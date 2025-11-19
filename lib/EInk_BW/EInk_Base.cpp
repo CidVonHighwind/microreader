@@ -134,7 +134,8 @@ void EInk_Base::_reset() {
   }
 }
 
-void EInk_Base::_waitWhileBusy(const char* comment, uint16_t busy_time) {
+unsigned long EInk_Base::_waitWhileBusy(const char* comment, uint16_t busy_time) {
+  unsigned long elapsed = 0;
   if (_busy >= 0) {
     delay(1);  // add some margin to become active
     unsigned long start = micros();
@@ -155,19 +156,21 @@ void EInk_Base::_waitWhileBusy(const char* comment, uint16_t busy_time) {
       yield();  // avoid wdt
 #endif
     }
+    elapsed = micros() - start;
     if (comment) {
 #if !defined(DISABLE_DIAGNOSTIC_OUTPUT)
       if (_diag_enabled) {
-        unsigned long elapsed = micros() - start;
         Serial.print(comment);
         Serial.print(" : ");
         Serial.println(elapsed);
       }
 #endif
     }
-    (void)start;
-  } else
+  } else {
     delay(busy_time);
+    elapsed = (unsigned long)busy_time * 1000;  // Convert ms to us
+  }
+  return elapsed;
 }
 
 void EInk_Base::_writeCommand(uint8_t c) {

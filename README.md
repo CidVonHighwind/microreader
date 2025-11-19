@@ -96,6 +96,9 @@ C:/Users/Patrick/Desktop/microreader/.venv/Scripts/platformio.exe device monitor
   - `EInk_Gray_Display<>`: Template wrapper for grayscale displays
 - **Menu System**: Modular design with swappable `MenuDisplay` and `MenuDisplayGray` classes
 
+### Todoy
+- Create custom LUT
+
 ### Next Steps
 - Fast find LUT
 - Font rendering

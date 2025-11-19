@@ -40,12 +40,16 @@ volatile bool fullRedrawRequested = false;
 volatile int desiredCursorIndex = 0;    // Where cursor should be
 volatile int displayedCursorIndex = 0;  // Where cursor currently is on screen
 
+// Test rectangle state
+bool testRectangleBlack = true;  // Toggle between black and white
+
 // Display update task running on separate core
 void displayUpdateTask(void* parameter) {
   while (1) {
     if (fullRedrawRequested) {
-      menuDisplay.drawFullMenu(menuItems, menuCount, desiredCursorIndex);
-      displayedCursorIndex = desiredCursorIndex;
+      int newIndex = desiredCursorIndex;
+      menuDisplay.drawFullMenu(menuItems, menuCount, newIndex);
+      displayedCursorIndex = newIndex;
       fullRedrawRequested = false;
     } else if (desiredCursorIndex != displayedCursorIndex) {
       int oldIndex = displayedCursorIndex;
@@ -132,10 +136,29 @@ void loop() {
 
     Serial.printf("Selected: %s\n", menuItems[selectedIndex]);
     desiredCursorIndex = selectedIndex;  // Display task will handle the update
+  } else if (buttons.wasPressed(Buttons::VOLUME_UP)) {
+    Serial.println("Enable Custom LUT");
+    display.epd2.setCustomLUT(true);  // Enable custom LUT
+    uint16_t calculated_time = display.epd2.getCustomLUTRefreshTime();
+    Serial.printf("Calculated refresh time: %d ms\n", calculated_time);
+  } else if (buttons.wasPressed(Buttons::VOLUME_DOWN)) {
+    Serial.println("Disable Custom LUT");
+    display.epd2.setCustomLUT(false);  // Disable custom LUT and reset to defaults
   } else if (buttons.wasPressed(Buttons::CONFIRM)) {
-    Serial.printf("Opening: %s\n", menuItems[selectedIndex]);
+    // Draw test rectangle with custom LUT using same pattern as cursor updates
+    uint16_t fillColor = testRectangleBlack ? GxEPD_BLACK : GxEPD_WHITE;
+    Serial.printf("Drawing test rectangle: %s\n", testRectangleBlack ? "BLACK" : "WHITE");
+
+    // Use partial window and fill - same approach as updateCursor
+    display.setPartialWindow(300, 30, 100, 100);
+    display.firstPage();
+    do {
+      display.fillScreen(fillColor);
+    } while (display.nextPage());
+
+    testRectangleBlack = !testRectangleBlack;  // Toggle for next press
   } else if (buttons.wasPressed(Buttons::BACK)) {
-    // Request full redraw in background task
+    // Request full redraw in background task (this will clear the test rectangle)
     fullRedrawRequested = true;
   }
 }

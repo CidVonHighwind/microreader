@@ -128,6 +128,8 @@ void EInk426_BW::_setPartialRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t
 
 void EInk426_BW::clearScreen(uint8_t value) {
   // Full refresh needed for all cases (previous != screen)
+  // Reset to default display settings (in case custom LUT was loaded)
+  _InitDisplay();
   _writeScreenBuffer(CMD_WRITE_RAM_RED, value);  // set previous buffer (RED RAM used as previous)
   _writeScreenBuffer(CMD_WRITE_RAM_BW, value);   // set current buffer (BW RAM)
   refresh(false);                                // full refresh
@@ -395,25 +397,36 @@ void EInk426_BW::refresh(int16_t x, int16_t y, int16_t w, int16_t h) {
 // Update Routines (LUT & Waveform Control)
 // =============================================================================
 
-// Fast partial update LUT - reduces phases and timing for quicker updates
-// Trade-off: Less clean transitions, may have ghosting, but 3-5x faster
-const unsigned char EInk426_BW::lut_partial_fast[] PROGMEM = {
-    0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT0 - Black to White
-    0x80, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT1 - White to Black
-    0x40, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT2 - White to White
-    0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT3 - Black to Black
+// clang-format off
+// Custom test LUT with voltage values (110 bytes total)
+// Format: 50 bytes VS + 50 bytes TP/RP + 5 bytes frame rate + 5 bytes voltages
+const unsigned char EInk426_BW::lut_custom_test[] PROGMEM = {
+    // VS blocks (5 x 10 bytes = 50 bytes)
+    0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT0 - Black to Black
+    0x88, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT1 - Black to White
+    0x44, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT2 - White to Black
+    0x02, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT3 - White to White
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT4 - VCOM
 
-    0x0A, 0x00, 0x00, 0x00, 0x00,  // TP0-4: Phase timings (reduced from ~50ms to ~10ms)
-    0x00, 0x00, 0x00, 0x00, 0x00,  // TP5-9
-    0x00, 0x00, 0x00, 0x00, 0x00,  // Repeat counts (all 0 = single pass)
+    // TP/RP blocks (10 x 5 bytes = 50 bytes)
+    0x01, 0x01, 0x01, 0x01, 0x00,  // Group 0
+    0x01, 0x01, 0x01, 0x01, 0x00,  // Group 1
+    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 2
+    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 3
+    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 4
+    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 5
+    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 6
+    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 7
+    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 8
+    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 9
+
+    // Frame rate bytes (5 bytes)
+    0x44, 0x44, 0x44, 0x44, 0x44,
+
+    // Voltage values (5 bytes): VGH, VSH1, VSH2, VSL, VCOM
+    0x17, 0x41, 0xA8, 0x32, 0x30,
 };
-
-bool _use_fast_lut = false;
-
-void EInk426_BW::setFastPartialUpdate(bool enabled) {
-  _use_fast_lut = enabled;
-}
+// clang-format on
 
 void EInk426_BW::_Update_Full() {
   // Display Update Control 1
@@ -439,24 +452,124 @@ void EInk426_BW::_Update_Full() {
 }
 
 void EInk426_BW::_Update_Part() {
-  if (_use_fast_lut) {
-    // Load fast custom LUT for quicker partial updates
-    _writeCommand(CMD_WRITE_LUT);
-    for (uint16_t i = 0; i < sizeof(lut_partial_fast); i++) {
-      _writeData(pgm_read_byte(&lut_partial_fast[i]));
-    }
-  }
-
   // Display Update Control 1
   _writeCommand(CMD_DISPLAY_UPDATE_CTRL1);
   _writeData(UPDATE_CTRL1_NORMAL);  // RED RAM normal (not bypassed)
   _writeData(0x00);                 // single chip application
 
-  // Display Update Control 2: select fast or normal partial update
+  // Display Update Control 2: use custom LUT mode if active, otherwise normal partial
   _writeCommand(CMD_DISPLAY_UPDATE_CTRL2);
-  _writeData(_use_fast_lut ? UPDATE_MODE_PARTIAL_FAST : UPDATE_MODE_PARTIAL_NORMAL);
+  if (_custom_lut_active) {
+    _writeData(UPDATE_MODE_PARTIAL_FAST);  // Use fast mode with custom LUT
+  } else {
+    _writeData(UPDATE_MODE_PARTIAL_NORMAL);  // Normal partial update
+  }
 
   _writeCommand(CMD_MASTER_ACTIVATION);
-  _waitWhileBusy("_Update_Part", _use_fast_lut ? 200 : partial_refresh_time);
+
+  // Capture actual elapsed time from BUSY pin
+  unsigned long elapsed_us = _waitWhileBusy("_Update_Part", 0u);
+  Serial.printf("Parial update time: %d ms\n", elapsed_us / 1000);
+
   _power_is_on = true;
+}
+
+// =============================================================================
+// Testing / Debug Methods
+// =============================================================================
+
+uint16_t EInk426_BW::calculateLUTRefreshTime(const uint8_t* lut) {
+  // Calculate refresh time from LUT timing parameters
+  // LUT structure: 50 bytes VS + 50 bytes TP/RP + 5 bytes frame rate + 5 bytes voltages
+  // TP/RP section: 10 groups of 5 bytes each (TP0, TP1, TP2, TP3, RP)
+  // Each TP value represents number of frames, RP is repeat count (0 = repeat once)
+
+  uint32_t total_frames = 0;
+
+  // Parse the 10 TP/RP groups (bytes 50-99)
+  for (uint8_t group = 0; group < 10; group++) {
+    uint16_t group_offset = 50 + (group * 5);
+    uint8_t tp0 = pgm_read_byte(&lut[group_offset + 0]);
+    uint8_t tp1 = pgm_read_byte(&lut[group_offset + 1]);
+    uint8_t tp2 = pgm_read_byte(&lut[group_offset + 2]);
+    uint8_t tp3 = pgm_read_byte(&lut[group_offset + 3]);
+    uint8_t rp = pgm_read_byte(&lut[group_offset + 4]);
+
+    // RP value: 0 means repeat once, 1 means repeat twice, etc.
+    uint8_t repeat_count = rp + 1;
+
+    // Sum all timing phases for this group
+    uint16_t group_frames = (tp0 + tp1 + tp2 + tp3) * repeat_count;
+    total_frames += group_frames;
+  }
+
+  // Read frame rate bytes (100-104) - these control the base timing per frame
+  // Average the 5 frame rate bytes to get timing multiplier
+  uint32_t frame_rate_sum = 0;
+  for (uint8_t i = 0; i < 5; i++) {
+    frame_rate_sum += pgm_read_byte(&lut[100 + i]);
+  }
+  uint8_t avg_frame_rate = frame_rate_sum / 5;
+
+  // Convert frame rate value to milliseconds per frame
+  // Formula: FrameTime = BaseClock / FrameRateByte
+  // BaseClock is typically 2000-3000 (assumed 2500 for this calculation)
+  // Lower FrameRateByte = longer frame time (slower refresh)
+  // 0x22 (34) → 2500/34 ≈ 73ms, 0x44 (68) → 2500/68 ≈ 36ms
+  uint16_t ms_per_frame = 2500 / avg_frame_rate;
+  if (ms_per_frame < 10)
+    ms_per_frame = 10;  // Minimum 10ms per frame
+
+  uint16_t refresh_time = (total_frames * ms_per_frame);
+
+  // Add safety margin (10%) to account for controller overhead
+  refresh_time = refresh_time + (refresh_time / 10);
+
+  return refresh_time;
+}
+
+void EInk426_BW::setCustomLUT(bool enabled) {
+  if (enabled) {
+    // Load custom LUT with voltage initialization
+    // Does NOT trigger a refresh - just prepares the LUT for subsequent refresh operations
+
+    // Initialize display if needed
+    if (!_init_display_done)
+      _InitDisplay();
+
+    // Load custom test LUT with voltage initialization
+    // First 105 bytes are LUT data (VS + TP/RP + frame rate)
+    _writeCommand(CMD_WRITE_LUT);
+    for (uint16_t i = 0; i < 105; i++) {
+      _writeData(pgm_read_byte(&lut_custom_test[i]));
+    }
+
+    // Set voltage values from bytes 105-109
+    _writeCommand(CMD_GATE_VOLTAGE);  // 0x03: VGH
+    _writeData(pgm_read_byte(&lut_custom_test[105]));
+
+    _writeCommand(CMD_SOURCE_VOLTAGE);                 // 0x04: VSH1, VSH2, VSL
+    _writeData(pgm_read_byte(&lut_custom_test[106]));  // VSH1
+    _writeData(pgm_read_byte(&lut_custom_test[107]));  // VSH2
+    _writeData(pgm_read_byte(&lut_custom_test[108]));  // VSL
+
+    _writeCommand(CMD_WRITE_VCOM);  // 0x2C: VCOM
+    _writeData(pgm_read_byte(&lut_custom_test[109]));
+
+    // Calculate and store the refresh time for this LUT
+    _custom_lut_refresh_time = calculateLUTRefreshTime(lut_custom_test);
+    _custom_lut_active = true;
+
+    // LUT is now loaded and ready to use for subsequent refresh operations
+  } else {
+    // Disable custom LUT and reset to default settings
+    resetDisplay();
+  }
+}
+
+void EInk426_BW::resetDisplay() {
+  // Reset display to default settings after custom LUT testing
+  _custom_lut_active = false;
+  _custom_lut_refresh_time = 0;
+  _InitDisplay();
 }
