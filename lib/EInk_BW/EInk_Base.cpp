@@ -1,21 +1,6 @@
-// Display Library for SPI e-paper panels from Dalian Good Display and boards from Waveshare.
-// Requires HW SPI and Adafruit_GFX. Caution: the e-paper panels require 3.3V supply AND data lines!
-//
-// Display Library based on Demo Example from Good Display: https://www.good-display.com/companyfile/32/
-//
-// Author: Jean-Marc Zingg
-//
-// Version: see library.properties
-//
-// Library: https://github.com/ZinggJM/GxEPD2
-
 #include "EInk_Base.h"
 
-#if defined(ESP8266) || defined(ESP32)
 #include <pgmspace.h>
-#else
-#include <avr/pgmspace.h>
-#endif
 
 EInk_Base::EInk_Base(int16_t cs, int16_t dc, int16_t rst, int16_t busy, int16_t busy_level, uint32_t busy_timeout,
                      uint16_t w, uint16_t h, EInk::Panel p, bool c, bool pu, bool fpu)
@@ -33,7 +18,7 @@ EInk_Base::EInk_Base(int16_t cs, int16_t dc, int16_t rst, int16_t busy, int16_t 
       _busy_timeout(busy_timeout),
       _diag_enabled(false),
       _pSPIx(&SPI),
-      _spi_settings(4000000, MSBFIRST, SPI_MODE0) {
+      _spi_settings(20000000, MSBFIRST, SPI_MODE0) {
   _initial_write = true;
   _initial_refresh = true;
   _power_is_on = false;

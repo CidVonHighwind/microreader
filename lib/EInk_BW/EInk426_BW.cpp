@@ -398,33 +398,39 @@ void EInk426_BW::refresh(int16_t x, int16_t y, int16_t w, int16_t h) {
 // =============================================================================
 
 // clang-format off
-// Custom test LUT with voltage values (110 bytes total)
-// Format: 50 bytes VS + 50 bytes TP/RP + 5 bytes frame rate + 5 bytes voltages
-const unsigned char EInk426_BW::lut_custom_test[] PROGMEM = {
-    // VS blocks (5 x 10 bytes = 50 bytes)
-    0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT0 - Black to Black
-    0x88, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT1 - Black to White
-    0x44, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT2 - White to Black
-    0x02, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT3 - White to White
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT4 - VCOM
+const unsigned char lut_custom[] PROGMEM = {
+  // VS L0-L3 (voltage patterns per transition)
+  // Black → Black: [VSH1→VSS→VSS→VSH1→VSS→VSS→VSH1→VSS]
+  0x41,0x04,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  // Black → White: [VSL→VSL→VSS→VSL→VSL→VSS→VSL→VSL]
+  0xA2,0x8A,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  // White → Black: [VSH2→VSH2→VSS→VSH2→VSH2→VSS→VSH1→VSH1]
+  0xF3,0xC5,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  // White → White: [VSL→VSS→VSS→VSL→VSS→VSS→VSL→VSS]
+  0x82,0x08,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+  // L4 (VCOM)
+  0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
 
-    // TP/RP blocks (10 x 5 bytes = 50 bytes)
-    0x01, 0x01, 0x01, 0x01, 0x00,  // Group 0
-    0x01, 0x01, 0x01, 0x01, 0x00,  // Group 1
-    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 2
-    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 3
-    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 4
-    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 5
-    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 6
-    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 7
-    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 8
-    0x00, 0x00, 0x00, 0x00, 0x00,  // Group 9
+  // TP/RP groups (global timing)
+  0x01,0x01,0x01,0x01,0x01,  // G0: A=1 B=1 C=1 D=1 RP=0 (4 frames)
+  0x01,0x01,0x01,0x01,0x01,  // G1: A=1 B=1 C=1 D=1 RP=0 (4 frames)
+  0x00,0x00,0x00,0x00,0x00,  // G2: A=0 B=0 C=0 D=0 RP=0
+  0x00,0x00,0x00,0x00,0x00,  // G3: A=0 B=0 C=0 D=0 RP=0
+  0x00,0x00,0x00,0x00,0x00,  // G4: A=0 B=0 C=0 D=0 RP=0
+  0x00,0x00,0x00,0x00,0x00,  // G5: A=0 B=0 C=0 D=0 RP=0
+  0x00,0x00,0x00,0x00,0x00,  // G6: A=0 B=0 C=0 D=0 RP=0
+  0x00,0x00,0x00,0x00,0x00,  // G7: A=0 B=0 C=0 D=0 RP=0
+  0x00,0x00,0x00,0x00,0x00,  // G8: A=0 B=0 C=0 D=0 RP=0
+  0x00,0x00,0x00,0x00,0x00,  // G9: A=0 B=0 C=0 D=0 RP=0
 
-    // Frame rate bytes (5 bytes)
-    0x44, 0x44, 0x44, 0x44, 0x44,
+  // Frame rate
+  0x8F,0x8F,0x8F,0x8F,0x8F,
 
-    // Voltage values (5 bytes): VGH, VSH1, VSH2, VSL, VCOM
-    0x17, 0x41, 0xA8, 0x32, 0x30,
+  // Voltages (VGH, VSH1, VSH2, VSL, VCOM)
+  0x17,0x41,0xA8,0x32,0x30,
+
+  // Reserved
+  0x00,0x00
 };
 // clang-format on
 
@@ -459,17 +465,22 @@ void EInk426_BW::_Update_Part() {
 
   // Display Update Control 2: use custom LUT mode if active, otherwise normal partial
   _writeCommand(CMD_DISPLAY_UPDATE_CTRL2);
+
+  // 11000111: Enable clock signal, Enable CP, Enable S1, Enable S2, Disable S3, Disable S4, Disable S5, Disable S6
   if (_custom_lut_active) {
     _writeData(UPDATE_MODE_PARTIAL_FAST);  // Use fast mode with custom LUT
   } else {
     _writeData(UPDATE_MODE_PARTIAL_NORMAL);  // Normal partial update
   }
 
-  _writeCommand(CMD_MASTER_ACTIVATION);
+  // for (size_t i = 0; i < (_custom_lut_active ? 2 : 1); i++)
+  {
+    _writeCommand(CMD_MASTER_ACTIVATION);
 
-  // Capture actual elapsed time from BUSY pin
-  unsigned long elapsed_us = _waitWhileBusy("_Update_Part", 0u);
-  Serial.printf("Parial update time: %d ms\n", elapsed_us / 1000);
+    // Capture actual elapsed time from BUSY pin
+    unsigned long elapsed_us = _waitWhileBusy("_Update_Part", 0u);
+    Serial.printf("[%lu ms] Partial update time: %d ms\n", millis(), elapsed_us / 1000);
+  }
 
   _power_is_on = true;
 }
@@ -541,23 +552,23 @@ void EInk426_BW::setCustomLUT(bool enabled) {
     // First 105 bytes are LUT data (VS + TP/RP + frame rate)
     _writeCommand(CMD_WRITE_LUT);
     for (uint16_t i = 0; i < 105; i++) {
-      _writeData(pgm_read_byte(&lut_custom_test[i]));
+      _writeData(pgm_read_byte(&lut_custom[i]));
     }
 
     // Set voltage values from bytes 105-109
     _writeCommand(CMD_GATE_VOLTAGE);  // 0x03: VGH
-    _writeData(pgm_read_byte(&lut_custom_test[105]));
+    _writeData(pgm_read_byte(&lut_custom[105]));
 
-    _writeCommand(CMD_SOURCE_VOLTAGE);                 // 0x04: VSH1, VSH2, VSL
-    _writeData(pgm_read_byte(&lut_custom_test[106]));  // VSH1
-    _writeData(pgm_read_byte(&lut_custom_test[107]));  // VSH2
-    _writeData(pgm_read_byte(&lut_custom_test[108]));  // VSL
+    _writeCommand(CMD_SOURCE_VOLTAGE);            // 0x04: VSH1, VSH2, VSL
+    _writeData(pgm_read_byte(&lut_custom[106]));  // VSH1
+    _writeData(pgm_read_byte(&lut_custom[107]));  // VSH2
+    _writeData(pgm_read_byte(&lut_custom[108]));  // VSL
 
     _writeCommand(CMD_WRITE_VCOM);  // 0x2C: VCOM
-    _writeData(pgm_read_byte(&lut_custom_test[109]));
+    _writeData(pgm_read_byte(&lut_custom[109]));
 
     // Calculate and store the refresh time for this LUT
-    _custom_lut_refresh_time = calculateLUTRefreshTime(lut_custom_test);
+    _custom_lut_refresh_time = calculateLUTRefreshTime(lut_custom);
     _custom_lut_active = true;
 
     // LUT is now loaded and ready to use for subsequent refresh operations

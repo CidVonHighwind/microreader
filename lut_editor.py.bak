@@ -1,0 +1,615 @@
+#!/usr/bin/env python3
+"""
+SSD1677 LUT Editor with GUI
+Interactive tool for creating and editing custom LUTs for e-paper displays
+Intuitive sequence-based editing interface
+"""
+
+import tkinter as tk
+from tkinter import ttk, scrolledtext, messagebox, filedialog
+import json
+from typing import List, Dict, Tuple
+
+VS_MAP = {
+    0b00: "VSS",
+    0b01: "VSH1",
+    0b10: "VSL",
+    0b11: "VSH2",
+}
+
+VS_REVERSE = {v: k for k, v in VS_MAP.items()}
+
+TRANSITION_NAMES = ["Black → Black", "Black → White", "White → Black", "White → White"]
+VOLTAGE_OPTIONS = ["VSS", "VSH1", "VSL", "VSH2"]
+
+
+class LUTEditor:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("SSD1677 LUT Editor - Sequence Based")
+        self.root.geometry("1400x900")
+
+        # Store sequences for each transition
+        # Each transition has: voltage pattern (repeating) + 4 phase timings (A/B/C/D) + repeat count
+        self.sequences = {
+            0: {  # B->B
+                'voltages': ["VSL", "VSH1"],  # voltage pattern that cycles through phases
+                'timing': [10, 10, 0, 0],  # TP_A, TP_B, TP_C, TP_D (frames per phase)
+                'repeat': 1  # RP
+            },
+            1: {  # B->W
+                'voltages': ["VSH2", "VSH1", "VSS"],
+                'timing': [10, 8, 4, 0],
+                'repeat': 1
+            },
+            2: {  # W->B
+                'voltages': ["VSL", "VSL", "VSS"],
+                'timing': [10, 8, 4, 0],
+                'repeat': 1
+            },
+            3: {  # W->W
+                'voltages': ["VSH1", "VSS"],
+                'timing': [10, 10, 0, 0],
+                'repeat': 1
+            }
+        }
+
+        # Frame rate and voltages
+        self.frame_rate = [0x44] * 5
+        self.voltages = {
+            "VGH": 0x17,
+            "VSH1": 0x41,
+            "VSH2": 0xA8,
+            "VSL": 0x32,
+            "VCOM": 0x30,
+        }
+
+        self.create_widgets()
+        self.update_preview()
+
+    def create_widgets(self):
+        # Create main paned window
+        paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Left panel - Sequence editors
+        left_frame = ttk.Frame(paned)
+        paned.add(left_frame, weight=2)
+
+        # Right panel - Preview and export
+        right_frame = ttk.Frame(paned)
+        paned.add(right_frame, weight=1)
+
+        self.create_sequence_editor(left_frame)
+        self.create_right_panel(right_frame)
+
+    def create_sequence_editor(self, parent):
+        # Main container with scrollbar
+        canvas = tk.Canvas(parent)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Title
+        title_frame = ttk.Frame(scrollable_frame)
+        title_frame.pack(fill=tk.X, padx=10, pady=10)
+        ttk.Label(title_frame, text="Waveform Sequences", font=("", 14, "bold")).pack()
+        ttk.Label(
+            title_frame,
+            text="Define voltage sequences for each pixel transition",
+            font=("", 9),
+        ).pack()
+
+        # Create editor for each transition
+        self.sequence_frames = {}
+        for i in range(4):
+            self.create_transition_editor(scrollable_frame, i)
+
+        # Settings section
+        settings_frame = ttk.LabelFrame(
+            scrollable_frame, text="Global Settings", padding=10
+        )
+        settings_frame.pack(fill=tk.X, padx=10, pady=10)
+        self.create_settings_editor(settings_frame)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+    def create_transition_editor(self, parent, transition_idx):
+        """Create editor for one transition (B->B, B->W, etc.)"""
+        frame = ttk.LabelFrame(
+            parent, text=TRANSITION_NAMES[transition_idx], padding=10
+        )
+        frame.pack(fill=tk.X, padx=10, pady=5)
+
+        # Container for phase list
+        phases_container = ttk.Frame(frame)
+        phases_container.pack(fill=tk.X, pady=5)
+
+        self.sequence_frames[transition_idx] = {
+            "phases_container": phases_container,
+            "phase_widgets": [],
+        }
+
+        # Add phase button
+        button_frame = ttk.Frame(frame)
+        button_frame.pack(fill=tk.X)
+        ttk.Button(
+            button_frame,
+            text="+ Add Phase",
+            command=lambda: self.add_phase(transition_idx),
+        ).pack(side=tk.LEFT, padx=2)
+
+        # Repeat count
+        repeat_frame = ttk.Frame(frame)
+        repeat_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(
+            repeat_frame, text="Repeat entire sequence:", font=("", 9, "bold")
+        ).pack(side=tk.LEFT)
+        repeat_spin = ttk.Spinbox(repeat_frame, from_=1, to=10, width=5)
+        repeat_spin.set(str(self.repeat_counts[transition_idx]))
+        repeat_spin.pack(side=tk.LEFT, padx=5)
+        repeat_spin.bind(
+            "<KeyRelease>", lambda e: self.on_repeat_change(transition_idx)
+        )
+        repeat_spin.bind(
+            "<<Increment>>", lambda e: self.on_repeat_change(transition_idx)
+        )
+        repeat_spin.bind(
+            "<<Decrement>>", lambda e: self.on_repeat_change(transition_idx)
+        )
+        self.sequence_frames[transition_idx]["repeat_spin"] = repeat_spin
+        ttk.Label(repeat_frame, text="time(s)").pack(side=tk.LEFT)
+
+        # Load initial phases
+        self.reload_phases(transition_idx)
+
+    def add_phase(self, transition_idx):
+        """Add a new phase to the sequence"""
+        self.sequences[transition_idx].append(("VSS", 5))
+        self.reload_phases(transition_idx)
+        self.update_preview()
+
+    def remove_phase(self, transition_idx, phase_idx):
+        """Remove a phase from the sequence"""
+        if len(self.sequences[transition_idx]) > 1:
+            self.sequences[transition_idx].pop(phase_idx)
+            self.reload_phases(transition_idx)
+            self.update_preview()
+
+    def reload_phases(self, transition_idx):
+        """Reload all phase widgets for a transition"""
+        container = self.sequence_frames[transition_idx]["phases_container"]
+
+        # Clear existing widgets
+        for widget in container.winfo_children():
+            widget.destroy()
+
+        self.sequence_frames[transition_idx]["phase_widgets"] = []
+
+        # Create widgets for each phase
+        for phase_idx, (voltage, frames) in enumerate(self.sequences[transition_idx]):
+            phase_frame = ttk.Frame(container)
+            phase_frame.pack(fill=tk.X, pady=2)
+
+            ttk.Label(phase_frame, text=f"Phase {phase_idx + 1}:", width=8).pack(
+                side=tk.LEFT
+            )
+
+            # Voltage selector
+            voltage_combo = ttk.Combobox(
+                phase_frame, values=VOLTAGE_OPTIONS, width=8, state="readonly"
+            )
+            voltage_combo.set(voltage)
+            voltage_combo.pack(side=tk.LEFT, padx=5)
+            voltage_combo.bind(
+                "<<ComboboxSelected>>",
+                lambda e, t=transition_idx, p=phase_idx: self.on_phase_change(t, p),
+            )
+
+            ttk.Label(phase_frame, text="for").pack(side=tk.LEFT, padx=2)
+
+            # Frame count
+            frames_spin = ttk.Spinbox(phase_frame, from_=0, to=255, width=6)
+            frames_spin.set(str(frames))
+            frames_spin.pack(side=tk.LEFT, padx=5)
+            frames_spin.bind(
+                "<KeyRelease>",
+                lambda e, t=transition_idx, p=phase_idx: self.on_phase_change(t, p),
+            )
+            frames_spin.bind(
+                "<<Increment>>",
+                lambda e, t=transition_idx, p=phase_idx: self.on_phase_change(t, p),
+            )
+            frames_spin.bind(
+                "<<Decrement>>",
+                lambda e, t=transition_idx, p=phase_idx: self.on_phase_change(t, p),
+            )
+
+            ttk.Label(phase_frame, text="frames").pack(side=tk.LEFT, padx=2)
+
+            # Remove button
+            ttk.Button(
+                phase_frame,
+                text="✕",
+                width=3,
+                command=lambda t=transition_idx, p=phase_idx: self.remove_phase(t, p),
+            ).pack(side=tk.LEFT, padx=5)
+
+            self.sequence_frames[transition_idx]["phase_widgets"].append(
+                {"frame": phase_frame, "voltage": voltage_combo, "frames": frames_spin}
+            )
+
+    def on_phase_change(self, transition_idx, phase_idx):
+        """Handle phase parameter change"""
+        widgets = self.sequence_frames[transition_idx]["phase_widgets"][phase_idx]
+        voltage = widgets["voltage"].get()
+        try:
+            frames = int(widgets["frames"].get() or 0)
+        except ValueError:
+            frames = 0
+
+        self.sequences[transition_idx][phase_idx] = (voltage, frames)
+        self.update_preview()
+
+    def on_repeat_change(self, transition_idx):
+        """Handle repeat count change"""
+        repeat_spin = self.sequence_frames[transition_idx]["repeat_spin"]
+        try:
+            repeat = int(repeat_spin.get() or 1)
+            if repeat < 1:
+                repeat = 1
+            self.repeat_counts[transition_idx] = repeat
+        except ValueError:
+            pass
+        self.update_preview()
+
+    def create_settings_editor(self, parent):
+        """Create frame rate and voltage settings editor"""
+        # Frame rate
+        frame_rate_frame = ttk.Frame(parent)
+        frame_rate_frame.pack(fill=tk.X, pady=5)
+
+        ttk.Label(frame_rate_frame, text="Frame Rate:", font=("", 9, "bold")).pack(
+            side=tk.LEFT
+        )
+        ttk.Label(frame_rate_frame, text="  Lower = slower but more stable").pack(
+            side=tk.LEFT, padx=5
+        )
+
+        self.frame_rate_spin = ttk.Spinbox(frame_rate_frame, from_=1, to=255, width=6)
+        self.frame_rate_spin.set(str(self.frame_rate[0]))
+        self.frame_rate_spin.pack(side=tk.LEFT, padx=5)
+        self.frame_rate_spin.bind("<KeyRelease>", lambda e: self.on_framerate_change())
+        self.frame_rate_spin.bind("<<Increment>>", lambda e: self.on_framerate_change())
+        self.frame_rate_spin.bind("<<Decrement>>", lambda e: self.on_framerate_change())
+
+        ttk.Label(frame_rate_frame, text="(typically 0x22-0x88)").pack(side=tk.LEFT)
+
+        # Voltages
+        voltage_frame = ttk.Frame(parent)
+        voltage_frame.pack(fill=tk.X, pady=5)
+
+        ttk.Label(voltage_frame, text="Voltages:", font=("", 9, "bold")).pack(
+            anchor=tk.W
+        )
+
+        self.voltage_entries = {}
+        voltage_names = ["VGH", "VSH1", "VSH2", "VSL", "VCOM"]
+
+        v_grid = ttk.Frame(voltage_frame)
+        v_grid.pack(fill=tk.X, pady=2)
+
+        for i, name in enumerate(voltage_names):
+            ttk.Label(v_grid, text=f"{name}:").grid(
+                row=i, column=0, sticky=tk.W, padx=2, pady=2
+            )
+            entry = ttk.Entry(v_grid, width=8)
+            entry.insert(0, f"0x{self.voltages[name]:02X}")
+            entry.grid(row=i, column=1, padx=2, pady=2)
+            entry.bind("<KeyRelease>", lambda e: self.on_voltage_change())
+            self.voltage_entries[name] = entry
+
+    def on_framerate_change(self):
+        """Handle frame rate change"""
+        try:
+            val = int(self.frame_rate_spin.get() or 0x44)
+            self.frame_rate = [val] * 5
+        except ValueError:
+            pass
+        self.update_preview()
+
+    def on_voltage_change(self):
+        """Handle voltage change"""
+        for name, entry in self.voltage_entries.items():
+            try:
+                text = entry.get().strip()
+                if text.startswith("0x") or text.startswith("0X"):
+                    val = int(text, 16)
+                else:
+                    val = int(text)
+                self.voltages[name] = val & 0xFF
+            except ValueError:
+                pass
+        self.update_preview()
+
+    def create_right_panel(self, parent):
+        """Create preview and export panel"""
+        # Buttons
+        button_frame = ttk.Frame(parent)
+        button_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        ttk.Button(button_frame, text="Load", command=self.load_from_file).pack(
+            side=tk.LEFT, padx=2
+        )
+        ttk.Button(button_frame, text="Save", command=self.save_to_file).pack(
+            side=tk.LEFT, padx=2
+        )
+        ttk.Button(button_frame, text="Reset", command=self.reset_to_default).pack(
+            side=tk.LEFT, padx=2
+        )
+
+        # Timing info
+        info_frame = ttk.LabelFrame(parent, text="Timing Info", padding=5)
+        info_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        self.timing_label = ttk.Label(info_frame, text="Calculating...", font=("", 9))
+        self.timing_label.pack()
+
+        # Preview
+        preview_frame = ttk.LabelFrame(parent, text="C Array Output", padding=5)
+        preview_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        self.preview_text = scrolledtext.ScrolledText(
+            preview_frame, wrap=tk.WORD, font=("Consolas", 9)
+        )
+        self.preview_text.pack(fill=tk.BOTH, expand=True)
+
+        # Copy button
+        copy_frame = ttk.Frame(parent)
+        copy_frame.pack(fill=tk.X, padx=5, pady=5)
+        ttk.Button(
+            copy_frame, text="Copy to Clipboard", command=self.copy_to_clipboard
+        ).pack(fill=tk.X)
+
+    def sequences_to_lut(self) -> List[int]:
+        """Convert sequences to 112-byte LUT"""
+        lut = [0x00] * 112
+
+        # For each transition (L0-L3), create VS blocks
+        for trans_idx in range(4):
+            sequence = self.sequences[trans_idx]
+            vs_block_start = trans_idx * 10
+
+            # Pack voltage sequence into 10 bytes (40 phases, 2 bits each)
+            phases = []
+            for voltage, frame_count in sequence:
+                # Repeat this voltage for multiple phases to fill the block
+                phases.append(voltage)
+
+            # Pad or truncate to fill the VS block with meaningful pattern
+            # For simplicity, repeat the pattern
+            while len(phases) < 40:
+                for voltage, _ in sequence:
+                    phases.append(voltage)
+                    if len(phases) >= 40:
+                        break
+
+            phases = phases[:40]
+
+            # Encode into bytes
+            for byte_idx in range(10):
+                phase_group = phases[byte_idx * 4 : (byte_idx + 1) * 4]
+                byte_val = 0
+                for i, phase in enumerate(phase_group):
+                    shift = 6 - (i * 2)
+                    byte_val |= VS_REVERSE.get(phase, 0) << shift
+                lut[vs_block_start + byte_idx] = byte_val
+
+        # L4 (VCOM) - keep as zeros
+
+        # Build TP/RP groups from sequences
+        # Use first 4 groups for the 4 transitions
+        for trans_idx in range(4):
+            sequence = self.sequences[trans_idx]
+            repeat = self.repeat_counts[trans_idx]
+            group_start = 50 + trans_idx * 5
+
+            # Extract frame counts (up to 4 phases per group)
+            frame_counts = [frames for _, frames in sequence[:4]]
+            while len(frame_counts) < 4:
+                frame_counts.append(0)
+
+            lut[group_start] = frame_counts[0]
+            lut[group_start + 1] = frame_counts[1]
+            lut[group_start + 2] = frame_counts[2]
+            lut[group_start + 3] = frame_counts[3]
+            lut[group_start + 4] = repeat - 1  # RP is repeat_count - 1
+
+        # Frame rate
+        for i in range(5):
+            lut[100 + i] = self.frame_rate[i]
+
+        # Voltages
+        lut[105] = self.voltages["VGH"]
+        lut[106] = self.voltages["VSH1"]
+        lut[107] = self.voltages["VSH2"]
+        lut[108] = self.voltages["VSL"]
+        lut[109] = self.voltages["VCOM"]
+
+        return lut
+
+    def calculate_refresh_time(self) -> Tuple[int, int]:
+        """Calculate estimated refresh time in ms and total frames"""
+        total_frames = 0
+        
+        for trans_idx in range(4):
+            seq = self.sequences[trans_idx]
+            timing = seq['timing']
+            repeat = seq['repeat']
+            frames_in_group = sum(timing)  # A + B + C + D
+            total_frames += frames_in_group * (repeat + 1)  # RP=0 means 1 iteration        avg_frame_rate = sum(self.frame_rate) / 5
+
+        if avg_frame_rate > 0:
+            ms_per_frame = 2500 / avg_frame_rate
+        else:
+            ms_per_frame = 50
+
+        if ms_per_frame < 10:
+            ms_per_frame = 10
+
+        refresh_time = int(total_frames * ms_per_frame * 1.1)  # 10% safety margin
+
+        return refresh_time, total_frames
+
+    def update_preview(self):
+        """Update the C array preview"""
+        lut = self.sequences_to_lut()
+
+        # Calculate timing
+        refresh_time, total_frames = self.calculate_refresh_time()
+        self.timing_label.config(
+            text=f"Total frames: {total_frames}  |  Estimated time: ~{refresh_time}ms"
+        )
+
+        # Generate C array
+        output = "const unsigned char lut_custom[] PROGMEM = {\n"
+
+        # VS blocks
+        output += "  // VS L0..L3 (4 x 10 bytes) - Voltage waveforms\n"
+        for level in range(4):
+            output += f"  // {TRANSITION_NAMES[level]}\n  "
+            for byte_idx in range(10):
+                lut_idx = level * 10 + byte_idx
+                output += f"0x{lut[lut_idx]:02X},"
+            output += "\n"
+
+        output += "  // L4 (VCOM)\n  "
+        for byte_idx in range(10):
+            output += f"0x{lut[40 + byte_idx]:02X},"
+        output += "\n"
+
+        output += "\n  // TP/RP (10 x 5 bytes) - Timing phases\n"
+        for group in range(10):
+            base = 50 + group * 5
+            output += f"  "
+            for i in range(5):
+                output += f"0x{lut[base + i]:02X},"
+            if group < 4:
+                seq = self.sequences[group]
+                pattern_str = "→".join(seq['voltages'])
+                timing_str = f"A:{seq['timing'][0]} B:{seq['timing'][1]} C:{seq['timing'][2]} D:{seq['timing'][3]}"
+                output += f"  // {TRANSITION_NAMES[group]}: [{pattern_str}] {timing_str} RP:{seq['repeat']}"
+            else:
+                output += f"  // G{group} (unused)"
+            output += "\n"
+
+        output += "\n  // Frame rate (5 bytes)\n  "
+        for i in range(5):
+            output += f"0x{lut[100 + i]:02X},"
+        output += "\n"
+
+        output += "\n  // Voltages (VGH, VSH1, VSH2, VSL, VCOM)\n  "
+        for i in range(5):
+            output += f"0x{lut[105 + i]:02X},"
+        output += "\n"
+
+        output += "\n  // Reserved\n  "
+        for i in range(2):
+            output += f"0x{lut[110 + i]:02X},"
+        output += "\n};\n"
+
+        self.preview_text.delete(1.0, tk.END)
+        self.preview_text.insert(1.0, output)
+
+    def copy_to_clipboard(self):
+        """Copy preview text to clipboard"""
+        text = self.preview_text.get(1.0, tk.END)
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        messagebox.showinfo("Copied", "LUT array copied to clipboard!")
+
+    def save_to_file(self):
+        """Save sequences to JSON file"""
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+        )
+        if filename:
+            data = {
+                "sequences": {str(k): v for k, v in self.sequences.items()},
+                "repeat_counts": self.repeat_counts,
+                "frame_rate": self.frame_rate,
+                "voltages": self.voltages,
+            }
+            with open(filename, "w") as f:
+                json.dump(data, f, indent=2)
+            messagebox.showinfo("Saved", f"Sequences saved to {filename}")
+
+    def load_from_file(self):
+        """Load sequences from JSON file"""
+        filename = filedialog.askopenfilename(
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+        if filename:
+            try:
+                with open(filename, "r") as f:
+                    data = json.load(f)
+                    self.sequences = {int(k): v for k, v in data["sequences"].items()}
+                    self.repeat_counts = {
+                        int(k): v for k, v in data["repeat_counts"].items()
+                    }
+                    self.frame_rate = data["frame_rate"]
+                    self.voltages = data["voltages"]
+
+                    # Reload UI
+                    for i in range(4):
+                        self.reload_phases(i)
+                        self.sequence_frames[i]["repeat_spin"].set(
+                            str(self.repeat_counts[i])
+                        )
+
+                    self.frame_rate_spin.set(str(self.frame_rate[0]))
+                    for name in self.voltages:
+                        self.voltage_entries[name].delete(0, tk.END)
+                        self.voltage_entries[name].insert(
+                            0, f"0x{self.voltages[name]:02X}"
+                        )
+
+                    self.update_preview()
+                    messagebox.showinfo("Loaded", f"Sequences loaded from {filename}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load: {e}")
+
+    def reset_to_default(self):
+        """Reset to default sequences"""
+        if messagebox.askyesno("Reset", "Reset to default sequences?"):
+            self.sequences = {
+                0: [("VSL", 10), ("VSH1", 10)],
+                1: [("VSH2", 10), ("VSH1", 8), ("VSS", 4)],
+                2: [("VSL", 10), ("VSL", 8), ("VSS", 4)],
+                3: [("VSH1", 10), ("VSS", 10)],
+            }
+            self.repeat_counts = {0: 1, 1: 1, 2: 1, 3: 1}
+
+            for i in range(4):
+                self.reload_phases(i)
+                self.sequence_frames[i]["repeat_spin"].set("1")
+
+            self.update_preview()
+
+
+def main():
+    root = tk.Tk()
+    app = LUTEditor(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()

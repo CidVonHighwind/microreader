@@ -18,6 +18,7 @@ class MenuDisplay {
 
  private:
   EInk_BW_Display<EInk426_BW, EInk426_BW::HEIGHT>& display;
+  void drawMenuItem(const char* itemText, int y, bool isSelected);
 };
 
 #endif

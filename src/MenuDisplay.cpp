@@ -6,6 +6,17 @@ void MenuDisplay::begin() {
   // Any initialization specific to this display implementation
 }
 
+void MenuDisplay::drawMenuItem(const char* itemText, int y, bool isSelected) {
+  display.setCursor(15, y);
+  if (isSelected) {
+    display.print(">");
+    display.print(itemText);
+    display.print("<");
+  } else {
+    display.print(itemText);
+  }
+}
+
 void MenuDisplay::drawFullMenu(const char** menuItems, int menuCount, int selectedIndex) {
   display.setFullWindow();
   display.firstPage();
@@ -19,15 +30,7 @@ void MenuDisplay::drawFullMenu(const char** menuItems, int menuCount, int select
     display.setTextSize(2);
     for (int i = 0; i < menuCount; i++) {
       int y = menuStartY + (i * lineHeight);
-
-      // Draw cursor for selected item
-      if (i == selectedIndex) {
-        display.setCursor(5, y);
-        display.print(">");
-      }
-
-      display.setCursor(20, y);
-      display.println(menuItems[i]);
+      drawMenuItem(menuItems[i], y, i == selectedIndex);
     }
   } while (display.nextPage());
 }
@@ -38,25 +41,21 @@ void MenuDisplay::updateCursor(const char** menuItems, int menuCount, int oldInd
   int maxIndex = max(oldIndex, newIndex);
 
   int y = menuStartY + (minIndex * lineHeight);
-  int h = ((maxIndex - minIndex) + 1) * lineHeight;
-  int16_t x = 5;
-  int16_t w = 10;  // Only need to update cursor column (first 10 pixels)
+  int h = ((maxIndex - minIndex) + 1) * lineHeight - 5;
+  int16_t x = 15;
+  int16_t w = 300;  // Width to cover full text lines
 
-  // Single partial update for just the cursor area
+  // Single partial update for the affected text lines
   display.setPartialWindow(x, y - 5, w, h);
   display.firstPage();
   do {
     display.fillScreen(GxEPD_WHITE);
     display.setTextSize(2);
 
-    // Draw cursor only at new position
+    // Redraw text lines with cursor prefix
     for (int i = minIndex; i <= maxIndex; i++) {
       int itemY = menuStartY + (i * lineHeight);
-
-      if (i == newIndex) {
-        display.setCursor(5, itemY);
-        display.print(">");
-      }
+      drawMenuItem(menuItems[i], itemY, i == newIndex);
     }
   } while (display.nextPage());
 }
