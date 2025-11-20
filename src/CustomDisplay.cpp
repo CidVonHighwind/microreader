@@ -22,7 +22,7 @@ const unsigned char lut_custom[] PROGMEM = {
 
     // TP/RP groups (global timing)
     0x01, 0x01, 0x01, 0x01, 0x01,  // G0: A=1 B=1 C=1 D=1 RP=0 (4 frames)
-    0x01, 0x01, 0x01, 0x01, 0x01,  // G1: A=1 B=1 C=1 D=1 RP=0 (4 frames)
+    0x00, 0x00, 0x00, 0x00, 0x00,  // G1: A=1 B=1 C=1 D=1 RP=0 (4 frames)
     0x00, 0x00, 0x00, 0x00, 0x00,  // G2: A=0 B=0 C=0 D=0 RP=0
     0x00, 0x00, 0x00, 0x00, 0x00,  // G3: A=0 B=0 C=0 D=0 RP=0
     0x00, 0x00, 0x00, 0x00, 0x00,  // G4: A=0 B=0 C=0 D=0 RP=0
@@ -104,29 +104,26 @@ void CustomDisplay::begin() {
 void CustomDisplay::handleButton(Button button) {
   switch (button) {
     case VOLUME_UP:
-      Serial.printf("[%lu] CustomDisplay: VOLUME_UP pressed\n", millis());
-      Serial.printf("[%lu]   Clearing screen to BLACK\n", millis());
+      Serial.printf("[%lu] Clearing screen to BLACK\n", millis());
       clearScreen(0x00);
       displayBuffer(false);  // Partial refresh
       break;
 
     case VOLUME_DOWN:
-      Serial.printf("[%lu] CustomDisplay: VOLUME_DOWN pressed\n", millis());
-      Serial.printf("[%lu]   Clearing screen to WHITE\n", millis());
+      Serial.printf("[%lu] Clearing screen to WHITE\n", millis());
       clearScreen(0xFF);
       displayBuffer(false);  // Partial refresh
       break;
 
     case CONFIRM:
-      Serial.printf("[%lu] CustomDisplay: CONFIRM pressed\n", millis());
-      Serial.printf("[%lu]   Displaying bebop image...\n", millis());
+      Serial.printf("[%lu] Displaying bebop image...\n", millis());
       drawImage(bebop_image, 0, 0, BEBOP_WIDTH, BEBOP_HEIGHT, true);
       displayBuffer(false);  // Partial refresh
-      Serial.printf("[%lu]   Bebop image displayed\n", millis());
       break;
 
     case BACK:
       Serial.printf("[%lu] CustomDisplay: BACK pressed\n", millis());
+      setCustomLUT(!customLutActive);
       break;
 
     case LEFT:
@@ -392,11 +389,14 @@ void CustomDisplay::refreshDisplay(bool fullRefresh) {
     waitWhileBusy(" enabling count and analog");
   }
 
-  uint8_t lutFlag = customLutActive ? 0x30 : 0x00;
-
   // Select appropriate display mode
   // FC is faster
-  uint8_t displayMode = (fullRefresh ? 0xD7 : 0x1C) | lutFlag;
+  uint8_t displayMode = (fullRefresh ? 0xD7 : 0x1C);
+
+  if (customLutActive) {
+    displayMode = 0x04;
+  }
+
   // Power on and refresh display
   Serial.printf("[%lu]   Powering on display 0x%02X (%s refresh)...\n", millis(), displayMode, refreshType);
   sendCommand(CMD_DISPLAY_UPDATE_CTRL2);
