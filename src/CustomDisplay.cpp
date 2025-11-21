@@ -10,19 +10,19 @@
 const unsigned char lut_custom[] PROGMEM = {
     // VS L0-L3 (voltage patterns per transition)
     // Black → Black: [VSH1→VSS→VSS→VSH1→VSS→VSS→VSH1→VSS]
-    0x41, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     // Black → White: [VSL→VSL→VSS→VSL→VSL→VSS→VSL→VSL]
     0xA2, 0x8A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     // White → Black: [VSH2→VSH2→VSS→VSH2→VSH2→VSS→VSH1→VSH1]
     0xF3, 0xC5, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     // White → White: [VSL→VSS→VSS→VSL→VSS→VSS→VSL→VSS]
-    0x82, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x82, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     // L4 (VCOM)
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 
     // TP/RP groups (global timing)
     0x01, 0x01, 0x01, 0x01, 0x01,  // G0: A=1 B=1 C=1 D=1 RP=0 (4 frames)
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G1: A=1 B=1 C=1 D=1 RP=0 (4 frames)
+    0x01, 0x01, 0x01, 0x01, 0x01,  // G1: A=1 B=1 C=1 D=1 RP=0 (4 frames)
     0x00, 0x00, 0x00, 0x00, 0x00,  // G2: A=0 B=0 C=0 D=0 RP=0
     0x00, 0x00, 0x00, 0x00, 0x00,  // G3: A=0 B=0 C=0 D=0 RP=0
     0x00, 0x00, 0x00, 0x00, 0x00,  // G4: A=0 B=0 C=0 D=0 RP=0
@@ -104,15 +104,11 @@ void CustomDisplay::begin() {
 void CustomDisplay::handleButton(Button button) {
   switch (button) {
     case VOLUME_UP:
-      Serial.printf("[%lu] Clearing screen to BLACK\n", millis());
-      clearScreen(0x00);
-      displayBuffer(false);  // Partial refresh
+      setCustomLUT(true);
       break;
 
     case VOLUME_DOWN:
-      Serial.printf("[%lu] Clearing screen to WHITE\n", millis());
-      clearScreen(0xFF);
-      displayBuffer(false);  // Partial refresh
+      setCustomLUT(false);
       break;
 
     case CONFIRM:
@@ -122,16 +118,19 @@ void CustomDisplay::handleButton(Button button) {
       break;
 
     case BACK:
-      Serial.printf("[%lu] CustomDisplay: BACK pressed\n", millis());
-      setCustomLUT(!customLutActive);
+      displayBuffer(true);  // Full refresh
       break;
 
     case LEFT:
-      Serial.printf("[%lu] CustomDisplay: LEFT pressed\n", millis());
+      Serial.printf("[%lu] Clearing screen to WHITE\n", millis());
+      clearScreen(0xFF);
+      displayBuffer(false);  // Partial refresh
       break;
 
     case RIGHT:
-      Serial.printf("[%lu] CustomDisplay: RIGHT pressed\n", millis());
+      Serial.printf("[%lu] Clearing screen to BLACK\n", millis());
+      clearScreen(0x00);
+      displayBuffer(false);  // Partial refresh
       break;
   }
 }
@@ -390,8 +389,9 @@ void CustomDisplay::refreshDisplay(bool fullRefresh) {
   }
 
   // Select appropriate display mode
-  // FC is faster
-  uint8_t displayMode = (fullRefresh ? 0xD7 : 0x1C);
+  // 0xD7: 1720ms full refresh
+  // 0xF7:
+  uint8_t displayMode = (fullRefresh ? 0xF7 : 0x1C);
 
   if (customLutActive) {
     displayMode = 0x04;
