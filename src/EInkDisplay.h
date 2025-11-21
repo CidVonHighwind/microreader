@@ -1,8 +1,12 @@
 #ifndef EINK_DISPLAY_H
 #define EINK_DISPLAY_H
 
+#ifdef ARDUINO
 #include <Arduino.h>
 #include <SPI.h>
+#else
+#include <cstdint>
+#endif
 
 class EInkDisplay {
  public:

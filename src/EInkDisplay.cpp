@@ -64,7 +64,7 @@ void EInkDisplay::begin() {
 
   // Initialize SPI with custom pins
   SPI.begin(_sclk, -1, _mosi, _cs);
-  spiSettings = SPISettings(40000000, MSBFIRST, SPI_MODE0);  // 40 MHz (2x spec, max stable)
+  spiSettings = SPISettings(40000000, MSBFIRST, SPI_MODE0);  // 40 MHz
   Serial.printf("[%lu]   SPI initialized at 40 MHz (actual)\n", millis());
 
   // Setup GPIO pins

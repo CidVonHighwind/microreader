@@ -53,6 +53,8 @@ esptool.py --chip esp32c3 --port COM4 write_flash 0x0 firmware_backup.bin
 
 ## Building
 
+### For ESP32 Device
+
 This project uses PlatformIO in a virtual environment:
 
 ```powershell
@@ -65,6 +67,17 @@ C:/Users/Patrick/Desktop/microreader/.venv/Scripts/platformio.exe run -t upload
 # Monitor serial output
 C:/Users/Patrick/Desktop/microreader/.venv/Scripts/platformio.exe device monitor
 ```
+
+### Testing Text Layout on Windows
+
+Test the text layout algorithm without uploading to the device:
+
+```powershell
+cd test
+.\build_msvc.bat
+```
+
+This builds and runs `windows_test_simple.cpp` which tests the Knuth-Plass layout algorithm with the actual FreeSans font. The output is saved as `output.pbm` in the `build_msvc` folder.
 
 ### Switching Boot Partitions (app0/app1)
 

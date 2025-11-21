@@ -1,0 +1,98 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build TextLayout Test",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/test/build"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/test"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "dependsOn": "Configure TextLayout Test"
+        },
+        {
+            "label": "Configure TextLayout Test",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "-S",
+                "${workspaceFolder}/test",
+                "-B",
+                "${workspaceFolder}/test/build",
+                "-G",
+                "MinGW Makefiles"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/test"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build TextLayout Test (MSVC)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/test/build_msvc",
+                "--config",
+                "Release"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/test"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "problemMatcher": [
+                "$msCompile"
+            ],
+            "dependsOn": "Configure TextLayout Test (MSVC)"
+        },
+        {
+            "label": "Configure TextLayout Test (MSVC)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "-S",
+                "${workspaceFolder}/test",
+                "-B",
+                "${workspaceFolder}/test/build_msvc",
+                "-G",
+                "Visual Studio 17 2022"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/test"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Clean TextLayout Test",
+            "type": "shell",
+            "command": "Remove-Item",
+            "args": [
+                "-Recurse",
+                "-Force",
+                "-Path",
+                "build,build_msvc",
+                "-ErrorAction",
+                "SilentlyContinue"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/test"
+            },
+            "problemMatcher": []
+        }
+    ]
+}
