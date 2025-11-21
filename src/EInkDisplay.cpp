@@ -1,6 +1,4 @@
-#include "CustomDisplay.h"
-
-#include "bebop_image.h"
+#include "EInkDisplay.h"
 
 // SSD1677 RAM buffer commands
 #define CMD_WRITE_RAM_BW 0x24   // Write to BW RAM (current frame)
@@ -41,16 +39,9 @@ const unsigned char lut_custom[] PROGMEM = {
     // Reserved
     0x00, 0x00};
 
-CustomDisplay::CustomDisplay(int8_t sclk, int8_t mosi, int8_t cs, int8_t dc, int8_t rst, int8_t busy)
-    : _sclk(sclk),
-      _mosi(mosi),
-      _cs(cs),
-      _dc(dc),
-      _rst(rst),
-      _busy(busy),
-      bebopImageVisible(false),
-      customLutActive(false) {
-  Serial.printf("[%lu] CustomDisplay: Constructor called\n", millis());
+EInkDisplay::EInkDisplay(int8_t sclk, int8_t mosi, int8_t cs, int8_t dc, int8_t rst, int8_t busy)
+    : _sclk(sclk), _mosi(mosi), _cs(cs), _dc(dc), _rst(rst), _busy(busy), customLutActive(false) {
+  Serial.printf("[%lu] EInkDisplay: Constructor called\n", millis());
   Serial.printf("[%lu]   SCLK=%d, MOSI=%d, CS=%d, DC=%d, RST=%d, BUSY=%d\n", millis(), sclk, mosi, cs, dc, rst, busy);
 
   // Allocate frame buffer
@@ -59,17 +50,17 @@ CustomDisplay::CustomDisplay(int8_t sclk, int8_t mosi, int8_t cs, int8_t dc, int
   Serial.printf("[%lu]   Frame buffer allocated (%lu bytes)\n", millis(), BUFFER_SIZE);
 }
 
-CustomDisplay::~CustomDisplay() {
-  Serial.printf("[%lu] CustomDisplay: Destructor called\n", millis());
+EInkDisplay::~EInkDisplay() {
+  Serial.printf("[%lu] EInkDisplay: Destructor called\n", millis());
   if (frameBuffer) {
     delete[] frameBuffer;
     frameBuffer = nullptr;
   }
 }
 
-void CustomDisplay::begin() {
-  Serial.printf("[%lu] CustomDisplay: begin() called\n", millis());
-  Serial.printf("[%lu]   Initializing custom display driver...\n", millis());
+void EInkDisplay::begin() {
+  Serial.printf("[%lu] EInkDisplay: begin() called\n", millis());
+  Serial.printf("[%lu]   Initializing e-ink display driver...\n", millis());
 
   // Initialize SPI with custom pins
   SPI.begin(_sclk, -1, _mosi, _cs);
@@ -93,53 +84,14 @@ void CustomDisplay::begin() {
   // Initialize display controller
   initDisplayController();
 
-  // Display bebop image on startup
-  // clearScreen(0xFF);  // Clear buffer first
-  drawImage(bebop_image, 0, 0, BEBOP_WIDTH, BEBOP_HEIGHT, true);
-  displayBuffer(true);  // Full refresh
-
-  Serial.printf("[%lu]   Custom display driver initialized\n", millis());
-}
-
-void CustomDisplay::handleButton(Button button) {
-  switch (button) {
-    case VOLUME_UP:
-      setCustomLUT(true);
-      break;
-
-    case VOLUME_DOWN:
-      setCustomLUT(false);
-      break;
-
-    case CONFIRM:
-      Serial.printf("[%lu] Displaying bebop image...\n", millis());
-      drawImage(bebop_image, 0, 0, BEBOP_WIDTH, BEBOP_HEIGHT, true);
-      displayBuffer(false);  // Partial refresh
-      break;
-
-    case BACK:
-      displayBuffer(true);  // Full refresh
-      break;
-
-    case LEFT:
-      Serial.printf("[%lu] Clearing screen to WHITE\n", millis());
-      clearScreen(0xFF);
-      displayBuffer(false);  // Partial refresh
-      break;
-
-    case RIGHT:
-      Serial.printf("[%lu] Clearing screen to BLACK\n", millis());
-      clearScreen(0x00);
-      displayBuffer(false);  // Partial refresh
-      break;
-  }
+  Serial.printf("[%lu]   E-ink display driver initialized\n", millis());
 }
 
 // ============================================================================
 // Low-level display control methods
 // ============================================================================
 
-void CustomDisplay::resetDisplay() {
+void EInkDisplay::resetDisplay() {
   Serial.printf("[%lu]   Resetting display...\n", millis());
   digitalWrite(_rst, HIGH);
   delay(20);
@@ -150,7 +102,7 @@ void CustomDisplay::resetDisplay() {
   Serial.printf("[%lu]   Display reset complete\n", millis());
 }
 
-void CustomDisplay::sendCommand(uint8_t command) {
+void EInkDisplay::sendCommand(uint8_t command) {
   SPI.beginTransaction(spiSettings);
   digitalWrite(_dc, LOW);  // Command mode
   digitalWrite(_cs, LOW);  // Select chip
@@ -159,7 +111,7 @@ void CustomDisplay::sendCommand(uint8_t command) {
   SPI.endTransaction();
 }
 
-void CustomDisplay::sendData(uint8_t data) {
+void EInkDisplay::sendData(uint8_t data) {
   SPI.beginTransaction(spiSettings);
   digitalWrite(_dc, HIGH);  // Data mode
   digitalWrite(_cs, LOW);   // Select chip
@@ -168,7 +120,7 @@ void CustomDisplay::sendData(uint8_t data) {
   SPI.endTransaction();
 }
 
-void CustomDisplay::sendData(const uint8_t* data, uint16_t length) {
+void EInkDisplay::sendData(const uint8_t* data, uint16_t length) {
   SPI.beginTransaction(spiSettings);
   digitalWrite(_dc, HIGH);  // Data mode
   digitalWrite(_cs, LOW);   // Select chip
@@ -179,7 +131,7 @@ void CustomDisplay::sendData(const uint8_t* data, uint16_t length) {
   SPI.endTransaction();
 }
 
-void CustomDisplay::waitWhileBusy(const char* comment) {
+void EInkDisplay::waitWhileBusy(const char* comment) {
   unsigned long start = millis();
   while (digitalRead(_busy) == HIGH) {
     delay(1);
@@ -193,7 +145,7 @@ void CustomDisplay::waitWhileBusy(const char* comment) {
   }
 }
 
-void CustomDisplay::initDisplayController() {
+void EInkDisplay::initDisplayController() {
   Serial.printf("[%lu]   Initializing SSD1677 controller...\n", millis());
 
   // SSD1677 command definitions
@@ -234,7 +186,7 @@ void CustomDisplay::initDisplayController() {
   Serial.printf("[%lu]   SSD1677 controller initialized\n", millis());
 }
 
-void CustomDisplay::setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+void EInkDisplay::setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
   const uint16_t WIDTH = 800;
   const uint16_t HEIGHT = 480;
 
@@ -278,13 +230,13 @@ void CustomDisplay::setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
   sendData((y + h - 1) / 256);  // high byte
 }
 
-void CustomDisplay::clearScreen(uint8_t color) {
+void EInkDisplay::clearScreen(uint8_t color) {
   Serial.printf("[%lu]   Clearing frame buffer to 0x%02X...\n", millis(), color);
   memset(frameBuffer, color, BUFFER_SIZE);
 }
 
-void CustomDisplay::drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
-                              bool fromProgmem) {
+void EInkDisplay::drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                            bool fromProgmem) {
   Serial.printf("[%lu]   Drawing image to frame buffer at (%d,%d) size %dx%d...\n", millis(), x, y, w, h);
 
   // Calculate bytes per line for the image
@@ -314,7 +266,7 @@ void CustomDisplay::drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, 
   Serial.printf("[%lu]   Image drawn to frame buffer\n", millis());
 }
 
-void CustomDisplay::writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint32_t size) {
+void EInkDisplay::writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint32_t size) {
   const char* bufferName = (ramBuffer == CMD_WRITE_RAM_BW) ? "BW" : "RED";
   unsigned long startTime = millis();
   Serial.printf("[%lu]   Writing frame buffer to %s RAM (%lu bytes)...\n", startTime, bufferName, size);
@@ -333,7 +285,7 @@ void CustomDisplay::writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint3
   Serial.printf("[%lu]   %s RAM write complete (%lu ms)\n", millis(), bufferName, duration);
 }
 
-void CustomDisplay::displayBuffer(bool fullRefresh) {
+void EInkDisplay::displayBuffer(bool fullRefresh) {
   // Set up full screen RAM area
   setRamArea(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
@@ -356,7 +308,7 @@ void CustomDisplay::displayBuffer(bool fullRefresh) {
   }
 }
 
-void CustomDisplay::refreshDisplay(bool fullRefresh) {
+void EInkDisplay::refreshDisplay(bool fullRefresh) {
   const uint8_t CMD_DISPLAY_UPDATE_CTRL1 = 0x21;
   const uint8_t CMD_DISPLAY_UPDATE_CTRL2 = 0x22;
   const uint8_t CMD_MASTER_ACTIVATION = 0x20;
@@ -408,7 +360,7 @@ void CustomDisplay::refreshDisplay(bool fullRefresh) {
   waitWhileBusy(fullRefresh ? " after full refresh" : " after partial refresh");
 }
 
-void CustomDisplay::setCustomLUT(bool enabled) {
+void EInkDisplay::setCustomLUT(bool enabled) {
   if (enabled) {
     Serial.printf("[%lu]   Loading custom LUT...\n", millis());
 
@@ -446,7 +398,7 @@ void CustomDisplay::setCustomLUT(bool enabled) {
   }
 }
 
-void CustomDisplay::powerOff() {
+void EInkDisplay::powerOff() {
   const uint8_t CMD_DISPLAY_UPDATE_CTRL2 = 0x22;
   const uint8_t CMD_MASTER_ACTIVATION = 0x20;
   const uint8_t MODE_POWER_OFF = 0x83;

@@ -40,8 +40,6 @@ Original firmware has been backed up to `firmware_backup.bin` (16MB).
 esptool.py --chip esp32c3 --port COM4 write_flash 0x0 firmware_backup.bin
 ```
 
-**Backup created:** November 18, 2025
-
 ## Features
 
 - [x] Button input via ADC resistor ladder
@@ -66,6 +64,20 @@ C:/Users/Patrick/Desktop/microreader/.venv/Scripts/platformio.exe run -t upload
 
 # Monitor serial output
 C:/Users/Patrick/Desktop/microreader/.venv/Scripts/platformio.exe device monitor
+```
+
+### Switching Boot Partitions (app0/app1)
+
+```powershell
+# Backup current OTA data first
+python -m esptool --port COM4 read_flash 0xE000 0x2000 otadata_backup.bin
+
+# Flash to switch boot partition
+# Boot app0
+python -m esptool --port COM4 write_flash 0xE000 otadata_boot_app0.bin
+
+# Boot app1
+python -m esptool --port COM4 write_flash 0xE000 otadata_boot_app1.bin
 ```
 
 **Device Info:**
@@ -97,11 +109,9 @@ C:/Users/Patrick/Desktop/microreader/.venv/Scripts/platformio.exe device monitor
 - **Menu System**: Modular design with swappable `MenuDisplay` and `MenuDisplayGray` classes
 
 ### Todoy
-- Create custom LUT
+- Font rendering
 
 ### Next Steps
-- Fast find LUT
-- Font rendering
 - Implement SD card reading
 - Build file browser UI
 - Add text file viewer
