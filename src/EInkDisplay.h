@@ -10,6 +10,12 @@
 
 class EInkDisplay {
  public:
+  // Refresh modes
+  enum RefreshMode {
+    FULL_REFRESH,  // Full refresh with complete waveform
+    HALF_REFRESH,  // Half refresh (1720ms) - balanced quality and speed
+    FAST_REFRESH   // Fast refresh using custom LUT
+  };
   // Constructor with pin configuration
   EInkDisplay(int8_t sclk, int8_t mosi, int8_t cs, int8_t dc, int8_t rst, int8_t busy);
 
@@ -28,15 +34,22 @@ class EInkDisplay {
   // Frame buffer operations
   void clearScreen(uint8_t color = 0xFF);
   void drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool fromProgmem = false);
-  void displayBuffer(bool fullRefresh = false);
+  void displayBuffer(RefreshMode mode = FAST_REFRESH);
 
   // LUT control
   void setCustomLUT(bool enabled);
+
+  // Power management
+  void powerOn();
+  void powerOff();
 
   // Access to frame buffer
   uint8_t* getFrameBuffer() {
     return frameBuffer;
   }
+
+  // Debug
+  void debugPrintFramebuffer();
 
  private:
   // Pin configuration
@@ -62,8 +75,7 @@ class EInkDisplay {
   // Low-level display operations
   void setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
   void writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint32_t size);
-  void refreshDisplay(bool fullRefresh = false);
-  void powerOff();
+  void refreshDisplay(RefreshMode mode = FAST_REFRESH);
 };
 
 #endif

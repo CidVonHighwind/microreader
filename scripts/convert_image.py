@@ -7,15 +7,16 @@ import sys
 
 
 def convert_image_to_bytes(
-    image_path, output_path, width=800, height=480, grayscale=False
+    image_path, output_path, array_name, width=None, height=None, grayscale=False
 ):
     """Convert image to byte array for e-ink display
 
     Args:
         image_path: Path to input image
         output_path: Path to output header file
-        width: Target width in pixels
-        height: Target height in pixels
+        array_name: Name for the C array
+        width: Optional target width in pixels (default: use image width)
+        height: Optional target height in pixels (default: use image height)
         grayscale: If True, output 4-level grayscale (2-bit). If False, output black/white (1-bit). Default: False
     """
     # Open and convert image
@@ -31,31 +32,39 @@ def convert_image_to_bytes(
 
     print(f"Source image dimensions: {img.width}x{img.height}")
 
-    # Calculate aspect-preserving resize
-    img_ratio = img.width / img.height
-    target_ratio = width / height
+    # Use actual image dimensions if not specified
+    if width is None:
+        width = img.width
+    if height is None:
+        height = img.height
 
-    if img_ratio > target_ratio:
-        # Image is wider, fit to width
-        new_width = width
-        new_height = int(width / img_ratio)
+    # Only resize if dimensions don't match
+    if img.width != width or img.height != height:
+        # Calculate aspect-preserving resize
+        img_ratio = img.width / img.height
+        target_ratio = width / height
+
+        if img_ratio > target_ratio:
+            # Image is wider, fit to width
+            new_width = width
+            new_height = int(width / img_ratio)
+        else:
+            # Image is taller, fit to height
+            new_height = height
+            new_width = int(height * img_ratio)
+
+        # Resize maintaining aspect ratio
+        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        # Create white background and paste centered
+        final_img = Image.new("L", (width, height), 255)  # White background
+        x_offset = (width - new_width) // 2
+        y_offset = (height - new_height) // 2
+        final_img.paste(img, (x_offset, y_offset))
+        img = final_img
     else:
-        # Image is taller, fit to height
-        new_height = height
-        new_width = int(height * img_ratio)
-
-    # Resize maintaining aspect ratio
-    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-    # Create white background and paste centered
-    final_img = Image.new("L", (width, height), 255)  # White background
-    x_offset = (width - new_width) // 2
-    y_offset = (height - new_height) // 2
-    final_img.paste(img, (x_offset, y_offset))
-    img = final_img
-
-    # Convert to grayscale for 2-bit (4 color) encoding
-    img = img.convert("L")  # Grayscale
+        # Use image as-is
+        img = img.convert("L")  # Convert to grayscale
 
     # Apply sharpening to preserve thin lines
     from PIL import ImageFilter, ImageEnhance
@@ -135,8 +144,8 @@ def convert_image_to_bytes(
 
     # Generate C header file
     with open(output_path, "w") as f:
-        f.write("#ifndef BEBOP_IMAGE_H\n")
-        f.write("#define BEBOP_IMAGE_H\n\n")
+        f.write(f"#ifndef {array_name.upper()}_H\n")
+        f.write(f"#define {array_name.upper()}_H\n\n")
         f.write("#include <pgmspace.h>\n\n")
         f.write(f"// Image dimensions: {final_width}x{final_height}\n")
         if grayscale:
@@ -145,9 +154,9 @@ def convert_image_to_bytes(
         else:
             f.write(f"// Encoding: 1-bit black/white, 8 pixels per byte\n")
             f.write(f"// Bit values: 0=White, 1=Black\n")
-        f.write(f"#define BEBOP_WIDTH {final_width}\n")
-        f.write(f"#define BEBOP_HEIGHT {final_height}\n\n")
-        f.write("const unsigned char bebop_image[] PROGMEM = {\n")
+        f.write(f"#define {array_name.upper()}_WIDTH {final_width}\n")
+        f.write(f"#define {array_name.upper()}_HEIGHT {final_height}\n\n")
+        f.write(f"const unsigned char {array_name}[] PROGMEM = {{\n")
 
         # Write bytes in rows of 16
         for i in range(0, len(byte_array), 16):
@@ -159,7 +168,7 @@ def convert_image_to_bytes(
             f.write("\n")
 
         f.write("};\n\n")
-        f.write("#endif // BEBOP_IMAGE_H\n")
+        f.write(f"#endif // {array_name.upper()}_H\n")
 
     print(f"Converted {image_path} to {output_path}")
     print(f"Original size request: {width}x{height}")
@@ -176,4 +185,6 @@ def convert_image_to_bytes(
 
 
 if __name__ == "__main__":
-    convert_image_to_bytes("bebop.jpg", "src/bebop_image.h", 800, 480)
+    # Use actual image dimensions
+    convert_image_to_bytes("scripts/bebop.jpg", "src/bebop_image.h", "bebop_image")
+    convert_image_to_bytes("scripts/bebop_2.jpg", "src/bebop_2.h", "bebop_2")

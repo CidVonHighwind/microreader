@@ -1,0 +1,143 @@
+FONT RENDERING TEST FILE
+=======================
+
+Basic Latin Alphabet (Uppercase):
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+
+Basic Latin Alphabet (Lowercase):
+abcdefghijklmnopqrstuvwxyz
+
+Numbers:
+0123456789
+
+Common Punctuation:
+. , ; : ! ? ' " - – — ( ) [ ] { } / \ | @ # $ % & * + = _ ~ ` ^ < >
+
+English Special Characters:
+' ' " " … • ·
+
+German Characters (Uppercase):
+Ä Ö Ü ẞ
+
+German Characters (Lowercase):
+ä ö ü ß
+
+French Characters (Uppercase):
+À Â Æ Ç É È Ê Ë Î Ï Ô Œ Ù Û Ü Ÿ
+
+French Characters (Lowercase):
+à â æ ç é è ê ë î ï ô œ ù û ü ÿ
+
+Spanish Characters (Uppercase):
+Á É Í Ñ Ó Ú Ü
+
+Spanish Characters (Lowercase):
+á é í ñ ó ú ü ¡ ¿
+
+Italian Characters (Uppercase):
+À È É Ì Í Î Ò Ó Ù Ú
+
+Italian Characters (Lowercase):
+à è é ì í î ò ó ù ú
+
+Portuguese Characters (Uppercase):
+Á Â Ã À Ç É Ê Í Ó Ô Õ Ú
+
+Portuguese Characters (Lowercase):
+á â ã à ç é ê í ó ô õ ú
+
+Scandinavian Characters (Uppercase):
+Å Æ Ø Þ Ð
+
+Scandinavian Characters (Lowercase):
+å æ ø þ ð
+
+Eastern European Characters (Uppercase):
+Ą Ć Č Ď Ę Ě Ĺ Ľ Ł Ń Ň Ř Ś Š Ť Ů Ű Ź Ž Ż
+
+Eastern European Characters (Lowercase):
+ą ć č ď ę ě ĺ ľ ł ń ň ř ś š ť ů ű ź ž ż
+
+Currency Symbols:
+$ € £ ¥ ¢ ₹ ₽ ₩ ₪ ₴
+
+Mathematical Symbols:
++ - × ÷ = ≠ < > ≤ ≥ ± ∞ ∑ ∏ √ ∫ ∂ ∆ π
+
+Common Symbols:
+© ® ™ § ¶ † ‡ ° º ª µ ¤
+
+Arrows:
+← → ↑ ↓ ↔ ↕ ⇐ ⇒ ⇑ ⇓ ⇔
+
+Fractions:
+½ ⅓ ⅔ ¼ ¾ ⅛ ⅜ ⅝ ⅞
+
+Superscript Numbers:
+⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹
+
+Subscript Numbers:
+₀ ₁ ₂ ₃ ₄ ₅ ₆ ₇ ₈ ₉
+
+Box Drawing Characters:
+┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ ─ │ ═ ║ ╔ ╗ ╚ ╝ ╠ ╣ ╦ ╩ ╬
+
+Sample Sentence (English):
+The quick brown fox jumps over the lazy dog.
+THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG.
+
+Sample Sentence (German):
+Franz jagt im komplett verwahrlosten Taxi quer durch Bayern.
+Zwölf Boxkämpfer jagen Viktor quer über den großen Sylter Deich.
+
+Sample Sentence (French):
+Portez ce vieux whisky au juge blond qui fume.
+Voix ambiguë d'un cœur qui, au zéphyr, préfère les jattes de kiwis.
+
+Sample Sentence (Spanish):
+El veloz murciélago hindú comía feliz cardillo y kiwi.
+¿Qué tal? ¡Excelente!
+
+Sample Sentence (Portuguese):
+Às quatro horas, o velho jaguar comia uma pêra e o bebê dormia feliz.
+
+Sample Sentence (Mixed):
+Café, naïve résumé, Zürich, Łódź, Malmö, São Paulo.
+
+Numbers and Formatting Test:
+1,234,567.89
+1.234.567,89
+$1,000.00
+€1.000,00
+-123.45
++98.76%
+
+Date Formats:
+01/23/2024
+23.01.2024
+2024-01-23
+
+Whitespace Tests:
+Single space: a b
+Multiple spaces: a    b
+Tab: a	b
+New line test
+
+Special Quotes and Apostrophes:
+"Double quotes"
+'Single quotes'
+"Smart double quotes"
+'Smart single quotes'
+John's book
+It's a test
+
+Ligatures (if supported):
+fi fl ff ffi ffl
+
+All Digits in Context:
+0 zero, 1 one, 2 two, 3 three, 4 four, 5 five, 6 six, 7 seven, 8 eight, 9 nine
+
+Stress Test Line:
+AaBbCcDdEeFfGgHhIiJjKkLlMmNnOoPpQqRrSsTtUuVvWwXxYyZzÄäÖöÜüßÀàÉéÈèÑñÅåØø0123456789!@#$%^&*()
+
+END OF TEST FILE

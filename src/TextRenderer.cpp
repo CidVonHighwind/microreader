@@ -34,9 +34,9 @@ void TextRenderer::drawPixel(int16_t x, int16_t y, uint16_t color) {
 }
 
 void TextRenderer::clearText() {
-  display.clearScreen(0xFF);  // White
+  display.clearScreen(0xFF);
 }
 
-void TextRenderer::refresh(bool fullRefresh) {
-  display.displayBuffer(fullRefresh);
+void TextRenderer::refresh(EInkDisplay::RefreshMode mode) {
+  display.displayBuffer(mode);
 }

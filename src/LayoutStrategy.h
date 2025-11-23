@@ -17,9 +17,11 @@ class LayoutStrategy {
  public:
   enum Type { GREEDY, KNUTH_PLASS };
 
+  enum TextAlignment { ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT };
+
   struct Word {
     String text;
-    float width;
+    int16_t width;
   };
 
   struct LayoutConfig {
@@ -31,6 +33,7 @@ class LayoutStrategy {
     int16_t minSpaceWidth;
     int16_t pageWidth;
     int16_t pageHeight;
+    TextAlignment alignment;
   };
 
   virtual ~LayoutStrategy() = default;

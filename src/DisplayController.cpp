@@ -3,15 +3,16 @@
 #include <Fonts/FreeSans12pt7b.h>
 #include <Fonts/FreeSans18pt7b.h>
 
-#include "GreedyLayoutStrategy.h"
+#include "KnuthPlassLayoutStrategy.h"
 #include "TextLayout.h"
+#include "bebop_2.h"
 #include "bebop_image.h"
 #include "sample_text.h"
 
 DisplayController::DisplayController(EInkDisplay& display)
     : display(display),
       textRenderer(display),
-      textLayout(new GreedyLayoutStrategy()),  // Use greedy word wrap algorithm
+      textLayout(new KnuthPlassLayoutStrategy()),  // Use Knuth-Plass optimal line breaking
       currentMode(READER),
       currentScreen(IMAGE),
       currentPage(0),
@@ -31,7 +32,7 @@ void DisplayController::begin() {
   } else {
     showScreen(currentScreen);
   }
-  display.displayBuffer(true);  // Full refresh
+  display.displayBuffer(EInkDisplay::HALF_REFRESH);
 
   Serial.printf("[%lu] DisplayController initialized\n", millis());
 }
@@ -52,9 +53,17 @@ void DisplayController::showScreen(Screen screen) {
 
     case IMAGE:
       Serial.printf("[%lu] Showing IMAGE screen\n", millis());
-      display.drawImage(bebop_image, 0, 0, BEBOP_WIDTH, BEBOP_HEIGHT, true);
+      display.drawImage(bebop_image, 0, 0, BEBOP_IMAGE_WIDTH, BEBOP_IMAGE_HEIGHT, true);
+      break;
+
+    case IMAGE_2:
+      Serial.printf("[%lu] Showing IMAGE screen\n", millis());
+      display.drawImage(bebop_2, 0, 0, BEBOP_2_WIDTH, BEBOP_2_HEIGHT, true);
       break;
   }
+
+  // Debug: Print complete framebuffer
+  // display.debugPrintFramebuffer();
 }
 
 void DisplayController::showReaderPage(int page) {
@@ -79,20 +88,26 @@ void DisplayController::showReaderPage(int page) {
     config.minSpaceWidth = 10;
     config.pageWidth = 480;
     config.pageHeight = 800;
+    config.alignment = LayoutStrategy::ALIGN_LEFT;
 
     // Layout and render text
     textLayout.layoutText(pageText, textRenderer, config);
   }
 
-  // Add page indicator at bottom
+  // Add page indicator at bottom center
   textRenderer.setFont();
-  textRenderer.setCursor(20, 780);
-  textRenderer.print("Page ");
-  textRenderer.print(page + 1);
-  textRenderer.print(" of ");
-  textRenderer.print(totalPages);
 
-  textRenderer.setFont();
+  // Create page indicator string
+  String pageIndicator = String(page + 1) + "/" + String(totalPages);
+
+  // Measure text to center it
+  int16_t x1, y1;
+  uint16_t w, h;
+  textRenderer.getTextBounds(pageIndicator.c_str(), 0, 0, &x1, &y1, &w, &h);
+  int16_t centerX = (480 - w) / 2;
+
+  textRenderer.setCursor(centerX, 780);
+  textRenderer.print(pageIndicator);
 }
 
 void DisplayController::loadTextFile() {
@@ -151,6 +166,27 @@ void DisplayController::switchMode() {
   }
 }
 
+void DisplayController::showSleepScreen() {
+  Serial.printf("[%lu] Showing SLEEP screen\n", millis());
+  display.clearScreen(0xFF);
+
+  // Draw bebop image centered
+  display.drawImage(bebop_image, 0, 0, BEBOP_IMAGE_WIDTH, BEBOP_IMAGE_HEIGHT, true);
+
+  // Add "Sleeping..." text at the bottom
+  textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
+  textRenderer.setFont(&FreeSans12pt7b);
+
+  const char* sleepText = "Sleeping...";
+  int16_t x1, y1;
+  uint16_t w, h;
+  textRenderer.getTextBounds(sleepText, 0, 0, &x1, &y1, &w, &h);
+  int16_t centerX = (480 - w) / 2;
+
+  textRenderer.setCursor(centerX, 780);
+  textRenderer.print(sleepText);
+}
+
 void DisplayController::handleButtons(Buttons& buttons) {
   if (buttons.wasPressed(Buttons::VOLUME_UP)) {
     display.setCustomLUT(true);
@@ -159,32 +195,32 @@ void DisplayController::handleButtons(Buttons& buttons) {
   } else if (buttons.wasPressed(Buttons::CONFIRM)) {
     // Switch between modes
     switchMode();
-    display.displayBuffer(false);  // Partial refresh
+    display.displayBuffer(EInkDisplay::FAST_REFRESH);
   } else if (buttons.wasPressed(Buttons::BACK)) {
-    display.displayBuffer(true);  // Full refresh
+    display.displayBuffer(EInkDisplay::FULL_REFRESH);
   } else if (buttons.wasPressed(Buttons::LEFT)) {
     // Navigate within current mode
     if (currentMode == DEMO) {
       // Navigate to next demo screen (WHITE/BLACK/IMAGE)
-      int next = (currentScreen + 1) % 3;
+      int next = (currentScreen + 1) % 4;
       showScreen(static_cast<Screen>(next));
     } else {
       // Navigate to next page in reader mode (with looping)
       int next = (currentPage + 1) % totalPages;
       showReaderPage(next);
     }
-    display.displayBuffer(false);  // Partial refresh
+    display.displayBuffer(EInkDisplay::FAST_REFRESH);
   } else if (buttons.wasPressed(Buttons::RIGHT)) {
     // Navigate within current mode
     if (currentMode == DEMO) {
       // Navigate to previous demo screen (WHITE/BLACK/IMAGE)
-      int prev = (currentScreen - 1 + 3) % 3;
+      int prev = (currentScreen - 1 + 4) % 4;
       showScreen(static_cast<Screen>(prev));
     } else {
       // Navigate to previous page in reader mode (with looping)
       int prev = (currentPage - 1 + totalPages) % totalPages;
       showReaderPage(prev);
     }
-    display.displayBuffer(false);  // Partial refresh
+    display.displayBuffer(EInkDisplay::FAST_REFRESH);
   }
 }

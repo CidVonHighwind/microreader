@@ -19,9 +19,12 @@ class DisplayController {
   // Handle button presses
   void handleButtons(Buttons& buttons);
 
+  // Power management
+  void showSleepScreen();
+
  private:
   enum Mode { DEMO, READER };
-  enum Screen { WHITE, BLACK, IMAGE };
+  enum Screen { WHITE, BLACK, IMAGE, IMAGE_2 };
 
   EInkDisplay& display;
   TextRenderer textRenderer;
@@ -31,6 +34,9 @@ class DisplayController {
   int currentPage;            // For reader mode pagination
   std::vector<String> pages;  // Loaded text pages
   int totalPages;
+
+  // Power button timing
+  static const unsigned long POWER_BUTTON_SLEEP_MS = 1000;
 
   void showScreen(Screen screen);
   void showReaderPage(int page);

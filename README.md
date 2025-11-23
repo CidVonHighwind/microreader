@@ -122,9 +122,11 @@ python -m esptool --port COM4 write_flash 0xE000 otadata_boot_app1.bin
 - **Menu System**: Modular design with swappable `MenuDisplay` and `MenuDisplayGray` classes
 
 ### Todoy
-- Font rendering
 
 ### Next Steps
+- Custom Fonts
+- Grayscale Fonts
+
 - Implement SD card reading
 - Build file browser UI
 - Add text file viewer

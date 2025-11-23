@@ -9,7 +9,7 @@
 extern unsigned long millis();
 #endif
 
-GreedyLayoutStrategy::GreedyLayoutStrategy() : spaceWidth_(4.0f) {}
+GreedyLayoutStrategy::GreedyLayoutStrategy() : spaceWidth_(4) {}
 
 GreedyLayoutStrategy::~GreedyLayoutStrategy() {}
 
@@ -74,7 +74,7 @@ void GreedyLayoutStrategy::layoutText(const String& text, TextRenderer& renderer
       continue;
 
     // Use line breaking algorithm for all paragraphs
-    y = layoutAndRender(words, renderer, config.marginLeft, y, maxWidth, config.lineHeight, maxY);
+    y = layoutAndRender(words, renderer, config.marginLeft, y, maxWidth, config.lineHeight, maxY, config.alignment);
 
     // Add spacing between paragraphs
     if (p < paragraphs.size() - 1) {
@@ -112,7 +112,7 @@ std::vector<LayoutStrategy::Word> GreedyLayoutStrategy::tokenizeAndMeasure(const
       renderer.getTextBounds(word.c_str(), 0, 0, &x1, &y1, &w, &h);
       int16_t actualWidth = x1 + w;
 
-      words.push_back({word, (float)actualWidth});
+      words.push_back({word, actualWidth});
     }
 
     wordStart = wordEnd;
@@ -122,7 +122,8 @@ std::vector<LayoutStrategy::Word> GreedyLayoutStrategy::tokenizeAndMeasure(const
 }
 
 int16_t GreedyLayoutStrategy::layoutAndRender(const std::vector<Word>& words, TextRenderer& renderer, int16_t x,
-                                              int16_t y, int16_t maxWidth, int16_t lineHeight, int16_t maxY) {
+                                              int16_t y, int16_t maxWidth, int16_t lineHeight, int16_t maxY,
+                                              TextAlignment alignment) {
   if (words.empty()) {
     return y;
   }
@@ -135,14 +136,36 @@ int16_t GreedyLayoutStrategy::layoutAndRender(const std::vector<Word>& words, Te
 
   // If no breaks, render all words on one line
   if (breaks.empty()) {
-    renderer.setCursor(x, y);
-
+    // Calculate line width for alignment
+    int16_t lineWidth = 0;
     for (size_t i = 0; i < words.size(); i++) {
-      renderer.print(words[i].text);
+      lineWidth += words[i].width;
       if (i < words.size() - 1) {
-        renderer.print(" ");
+        lineWidth += spaceWidth_;
       }
     }
+
+    int16_t xPos = x;
+    if (alignment == ALIGN_CENTER) {
+      xPos = x + (maxWidth - lineWidth) / 2;
+    } else if (alignment == ALIGN_RIGHT) {
+      xPos = x + maxWidth - lineWidth;
+    }
+
+    int16_t currentX = xPos;
+    for (size_t i = 0; i < words.size(); i++) {
+      renderer.setCursor(currentX, y);
+      renderer.print(words[i].text);
+      currentX += words[i].width;
+      if (i < words.size() - 1) {
+        currentX += spaceWidth_;
+      }
+    }
+
+#ifdef DEBUG_LAYOUT
+    int16_t rightEdge = currentX;
+    Serial.printf("[Layout] Line right edge: %d (xPos=%d, lineWidth=%d)\n", rightEdge, xPos, lineWidth);
+#endif
 
     return y + lineHeight;
   }
@@ -155,15 +178,37 @@ int16_t GreedyLayoutStrategy::layoutAndRender(const std::vector<Word>& words, Te
       break;
     }
 
-    renderer.setCursor(x, y);
-
-    // Render words on this line
+    // Calculate line width for alignment
+    int16_t lineWidth = 0;
     for (size_t i = lineStart; i < lineEnd; i++) {
-      renderer.print(words[i].text);
+      lineWidth += words[i].width;
       if (i < lineEnd - 1) {
-        renderer.print(" ");
+        lineWidth += spaceWidth_;
       }
     }
+
+    int16_t xPos = x;
+    if (alignment == ALIGN_CENTER) {
+      xPos = x + (maxWidth - lineWidth) / 2;
+    } else if (alignment == ALIGN_RIGHT) {
+      xPos = x + maxWidth - lineWidth;
+    }
+
+    // Render words on this line
+    int16_t currentX = xPos;
+    for (size_t i = lineStart; i < lineEnd; i++) {
+      renderer.setCursor(currentX, y);
+      renderer.print(words[i].text);
+      currentX += words[i].width;
+      if (i < lineEnd - 1) {
+        currentX += spaceWidth_;
+      }
+    }
+
+#ifdef DEBUG_LAYOUT
+    int16_t rightEdge = currentX;
+    Serial.printf("[Layout] Line right edge: %d (xPos=%d, lineWidth=%d)\n", rightEdge, xPos, lineWidth);
+#endif
 
     y += lineHeight;
     lineStart = lineEnd;
@@ -172,7 +217,7 @@ int16_t GreedyLayoutStrategy::layoutAndRender(const std::vector<Word>& words, Te
   return y;
 }
 
-std::vector<size_t> GreedyLayoutStrategy::calculateBreaks(const std::vector<Word>& words, float maxWidth) {
+std::vector<size_t> GreedyLayoutStrategy::calculateBreaks(const std::vector<Word>& words, int16_t maxWidth) {
   std::vector<size_t> breaks;
 
   if (words.empty()) {
@@ -180,14 +225,14 @@ std::vector<size_t> GreedyLayoutStrategy::calculateBreaks(const std::vector<Word
   }
 
 #ifdef DEBUG_LAYOUT
-  Serial.printf("[Layout] Greedy word wrap: %d words, maxWidth=%.2f\n", words.size(), maxWidth);
+  Serial.printf("[Layout] Greedy word wrap: %d words, maxWidth=%d\n", words.size(), maxWidth);
 #endif
 
-  float currentLineWidth = 0.0f;
+  int16_t currentLineWidth = 0;
 
   for (size_t i = 0; i < words.size(); i++) {
-    float wordWidth = words[i].width;
-    float spaceWidth = (i > 0) ? spaceWidth_ : 0.0f;
+    int16_t wordWidth = words[i].width;
+    int16_t spaceWidth = (i > 0) ? spaceWidth_ : 0;
 
     // Check if adding this word (with space) would exceed the line width
     if (currentLineWidth > 0 && currentLineWidth + spaceWidth + wordWidth > maxWidth) {

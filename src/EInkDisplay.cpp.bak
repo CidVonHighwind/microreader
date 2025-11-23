@@ -50,7 +50,8 @@ EInkDisplay::EInkDisplay(int8_t sclk, int8_t mosi, int8_t cs, int8_t dc, int8_t 
 
   // Allocate frame buffer
   frameBuffer = new uint8_t[BUFFER_SIZE];
-  memset(frameBuffer, 0xFF, BUFFER_SIZE);  // Initialize to white
+  memset(frameBuffer, 0x00, BUFFER_SIZE);  // Initialize to white
+
   Serial.printf("[%lu]   Frame buffer allocated (%lu bytes)\n", millis(), BUFFER_SIZE);
 }
 
@@ -214,21 +215,21 @@ void EInkDisplay::setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
   const uint8_t CMD_SET_RAM_Y_RANGE = 0x45;
   const uint8_t CMD_SET_RAM_X_COUNTER = 0x4E;
   const uint8_t CMD_SET_RAM_Y_COUNTER = 0x4F;
-  const uint8_t DATA_ENTRY_X_INC_Y_DEC = 0x01;
+  const uint8_t DATA_ENTRY_X_INC_Y_INC = 0x04;
 
   // Reverse Y coordinate (gates are reversed on this display)
   y = HEIGHT - y - h;
 
   // Set data entry mode (X increment, Y decrement for reversed gates)
   sendCommand(CMD_DATA_ENTRY_MODE);
-  sendData(DATA_ENTRY_X_INC_Y_DEC);
+  sendData(DATA_ENTRY_X_INC_Y_INC);
 
   // Set RAM X address range (start, end) - X is in PIXELS
   sendCommand(CMD_SET_RAM_X_RANGE);
-  sendData(x % 256);            // start low byte
-  sendData(x / 256);            // start high byte
   sendData((x + w - 1) % 256);  // end low byte
   sendData((x + w - 1) / 256);  // end high byte
+  sendData(x % 256);            // start low byte
+  sendData(x / 256);            // start high byte
 
   // Set RAM Y address range (start, end) - Y is in PIXELS
   sendCommand(CMD_SET_RAM_Y_RANGE);

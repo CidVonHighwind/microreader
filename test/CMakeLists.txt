@@ -14,7 +14,7 @@ include_directories(${CMAKE_SOURCE_DIR})  # For Arduino.h mock and font files
 add_executable(textlayout_test
     windows_test_simple.cpp
     Adafruit_GFX.cpp
-    ../src/GreedyLayoutStrategy.cpp
+    ../src/KnuthPlassLayoutStrategy.cpp
     ../src/TextLayout.cpp
 )
 

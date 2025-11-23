@@ -31,6 +31,13 @@ unsigned long millis() {
 // Mock EInkDisplay
 class EInkDisplay {
  public:
+  // Refresh modes
+  enum RefreshMode {
+    FULL_REFRESH,  // Full refresh with complete waveform
+    HALF_REFRESH,  // Half refresh (1720ms) - balanced quality and speed
+    FAST_REFRESH   // Fast refresh using custom LUT
+  };
+
   static constexpr int16_t DISPLAY_WIDTH = 800;
   static constexpr int16_t DISPLAY_HEIGHT = 480;
   static constexpr int16_t DISPLAY_WIDTH_BYTES = DISPLAY_WIDTH / 8;
@@ -47,8 +54,9 @@ class EInkDisplay {
   void clearScreen(uint8_t value) {
     std::fill(frameBuffer.begin(), frameBuffer.end(), value);
   }
-  void displayBuffer(bool fullRefresh) {
-    std::cout << "[Display buffer updated (fullRefresh=" << fullRefresh << ")]" << std::endl;
+  void displayBuffer(RefreshMode mode = FAST_REFRESH) {
+    const char* modeStr = (mode == FULL_REFRESH) ? "FULL" : (mode == HALF_REFRESH) ? "HALF" : "FAST";
+    std::cout << "[Display buffer updated (mode=" << modeStr << ")]" << std::endl;
   }
 
   // Save frame buffer as PPM image
@@ -116,8 +124,8 @@ class TextRenderer : public Adafruit_GFX {
   void clearText() {
     display.clearScreen(0xFF);
   }
-  void refresh(bool fullRefresh = false) {
-    display.displayBuffer(fullRefresh);
+  void refresh(EInkDisplay::RefreshMode mode = EInkDisplay::FAST_REFRESH) {
+    display.displayBuffer(mode);
   }
 
  private:
@@ -125,29 +133,16 @@ class TextRenderer : public Adafruit_GFX {
 };
 
 // Include the actual implementation headers
-#include "../src/GreedyLayoutStrategy.h"
+#include "../src/KnuthPlassLayoutStrategy.h"
 #include "../src/LayoutStrategy.h"
 #include "../src/TextLayout.h"
+#include "../src/sample_text.h"
 
 // Include the font
 #include "FreeSans12pt7b.h"
 
-// Test sample text - matches the actual sample_text.h from the device
-const char* TEST_TEXT = R"(Chapter 1: The Beginning
-
-In the realm of electronic paper displays, there existed a device known as the MicroReader. This remarkable gadget combined the comfort of reading traditional books with the convenience of modern technology. The e-ink screen displayed text with remarkable clarity, mimicking the appearance of ink on paper. No harsh backlight strained the eyes during long reading sessions. Readers could enjoy their favorite books for hours without fatigue.
-
-The technology behind e-ink displays was fascinating. Tiny microcapsules containing black and white particles responded to electrical charges, creating images that remained visible without power. This bistable nature meant the display only consumed energy when changing pages, allowing for weeks of battery life. The contrast ratio rivaled printed paper, making text crisp and legible even in direct sunlight.
-
----PAGE---
-
-Chapter 2: Discovery
-
-Engineers had spent years perfecting the technology. The custom LUT configurations allowed for rapid page refreshes, making the reading experience smooth and natural. Partial refresh modes eliminated the distracting full-screen flashes that plagued earlier generations of e-readers.
-
-Chapter 3: Innovation
-
-The device featured custom fonts rendered through Adafruit-GFX, providing crisp, professional typography. FreeSans fonts in multiple sizes offered excellent readability. Button navigation made page turning effortless.)";
+// Use the same text from the device
+const char* TEST_TEXT = SAMPLE_TEXT;
 
 void saveFrameBufferAsPBM(const EInkDisplay& display, const char* filename) {
   const uint8_t* buffer = const_cast<EInkDisplay&>(display).getFrameBuffer();
@@ -211,17 +206,6 @@ int main() {
   std::cout << "TextLayout Windows Test Harness" << std::endl;
   std::cout << "===============================" << std::endl;
 
-  // Create mock display and renderer
-  EInkDisplay display;
-  TextRenderer renderer(display);
-
-  // Set up font to match the real device (FreeSans12pt7b)
-  renderer.setFont(&FreeSans12pt7b);
-  renderer.setTextColor(TextRenderer::COLOR_BLACK);
-
-  // Create layout engine
-  TextLayout layout;
-
   // Configure layout
   TextLayout::LayoutConfig config;
   config.pageWidth = 480;
@@ -232,6 +216,7 @@ int main() {
   config.marginBottom = 40;
   config.lineHeight = 30;
   config.minSpaceWidth = 10;
+  config.alignment = LayoutStrategy::ALIGN_LEFT;
 
   std::cout << "\nLayout Configuration:" << std::endl;
   std::cout << "  Page size: " << config.pageWidth << "x" << config.pageHeight << std::endl;
@@ -240,38 +225,67 @@ int main() {
   std::cout << "  Line height: " << config.lineHeight << std::endl;
   std::cout << "  Min space width: " << config.minSpaceWidth << std::endl;
 
-  // Test the layout
-  std::cout << "\nPerforming text layout..." << std::endl;
-
-  // Split by ---PAGE--- delimiter like the real device does
+  // Split text into pages by ---PAGE--- delimiter
   std::string fullTextStr(TEST_TEXT);
-  size_t pageDelimiter = fullTextStr.find("---PAGE---");
-  std::string textStr = (pageDelimiter != std::string::npos) ? fullTextStr.substr(0, pageDelimiter) : fullTextStr;
+  std::vector<std::string> pages;
+  size_t start = 0;
 
-  // Trim whitespace
-  size_t trimStart = textStr.find_first_not_of(" \t\n\r");
-  size_t trimEnd = textStr.find_last_not_of(" \t\n\r");
-  if (trimStart != std::string::npos && trimEnd != std::string::npos) {
-    textStr = textStr.substr(trimStart, trimEnd - trimStart + 1);
+  while (start < fullTextStr.length()) {
+    size_t pageDelimiter = fullTextStr.find("---PAGE---", start);
+    std::string pageText;
+
+    if (pageDelimiter != std::string::npos) {
+      pageText = fullTextStr.substr(start, pageDelimiter - start);
+      start = pageDelimiter + 10;  // Skip past "---PAGE---"
+    } else {
+      pageText = fullTextStr.substr(start);
+      start = fullTextStr.length();
+    }
+
+    // Trim whitespace
+    size_t trimStart = pageText.find_first_not_of(" \t\n\r");
+    size_t trimEnd = pageText.find_last_not_of(" \t\n\r");
+    if (trimStart != std::string::npos && trimEnd != std::string::npos) {
+      pageText = pageText.substr(trimStart, trimEnd - trimStart + 1);
+      pages.push_back(pageText);
+    }
   }
 
-  String text(textStr.c_str());
-  std::cout << "Rendering first page only (" << textStr.length() << " characters)\n" << std::endl;
+  std::cout << "\nFound " << pages.size() << " pages in test text\n" << std::endl;
 
-  auto start = std::chrono::high_resolution_clock::now();
-  layout.layoutText(text, renderer, config);
-  auto end = std::chrono::high_resolution_clock::now();
+  // Render each page
+  for (size_t pageNum = 0; pageNum < pages.size(); pageNum++) {
+    std::cout << "=== Rendering Page " << (pageNum + 1) << " ===" << std::endl;
+    std::cout << "Characters: " << pages[pageNum].length() << std::endl;
 
-  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-  std::cout << "\nLayout completed in " << duration.count() << " microseconds" << std::endl;
+    // Create fresh display and renderer for each page
+    EInkDisplay display;
+    TextRenderer renderer(display);
+    renderer.setFont(&FreeSans12pt7b);
+    renderer.setTextColor(TextRenderer::COLOR_BLACK);
 
-  printLayoutInfo(layout, renderer);
+    // Create layout engine
+    TextLayout layout;
 
-  // Save to file
-  saveFrameBufferAsPBM(display, "output.pbm");
+    String text(pages[pageNum].c_str());
 
-  // You can add interactive debugging here
+    auto startTime = std::chrono::high_resolution_clock::now();
+    layout.layoutText(text, renderer, config);
+    auto endTime = std::chrono::high_resolution_clock::now();
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
+    std::cout << "Layout completed in " << duration.count() << " microseconds" << std::endl;
+
+    // Save to file with page number
+    std::string filename = "output_page_" + std::to_string(pageNum + 1) + ".pbm";
+    saveFrameBufferAsPBM(display, filename.c_str());
+    std::cout << std::endl;
+  }
+
+  printLayoutInfo(TextLayout(), TextRenderer(*new EInkDisplay()));
+
   std::cout << "\n=== Test Complete ===" << std::endl;
+  std::cout << "Generated " << pages.size() << " output files." << std::endl;
 
   return 0;
 }

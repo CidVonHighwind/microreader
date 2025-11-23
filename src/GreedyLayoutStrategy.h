@@ -16,13 +16,13 @@ class GreedyLayoutStrategy : public LayoutStrategy {
   void layoutText(const String& text, TextRenderer& renderer, const LayoutConfig& config) override;
 
  private:
-  float spaceWidth_;
+  int16_t spaceWidth_;
 
   // Helper methods
   std::vector<Word> tokenizeAndMeasure(const String& paragraph, TextRenderer& renderer);
   int16_t layoutAndRender(const std::vector<Word>& words, TextRenderer& renderer, int16_t x, int16_t y,
-                          int16_t maxWidth, int16_t lineHeight, int16_t maxY);
-  std::vector<size_t> calculateBreaks(const std::vector<Word>& words, float maxWidth);
+                          int16_t maxWidth, int16_t lineHeight, int16_t maxY, TextAlignment alignment);
+  std::vector<size_t> calculateBreaks(const std::vector<Word>& words, int16_t maxWidth);
 };
 
 #endif

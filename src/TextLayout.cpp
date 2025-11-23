@@ -1,6 +1,6 @@
 #include "TextLayout.h"
 
-#include "GreedyLayoutStrategy.h"
+#include "KnuthPlassLayoutStrategy.h"
 #include "TextRenderer.h"
 
 #ifdef ARDUINO
@@ -21,7 +21,7 @@ extern MockSerial Serial;
 constexpr int32_t TextLayout::MIN_COST;
 constexpr int32_t TextLayout::MAX_COST;
 
-TextLayout::TextLayout() : strategy_(new GreedyLayoutStrategy()) {}
+TextLayout::TextLayout() : strategy_(new KnuthPlassLayoutStrategy()) {}
 
 TextLayout::TextLayout(LayoutStrategy* strategy) : strategy_(strategy) {}
 

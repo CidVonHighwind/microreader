@@ -8,7 +8,7 @@
 #include <Adafruit_GFX.h>
 #endif
 
-class EInkDisplay;  // Forward declaration
+#include "EInkDisplay.h"
 
 class TextRenderer : public Adafruit_GFX {
  public:
@@ -20,7 +20,7 @@ class TextRenderer : public Adafruit_GFX {
 
   // Helper methods
   void clearText();
-  void refresh(bool fullRefresh = false);
+  void refresh(EInkDisplay::RefreshMode mode = EInkDisplay::FAST_REFRESH);
 
   // Color constants (0 = black, 1 = white for 1-bit display)
   static const uint16_t COLOR_BLACK = 0;
