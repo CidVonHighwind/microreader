@@ -10,9 +10,11 @@
 #include "EInkDisplay.h"
 #include "Screen.h"
 
+class UIManager;
+
 class FileBrowserScreen : public Screen {
  public:
-  FileBrowserScreen(EInkDisplay& display, TextRenderer& renderer, SDCardManager& sdManager);
+  FileBrowserScreen(EInkDisplay& display, TextRenderer& renderer, SDCardManager& sdManager, UIManager& uiManager);
   void begin() override;
   void show() override;
 
@@ -31,6 +33,7 @@ class FileBrowserScreen : public Screen {
   EInkDisplay& display;
   TextRenderer& textRenderer;
   SDCardManager& sdManager;
+  UIManager& uiManager;
 
   std::vector<String> sdFiles;
   int sdSelectedIndex = 0;

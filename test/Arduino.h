@@ -19,6 +19,19 @@
 
 // Mock Serial for debug output
 struct MockSerial {
+  void begin(unsigned long baudrate) {
+    (void)baudrate;  // Do nothing
+  }
+  size_t write(unsigned int c) {
+    std::cout << (char)c;
+    return 1;
+  }
+  void flush() {
+    std::cout.flush();
+  }
+  void end() {
+    // Do nothing
+  }
   void print(const char* str) {
     std::cout << str;
   }

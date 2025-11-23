@@ -5,9 +5,11 @@
 #include <Fonts/FreeSans18pt7b.h>
 
 #include "Buttons.h"
+#include "UIManager.h"
 
-FileBrowserScreen::FileBrowserScreen(EInkDisplay& display, TextRenderer& renderer, SDCardManager& sdManager)
-    : display(display), textRenderer(renderer), sdManager(sdManager) {}
+FileBrowserScreen::FileBrowserScreen(EInkDisplay& display, TextRenderer& renderer, SDCardManager& sdManager,
+                                     UIManager& uiManager)
+    : display(display), textRenderer(renderer), sdManager(sdManager), uiManager(uiManager) {}
 
 void FileBrowserScreen::begin() {
   loadFolder();
@@ -34,7 +36,7 @@ void FileBrowserScreen::renderSdBrowser() {
   textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
   textRenderer.setFont(&FreeSans18pt7b);
 
-  textRenderer.setCursor(10, 60);
+  textRenderer.setCursor(10, 50);
   textRenderer.print("SD Card");
 
   textRenderer.setFont(&FreeSans12pt7b);
@@ -64,8 +66,12 @@ void FileBrowserScreen::renderSdBrowser() {
 
 void FileBrowserScreen::confirm() {
   if (!sdFiles.empty()) {
-    String path = sdFiles[sdSelectedIndex];
-    Serial.printf("Selected file: %s\n", path.c_str());
+    String filename = sdFiles[sdSelectedIndex];
+    String fullPath = String("/Microreader/") + filename;
+    Serial.printf("Selected file: %s\n", fullPath.c_str());
+
+    // Ask UI manager to open the selected file in the text viewer
+    uiManager.openTextFile(fullPath);
   }
 }
 

@@ -9,51 +9,71 @@
 #include "screens/TextViewerScreen.h"
 
 UIManager::UIManager(EInkDisplay& display, SDCardManager& sdManager)
-    : display(display), sdManager(sdManager), textRenderer(display), textLayout(), currentScreenIndex(0) {
-  screens.emplace_back(std::unique_ptr<FileBrowserScreen>(new FileBrowserScreen(display, textRenderer, sdManager)));
-  screens.emplace_back(std::unique_ptr<ImageViewerScreen>(new ImageViewerScreen(display)));
-  screens.emplace_back(std::unique_ptr<TextViewerScreen>(new TextViewerScreen(display, textRenderer)));
+    : display(display), sdManager(sdManager), textRenderer(display), textLayout() {
+  // Create concrete screens and store pointers in the map.
+  screens[ScreenId::FileBrowser] =
+      std::unique_ptr<Screen>(new FileBrowserScreen(display, textRenderer, sdManager, *this));
+  screens[ScreenId::ImageViewer] = std::unique_ptr<Screen>(new ImageViewerScreen(display));
+  screens[ScreenId::TextViewer] = std::unique_ptr<Screen>(new TextViewerScreen(display, textRenderer, sdManager));
   Serial.printf("[%lu] UIManager: Constructor called\n", millis());
 }
 
 void UIManager::begin() {
   Serial.printf("[%lu] UIManager: begin() called\n", millis());
   // Initialize screens using generic Screen interface
-  for (auto& s : screens) {
-    s->begin();
+  for (auto& p : screens) {
+    if (p.second)
+      p.second->begin();
   }
 
-  // Show starting screen
-  showScreen(currentScreenIndex);
+  // Show starting screen (FileBrowser)
+  currentScreen = ScreenId::FileBrowser;
+  showScreen(currentScreen);
 
   display.displayBuffer(EInkDisplay::HALF_REFRESH);
   Serial.printf("[%lu] UIManager initialized\n", millis());
 }
 
-void UIManager::showScreen(int index) {
-  currentScreenIndex = index;
-  if (index >= 0 && index < (int)screens.size()) {
-    screens[index]->show();
+// navigation helpers (small fixed set; implement by scanning enum list)
+UIManager::ScreenId UIManager::nextScreenId(UIManager::ScreenId cur) const {
+  auto it = std::find(screenOrder.begin(), screenOrder.end(), cur);
+  if (it != screenOrder.end()) {
+    ++it;
+    if (it == screenOrder.end())
+      it = screenOrder.begin();
+    return *it;
   }
+  return screenOrder[0];
+}
+
+UIManager::ScreenId UIManager::prevScreenId(UIManager::ScreenId cur) const {
+  auto it = std::find(screenOrder.begin(), screenOrder.end(), cur);
+  if (it != screenOrder.end()) {
+    if (it == screenOrder.begin())
+      it = screenOrder.end();
+    --it;
+    return *it;
+  }
+  return screenOrder[0];
 }
 
 void UIManager::handleButtons(Buttons& buttons) {
   if (buttons.wasPressed(Buttons::VOLUME_UP) || buttons.wasPressed(Buttons::VOLUME_DOWN)) {
     // Move through the screens vector: UP => previous, DOWN => next (wrap-around).
     if (buttons.wasPressed(Buttons::VOLUME_UP)) {
-      int n = (int)screens.size();
-      currentScreenIndex = (currentScreenIndex - 1 + n) % n;
+      currentScreen = prevScreenId(currentScreen);
     } else {  // VOLUME_DOWN
-      currentScreenIndex = (currentScreenIndex + 1) % (int)screens.size();
+      currentScreen = nextScreenId(currentScreen);
     }
 
-    screens[currentScreenIndex]->show();
+    // We guarantee the screen exists, so access directly.
+    screens[currentScreen]->show();
     return;
   }
 
   // Pass buttons to the current screen
-  if (currentScreenIndex >= 0 && currentScreenIndex < (int)screens.size())
-    screens[currentScreenIndex]->handleButtons(buttons);
+  // Directly forward to the active screen (must exist)
+  screens[currentScreen]->handleButtons(buttons);
 }
 
 void UIManager::showSleepScreen() {
@@ -75,4 +95,17 @@ void UIManager::showSleepScreen() {
 
   textRenderer.setCursor(centerX, 780);
   textRenderer.print(sleepText);
+}
+
+void UIManager::openTextFile(const String& sdPath) {
+  Serial.printf("UIManager: openTextFile %s\n", sdPath.c_str());
+  // Directly access TextViewerScreen and open the file (guaranteed to exist)
+  static_cast<TextViewerScreen*>(screens[ScreenId::TextViewer].get())->openFile(sdPath);
+  showScreen(ScreenId::TextViewer);
+}
+
+void UIManager::showScreen(ScreenId id) {
+  // Directly show the requested screen (assumed present)
+  currentScreen = id;
+  screens[id]->show();
 }

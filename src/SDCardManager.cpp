@@ -60,3 +60,27 @@ std::vector<String> SDCardManager::listFiles(const char* path, int maxFiles) {
   root.close();
   return ret;
 }
+
+String SDCardManager::readFile(const char* path) {
+  if (!initialized) {
+    Serial.println("SDCardManager: not initialized; cannot read file");
+    return String("");
+  }
+
+  File f = SD.open(path);
+  if (!f) {
+    Serial.printf("Failed to open file: %s\n", path);
+    return String("");
+  }
+
+  String content = "";
+  size_t maxSize = 10240;  // Limit to 10KB
+  size_t readSize = 0;
+  while (f.available() && readSize < maxSize) {
+    char c = (char)f.read();
+    content += c;
+    readSize++;
+  }
+  f.close();
+  return content;
+}

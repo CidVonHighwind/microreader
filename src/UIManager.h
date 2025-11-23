@@ -2,7 +2,7 @@
 #define UI_MANAGER_H
 
 #include <memory>
-#include <vector>
+#include <unordered_map>
 
 #include "Buttons.h"
 #include "EInkDisplay.h"
@@ -12,6 +12,19 @@
 
 class SDCardManager;
 
+// Forward-declare concrete screen types (global, not nested)
+class FileBrowserScreen;
+class ImageViewerScreen;
+class TextViewerScreen;
+
+// Hash function for enum class
+struct EnumClassHash {
+  template <typename T>
+  std::size_t operator()(T t) const {
+    return static_cast<std::size_t>(t);
+  }
+};
+
 class UIManager {
  public:
   // Constructor
@@ -20,18 +33,32 @@ class UIManager {
   void begin();
   void handleButtons(Buttons& buttons);
   void showSleepScreen();
+  // Open a text file (path on SD) in the text viewer and switch to that screen.
+  void openTextFile(const String& sdPath);
+
+  // Typed screen identifiers so callers don't use raw indices
+  enum class ScreenId { FileBrowser, ImageViewer, TextViewer };
 
  private:
   EInkDisplay& display;
   SDCardManager& sdManager;
   TextRenderer textRenderer;
   TextLayout textLayout;
-  int currentScreenIndex;
 
-  void showScreen(int index);
+  ScreenId currentScreen = ScreenId::FileBrowser;
 
-  // Screen components (polymorphic list)
-  std::vector<std::unique_ptr<::Screen>> screens;
+  // Show a screen by id
+  void showScreen(ScreenId id);
+
+  // Map holding owning pointers to the screens; screens are
+  // constructed in the .cpp ctor and live for the UIManager lifetime.
+  std::unordered_map<ScreenId, std::unique_ptr<Screen>, EnumClassHash> screens;
+
+  // Order for navigation
+  std::vector<ScreenId> screenOrder = {ScreenId::FileBrowser, ScreenId::ImageViewer, ScreenId::TextViewer};
+
+  ScreenId nextScreenId(ScreenId cur) const;
+  ScreenId prevScreenId(ScreenId cur) const;
 };
 
 #endif
