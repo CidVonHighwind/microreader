@@ -36,7 +36,7 @@ Chapter 4: Implementation
 
 Behind the scenes, the SSD1677 display controller managed complex waveforms and voltage sequences. The ESP32-C3 microcontroller orchestrated everything with precision timing. Frame buffers stored pixel data efficiently, with each bit representing a single black or white pixel on the 800x480 display.
 
-The software architecture separated concerns into distinct layers. The EInkDisplay class handled low-level hardware communication, managing SPI transfers and display controller commands. The TextRenderer class provided a familiar graphics interface, extending Adafruit-GFX to render directly into the frame buffer. The DisplayController class implemented high-level application logic, managing page navigation and mode switching.
+	The software architecture separated concerns into distinct layers. The EInkDisplay class handled low-level hardware communication, managing SPI transfers and display controller commands. The TextRenderer class provided a familiar graphics interface, extending Adafruit-GFX to render directly into the frame buffer. The UIManager class implemented high-level application logic, managing page navigation and mode switching.
 
 Memory management was critical on the resource-constrained microcontroller. The frame buffer alone required 48 kilobytes of RAM. Careful optimization ensured smooth operation without exhausting available memory. Text content was stored in flash memory using PROGMEM, freeing precious RAM for runtime operations. String parsing happened incrementally to avoid creating large temporary buffers.
 

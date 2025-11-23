@@ -1,9 +1,12 @@
 #include <Arduino.h>
+#include <FS.h>
+#include <SD.h>
 #include <esp_sleep.h>
 
 #include "Buttons.h"
-#include "DisplayController.h"
 #include "EInkDisplay.h"
+#include "SDCardManager.h"
+#include "UIManager.h"
 
 // USB detection pin
 #define UART0_RXD 20  // Used for USB connection detection
@@ -13,15 +16,20 @@ const unsigned long POWER_BUTTON_WAKEUP_MS = 500;  // Time required to confirm b
 
 // Display SPI pins (custom pins, not hardware SPI defaults)
 #define EPD_SCLK 8   // SPI Clock
-#define EPD_MOSI 10  // SPI MOSI (Master Out Slave In)
-#define EPD_CS 21    // Chip Select
 #define EPD_DC 4     // Data/Command
 #define EPD_RST 5    // Reset
 #define EPD_BUSY 6   // Busy
+#define EPD_MOSI 10  // SPI MOSI (Master Out Slave In)
+
+#define SD_SPI_CS 12  // SD Card Chip Select
+#define SD_SPI_MISO 7
+
+#define EINK_SPI_CS 21  // EINK Chip Select
 
 Buttons buttons;
-EInkDisplay einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_RST, EPD_BUSY);
-DisplayController displayController(einkDisplay);
+EInkDisplay einkDisplay(EPD_SCLK, EPD_MOSI, EINK_SPI_CS, EPD_DC, EPD_RST, EPD_BUSY);
+SDCardManager sdManager(EPD_SCLK, SD_SPI_MISO, EPD_MOSI, SD_SPI_CS, EINK_SPI_CS);
+UIManager displayController(einkDisplay, sdManager);
 
 // Check if USB is connected
 bool isUsbConnected() {
@@ -106,6 +114,9 @@ void setup() {
   // Initialize buttons
   buttons.begin();
   Serial.println("Buttons initialized");
+
+  // Initialize SD card manager
+  sdManager.begin();
 
   // Initialize display driver (handles SPI, display init, and configuration)
   einkDisplay.begin();
