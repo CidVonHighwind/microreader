@@ -1,7 +1,7 @@
 #include "UIManager.h"
 
-#include <Fonts/FreeSans12pt7b.h>
-#include <Fonts/FreeSans18pt7b.h>
+#include <Fonts/Font16.h>
+#include <Fonts/Font27.h>
 
 #include "image/bebop_image.h"
 #include "screens/FileBrowserScreen.h"
@@ -86,7 +86,7 @@ void UIManager::showSleepScreen() {
 
   // Add "Sleeping..." text at the bottom
   textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
-  textRenderer.setFont(&FreeSans12pt7b);
+  textRenderer.setFont(&Font16);
 
   const char* sleepText = "Sleeping...";
   int16_t x1, y1;

@@ -1,8 +1,8 @@
 
 #include "screens/FileBrowserScreen.h"
 
-#include <Fonts/FreeSans12pt7b.h>
-#include <Fonts/FreeSans18pt7b.h>
+#include <Fonts/Font16.h>
+#include <Fonts/Font27.h>
 
 #include "Buttons.h"
 #include "UIManager.h"
@@ -34,12 +34,12 @@ void FileBrowserScreen::show() {
 void FileBrowserScreen::renderSdBrowser() {
   display.clearScreen(0xFF);
   textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
-  textRenderer.setFont(&FreeSans18pt7b);
+  textRenderer.setFont(&Font27);
 
   textRenderer.setCursor(10, 50);
   textRenderer.print("SD Card");
 
-  textRenderer.setFont(&FreeSans12pt7b);
+  textRenderer.setFont(&Font16);
 
   int lineY = 84;
   int lines = SD_LINES_PER_SCREEN;

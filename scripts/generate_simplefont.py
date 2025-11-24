@@ -276,6 +276,10 @@ if __name__ == "__main__":
         help="Either a comma/range list of decimal char codes (eg: 32 or 32,48-57) or a literal string of characters to include (eg: 'ABCabc0123').",
     )
     p.add_argument(
+        "--chars-file",
+        help="Path to a file containing the literal characters to include. Use this to avoid shell quoting/escaping issues.",
+    )
+    p.add_argument(
         "--size",
         type=int,
         required=True,
@@ -296,9 +300,21 @@ if __name__ == "__main__":
 
     args = p.parse_args()
 
-    # parse chars spec
+    # parse chars spec. Prefer --chars-file when present to avoid shell quoting issues
     codes = []
-    chars_arg = args.chars
+    if args.chars_file:
+        if not os.path.isfile(args.chars_file):
+            print(f"ERROR: chars file not found: '{args.chars_file}'")
+            sys.exit(1)
+        with open(args.chars_file, "r", encoding="utf-8") as cf:
+            chars_arg = cf.read()
+        # Strip Unicode BOM if present and trailing newlines to avoid accidental
+        # inclusion of BOM/newline characters from editors or Set-Content.
+        chars_arg = chars_arg.replace("\ufeff", "")
+        chars_arg = chars_arg.rstrip("\r\n")
+        print(f"Loaded {len(chars_arg)} character(s) from {args.chars_file}")
+    else:
+        chars_arg = args.chars
     # If the supplied arg contains any non-digit and non-separator characters,
     # treat it as a literal string of characters to include. This lets callers
     # pass an explicit set like "ABCabc0123Ω漢".
@@ -320,21 +336,35 @@ if __name__ == "__main__":
     size = args.size
     # If a TTF was supplied, render each glyph using Pillow
     if args.ttf:
+        # Provide clear error messages and fail early if Pillow or the font file
+        # cannot be used. Silent fallback to `generate_header()` produced the
+        # all-0xFF glyphs the user reported; make failures loud so they don't
+        # become confusing filled-bitmaps.
         if not PIL_AVAILABLE:
             print(
                 "ERROR: Pillow (PIL) is required to render from TTF. Install with `pip install pillow`."
             )
             sys.exit(1)
-        try:
-            font = ImageFont.truetype(args.ttf, args.size)
-        except Exception as e:
-            print(f"ERROR: failed to load font '{args.ttf}': {e}")
+
+        ttf_path = args.ttf
+        if not os.path.isfile(ttf_path):
+            print(f"ERROR: TTF file not found: '{ttf_path}'")
             sys.exit(1)
+
+        try:
+            font = ImageFont.truetype(ttf_path, args.size)
+        except Exception as e:
+            print(f"ERROR: failed to load font '{ttf_path}': {e}")
+            sys.exit(1)
+
+        print(
+            f"Rendering {len(codes)} glyph(s) from TTF: {ttf_path} (size={args.size})"
+        )
 
         bitmap_all = []
         glyphs = []
         offset = 0
-        for ch in codes:
+        for i, ch in enumerate(codes):
             w, h, bm, xadv, xoff, yoff = render_glyph_from_ttf(ch, font, args.size)
             glyph = {
                 "bitmapOffset": offset,
@@ -347,6 +377,17 @@ if __name__ == "__main__":
             glyphs.append(glyph)
             bitmap_all.extend(bm)
             offset += len(bm)
+
+            # Sanity check: warn if a glyph bitmap is entirely 0x00 or 0xFF
+            if bm:
+                uniq = set(bm)
+                if len(uniq) == 1:
+                    val = next(iter(uniq))
+                    if val in (0x00, 0xFF):
+                        cp = f"0x{ch:04X}"
+                        print(
+                            f"WARNING: glyph {cp} rendered to uniform byte 0x{val:02X}"
+                        )
 
         yadvance = args.size + 2
         write_header_from_data(args.name, args.out, codes, glyphs, bitmap_all, yadvance)

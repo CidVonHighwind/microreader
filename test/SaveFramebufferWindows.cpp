@@ -2,7 +2,8 @@
 #include <iostream>
 
 #include "../src/EInkDisplay.h"
-#include "../src/Fonts/Arial16.h"
+#include "../src/Fonts/Font16.h"
+#include "../src/Fonts/Font27.h"
 #include "../src/text_renderer/TextRenderer.h"
 #include "WString.h"
 
@@ -21,7 +22,7 @@ int main() {
   // Render some text onto the frame buffer using the TextRenderer
   TextRenderer renderer(display);
   // Use our local font
-  renderer.setFont(&Arial16);
+  renderer.setFont(&Font16);
   renderer.setTextColor(TextRenderer::COLOR_BLACK);
   // Print a full printable ASCII range for font testing character-by-character
   // and wrap to the next line when characters do not fit.

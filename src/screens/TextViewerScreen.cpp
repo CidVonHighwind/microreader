@@ -1,8 +1,8 @@
 #include "screens/TextViewerScreen.h"
 
 #include <Arduino.h>
-#include <Fonts/FreeSans12pt7b.h>
-#include <Fonts/FreeSans18pt7b.h>
+#include <Fonts/Font16.h>
+#include <Fonts/Font27.h>
 
 #include "../SDCardManager.h"
 #include "Buttons.h"
@@ -70,7 +70,7 @@ void TextViewerScreen::showPage() {
 
   display.clearScreen(0xFF);
   textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
-  textRenderer.setFont(&FreeSans12pt7b);
+  textRenderer.setFont(&Font27);
 
   pageStartIndex = provider->getCurrentIndex();
 
