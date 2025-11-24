@@ -1,7 +1,7 @@
 #ifndef WORD_PROVIDER_H
 #define WORD_PROVIDER_H
 
-#include "LayoutStrategy.h"  // For the Word struct
+#include "WString.h"  // For Arduino `String`
 
 class TextRenderer;  // Forward declaration
 
@@ -12,11 +12,11 @@ class WordProvider {
   // Returns true if there are more words to read
   virtual bool hasNextWord() = 0;
 
-  // Returns the next word, measuring its width using the renderer
-  virtual LayoutStrategy::Word getNextWord(TextRenderer& renderer) = 0;
+  // Returns the next word as an Arduino `String`, measuring its width using the renderer
+  virtual String getNextWord(TextRenderer& renderer) = 0;
 
-  // Gets the previous word and moves index backwards
-  virtual LayoutStrategy::Word getPrevWord(TextRenderer& renderer) = 0;
+  // Gets the previous word as an Arduino `String` and moves index backwards
+  virtual String getPrevWord(TextRenderer& renderer) = 0;
 
   // Returns the current reading progress as a percentage (0.0 to 1.0)
   virtual float getPercentage() = 0;

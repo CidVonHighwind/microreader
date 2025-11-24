@@ -27,12 +27,16 @@ void KnuthPlassLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& 
   // Collect all words from provider (treat as one paragraph for simplicity)
   std::vector<Word> words;
   while (provider.hasNextWord()) {
-    Word word = provider.getNextWord(renderer);
+    String text = provider.getNextWord(renderer);
     // Skip break words for Knuth-Plass (treat as one paragraph)
-    if (word.text == "\n" || word.text == "\n\n") {
+    if (text == "\n" || text == "\n\n") {
       continue;
     }
-    words.push_back(word);
+    // Measure width using renderer
+    int16_t bx = 0, by = 0;
+    uint16_t bw = 0, bh = 0;
+    renderer.getTextBounds(text.c_str(), 0, 0, &bx, &by, &bw, &bh);
+    words.push_back(LayoutStrategy::Word{text, static_cast<int16_t>(bw)});
   }
 
   if (words.empty()) {
@@ -311,7 +315,11 @@ int KnuthPlassLayoutStrategy::getPreviousPageStart(WordProvider& provider, TextR
 
   // Go backwards collecting words until we fill a page
   while (provider.getCurrentIndex() > 0 && y < maxY) {
-    Word word = provider.getPrevWord(renderer);
+    String t = provider.getPrevWord(renderer);
+    int16_t bx = 0, by = 0;
+    uint16_t bw = 0, bh = 0;
+    renderer.getTextBounds(t.c_str(), 0, 0, &bx, &by, &bw, &bh);
+    LayoutStrategy::Word word{t, static_cast<int16_t>(bw)};
 
     if (word.text.length() == 0)
       break;  // No more words

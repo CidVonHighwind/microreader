@@ -65,7 +65,12 @@ std::vector<LayoutStrategy::Word> GreedyLayoutStrategy::getNextLine(WordProvider
   int16_t currentWidth = 0;
 
   while (provider.hasNextWord()) {
-    LayoutStrategy::Word word = provider.getNextWord(renderer);
+    String text = provider.getNextWord(renderer);
+    // Measure the rendered width using the renderer
+    int16_t bx = 0, by = 0;
+    uint16_t bw = 0, bh = 0;
+    renderer.getTextBounds(text.c_str(), 0, 0, &bx, &by, &bw, &bh);
+    LayoutStrategy::Word word{text, static_cast<int16_t>(bw)};
 
     // Check for breaks - breaks are returned as special words
     if (word.text == "\n") {
@@ -103,9 +108,14 @@ std::vector<LayoutStrategy::Word> GreedyLayoutStrategy::getPrevLine(WordProvider
   int16_t currentWidth = 0;
 
   while (provider.getCurrentIndex() > 0) {
-    LayoutStrategy::Word word = provider.getPrevWord(renderer);
-    if (word.text.length() == 0)
+    String text = provider.getPrevWord(renderer);
+    if (text.length() == 0)
       break;
+    // Measure the rendered width using the renderer
+    int16_t bx = 0, by = 0;
+    uint16_t bw = 0, bh = 0;
+    renderer.getTextBounds(text.c_str(), 0, 0, &bx, &by, &bw, &bh);
+    LayoutStrategy::Word word{text, static_cast<int16_t>(bw)};
 
     // Check for breaks - breaks are returned as special words
     if (word.text == "\n") {

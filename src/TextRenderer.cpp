@@ -33,10 +33,4 @@ void TextRenderer::drawPixel(int16_t x, int16_t y, uint16_t color) {
   }
 }
 
-void TextRenderer::clearText() {
-  display.clearScreen(0xFF);
-}
-
-void TextRenderer::refresh(RefreshMode mode) {
-  display.displayBuffer(mode);
-}
+// clearText and refresh have been removed from TextRenderer; use EInkDisplay API instead.

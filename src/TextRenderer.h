@@ -14,16 +14,6 @@
 
 class EInkDisplay;  // Forward declaration
 
-// Define RefreshMode for all builds
-#ifndef REFRESH_MODE_DEFINED
-enum RefreshMode { FULL_REFRESH, HALF_REFRESH, FAST_REFRESH };
-#define REFRESH_MODE_DEFINED
-#endif
-
-#ifndef TEST_BUILD
-#include "EInkDisplay.h"
-#endif
-
 class TextRenderer : public Adafruit_GFX {
  public:
   // Constructor
@@ -31,10 +21,6 @@ class TextRenderer : public Adafruit_GFX {
 
   // Required Adafruit_GFX overrides
   void drawPixel(int16_t x, int16_t y, uint16_t color) override;
-
-  // Helper methods
-  void clearText();
-  void refresh(RefreshMode mode = FAST_REFRESH);
 
   // Color constants (0 = black, 1 = white for 1-bit display)
   static const uint16_t COLOR_BLACK = 0;

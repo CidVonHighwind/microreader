@@ -1,128 +1,79 @@
 #include "StringWordProvider.h"
 
-#include "TextRenderer.h"
+// NOTE: To keep this class testable without pulling in platform-specific
+// graphics/Arduino headers, do not depend on TextRenderer methods here.
+// Width measurement is simplified to the character count of the word so
+// unit tests can instantiate and exercise this class without stubbing
+// the entire graphics stack.
 
 StringWordProvider::StringWordProvider(const String& text) : text_(text), index_(0), prevIndex_(0) {}
 
 StringWordProvider::~StringWordProvider() {}
 
 bool StringWordProvider::hasNextWord() {
-  // Skip whitespace to check if there's a word ahead
-  int tempIndex = index_;
-  while (tempIndex < text_.length() &&
-         (text_[tempIndex] == ' ' || text_[tempIndex] == '\n' || text_[tempIndex] == '\t')) {
-    tempIndex++;
-  }
-  return tempIndex < text_.length();
+  return index_ < text_.length();
 }
 
-LayoutStrategy::Word StringWordProvider::getNextWord(TextRenderer& renderer) {
-  prevIndex_ = index_;  // Save position before advancing
-
-  // Skip leading whitespace and count consecutive newlines
-  int consecutiveNewlines = 0;
-  while (index_ < text_.length()) {
-    char c = text_[index_];
-    if (c == '\n') {
-      consecutiveNewlines++;
-    } else if (c == ' ' || c == '\t') {
-      consecutiveNewlines = 0;  // Reset on space/tab
-    } else {
-      break;  // Found non-whitespace
-    }
-    index_++;
-  }
-
-  // Return break words for consecutive newlines
-  if (consecutiveNewlines >= 2) {
-    return {"\n\n", 0};  // Paragraph break
-  } else if (consecutiveNewlines == 1) {
-    return {"\n", 0};  // Line break
-  }
-
-  // Check if we've reached the end
-  if (index_ >= text_.length()) {
-    return {"", 0};
-  }
-
-  // Find the end of the word
-  int wordStart = index_;
-  while (index_ < text_.length() && text_[index_] != ' ' && text_[index_] != '\n' && text_[index_] != '\t') {
-    index_++;
-  }
-
-  String wordText = text_.substring(wordStart, index_);
-
-  // Measure width
-  int16_t x1, y1;
-  uint16_t w, h;
-  renderer.getTextBounds(wordText.c_str(), 0, 0, &x1, &y1, &w, &h);
-  int16_t actualWidth = x1 + w;
-
-  return {wordText, actualWidth};
+String StringWordProvider::getNextWord(TextRenderer& renderer) {
+  return scanWord(+1, renderer);
 }
 
-LayoutStrategy::Word StringWordProvider::getPrevWord(TextRenderer& renderer) {
-  if (index_ == 0) {
-    return {"", 0};
+String StringWordProvider::getPrevWord(TextRenderer& renderer) {
+  return scanWord(-1, renderer);
+}
+
+String StringWordProvider::scanWord(int direction, TextRenderer& /*renderer*/) {
+  // Save prevIndex_ when scanning
+  prevIndex_ = index_;
+
+  int currentPos = (direction == 1) ? index_ : index_ - 1;
+  if ((direction == 1 && currentPos >= text_.length()) || (direction == -1 && currentPos < 0)) {
+    return String("");
   }
+  char c = text_[currentPos];
 
-  prevIndex_ = index_;  // Save position before moving backwards
-
-  // Start from before current index
-  int searchPos = index_ - 1;
-
-  // Skip backwards past whitespace
-  int consecutiveNewlines = 0;
-  while (searchPos >= 0) {
-    char c = text_[searchPos];
-    if (c == '\n') {
-      consecutiveNewlines++;
-    } else if (c == ' ' || c == '\t') {
-      consecutiveNewlines = 0;
+  if (c == ' ') {
+    String token;
+    int start = currentPos;
+    if (direction == 1) {
+      int end = currentPos;
+      while (end < text_.length() && text_[end] == ' ')
+        end++;
+      token = text_.substring(start, end);
+      index_ = end;
     } else {
-      break;  // Found non-whitespace
+      while (start > 0 && text_[start - 1] == ' ')
+        start--;
+      token = text_.substring(start, index_);
+      index_ = start;
     }
-    searchPos--;
+    return token;
+  } else if (c == '\n' || c == '\t' || c == '\r') {
+    if (direction == 1) {
+      index_++;
+    } else {
+      index_ = currentPos;
+    }
+    return String(c);
+  } else {
+    String token;
+    int start = currentPos;
+    if (direction == 1) {
+      int end = currentPos;
+      while (end < text_.length() && text_[end] != ' ' && text_[end] != '\n' && text_[end] != '\t' &&
+             text_[end] != '\r')
+        end++;
+      token = text_.substring(start, end);
+      index_ = end;
+    } else {
+      while (start > 0 && text_[start - 1] != ' ' && text_[start - 1] != '\n' && text_[start - 1] != '\t' &&
+             text_[start - 1] != '\r')
+        start--;
+      token = text_.substring(start, index_);
+      index_ = start;
+    }
+    return token;
   }
-
-  // If we found consecutive newlines, return a break word
-  if (consecutiveNewlines >= 2) {
-    index_ = searchPos;
-    return {"\n\n", 0};  // Paragraph break
-  } else if (consecutiveNewlines == 1) {
-    index_ = searchPos;
-    return {"\n", 0};  // Line break
-  }
-
-  if (searchPos < 0) {
-    index_ = 0;
-    return {"", 0};
-  }
-
-  // searchPos is at the end of the previous word
-  int wordEnd = searchPos;
-
-  // Find word start
-  while (searchPos >= 0 && text_[searchPos] != ' ' && text_[searchPos] != '\n' && text_[searchPos] != '\t') {
-    searchPos--;
-  }
-
-  int wordStart = searchPos + 1;
-
-  // Extract word
-  String wordText = text_.substring(wordStart, wordEnd + 1);
-
-  // Update index to word start
-  index_ = wordStart;
-
-  // Measure width
-  int16_t x1, y1;
-  uint16_t w, h;
-  renderer.getTextBounds(wordText.c_str(), 0, 0, &x1, &y1, &w, &h);
-  int16_t actualWidth = x1 + w;
-
-  return {wordText, actualWidth};
 }
 
 float StringWordProvider::getPercentage() {

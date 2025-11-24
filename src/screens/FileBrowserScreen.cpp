@@ -32,7 +32,7 @@ void FileBrowserScreen::show() {
 }
 
 void FileBrowserScreen::renderSdBrowser() {
-  textRenderer.clearText();
+  display.clearScreen(0xFF);
   textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
   textRenderer.setFont(&FreeSans18pt7b);
 

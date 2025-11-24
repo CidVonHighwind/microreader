@@ -68,7 +68,7 @@ void TextViewerScreen::showPage() {
   float displayPercentage = provider->getPercentage();
   provider->setPosition(currentIndex);
 
-  textRenderer.clearText();
+  display.clearScreen(0xFF);
   textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
   textRenderer.setFont(&FreeSans12pt7b);
 

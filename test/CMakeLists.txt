@@ -1,38 +1,17 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.5)
+project(StringWordProviderTest LANGUAGES CXX)
 
-project(TextLayoutTest)
-
-# Set C++ standard
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Add include directories
-include_directories(${CMAKE_SOURCE_DIR}/../src)
-include_directories(${CMAKE_SOURCE_DIR})  # For Arduino.h mock and font files
+# Prefer our test include directory so the minimal WString.h is used
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../src)
 
-# Add the test executable
-add_executable(textlayout_test
-    windows_test_simple.cpp
-    Adafruit_GFX.cpp
-    ../src/TextRenderer.cpp
-    ../src/EInkDisplay.cpp
-    "../src/screens/text view/KnuthPlassLayoutStrategy.cpp"
-    "../src/screens/text view/GreedyLayoutStrategy.cpp"
-    "../src/screens/text view/TextLayout.cpp"
-    "../src/screens/text view/StringWordProvider.cpp"
+add_executable(StringWordProviderTest
+  StringWordProviderTest.cpp
+  "${CMAKE_CURRENT_SOURCE_DIR}/../src/screens/text view/StringWordProvider.cpp"
 )
 
-# Define DEBUG_LAYOUT for debugging
-target_compile_definitions(textlayout_test PRIVATE DEBUG_LAYOUT TEST_BUILD)
-
-# Link math library if needed
-if(UNIX)
-    target_link_libraries(textlayout_test m)
-endif()
-
-# Enable warnings
-if(MSVC)
-    target_compile_options(textlayout_test PRIVATE /W4)
-else()
-    target_compile_options(textlayout_test PRIVATE -Wall -Wextra)
-endif()
+target_compile_definitions(StringWordProviderTest PRIVATE TEST_BUILD)
+target_include_directories(StringWordProviderTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/../src)
