@@ -6,16 +6,100 @@
 #include <SPI.h>
 #else
 #include <cstdint>
+
+// Compatibility shims for non-Arduino desktop builds (test harness)
+#include <chrono>
+#include <cstring>
+#include <thread>
+
+// PROGMEM / pgm_read helpers
+#ifndef PROGMEM
+#define PROGMEM
+#endif
+#ifndef pgm_read_byte
+#define pgm_read_byte(addr) (*(const unsigned char*)(addr))
+#endif
+
+// Minimal SPISettings stub (used by the driver code)
+#ifndef SPISettings
+struct SPISettings {
+  SPISettings() {}
+  SPISettings(uint32_t, int, int) {}
+};
+#endif
+
+// Minimal SPI mock
+struct MockSPI {
+  void begin(int sclk = -1, int miso = -1, int mosi = -1, int ssel = -1) {
+    (void)sclk;
+    (void)miso;
+    (void)mosi;
+    (void)ssel;
+  }
+  void beginTransaction(const SPISettings&) {}
+  void endTransaction() {}
+  void transfer(uint8_t) {}
+};
+
+static MockSPI SPI;
+
+// SPI mode / bit order constants
+#ifndef MSBFIRST
+#define MSBFIRST 1
+#endif
+#ifndef SPI_MODE0
+#define SPI_MODE0 0
+#endif
+
+// Arduino GPIO and timing stubs
+inline void pinMode(int, int) {}
+inline void digitalWrite(int, int) {}
+inline int digitalRead(int) {
+  return 0;
+}
+inline void delay(unsigned long) {}
+
+// Arduino constants
+#ifndef OUTPUT
+#define OUTPUT 1
+#endif
+#ifndef INPUT
+#define INPUT 0
+#endif
+#ifndef HIGH
+#define HIGH 1
+#endif
+#ifndef LOW
+#define LOW 0
+#endif
+
+#ifdef TEST_BUILD
+#include "Arduino.h"
+#else
+// Provide minimal declarations so code can reference Serial/millis when
+// building outside the Arduino framework but without the TEST_BUILD header.
+extern struct MockSerial {
+  void printf(const char*, ...);
+  void println(const char*);
+  void print(const char*);
+} Serial;
+
+unsigned long millis();
+#endif
+#endif
+
+// Refresh modes (guarded to avoid redefinition in test builds)
+#ifndef REFRESH_MODE_DEFINED
+enum RefreshMode {
+  FULL_REFRESH,  // Full refresh with complete waveform
+  HALF_REFRESH,  // Half refresh (1720ms) - balanced quality and speed
+  FAST_REFRESH   // Fast refresh using custom LUT
+};
+#define REFRESH_MODE_DEFINED
 #endif
 
 class EInkDisplay {
  public:
-  // Refresh modes
-  enum RefreshMode {
-    FULL_REFRESH,  // Full refresh with complete waveform
-    HALF_REFRESH,  // Half refresh (1720ms) - balanced quality and speed
-    FAST_REFRESH   // Fast refresh using custom LUT
-  };
   // Constructor with pin configuration
   EInkDisplay(int8_t sclk, int8_t mosi, int8_t cs, int8_t dc, int8_t rst, int8_t busy);
 
@@ -47,6 +131,9 @@ class EInkDisplay {
   uint8_t* getFrameBuffer() {
     return frameBuffer;
   }
+
+  // Save the current framebuffer to a PBM file (desktop/test builds only)
+  void saveFrameBufferAsPBM(const char* filename);
 
   // Debug
   void debugPrintFramebuffer();

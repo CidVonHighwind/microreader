@@ -4,6 +4,8 @@
 // Enable debug output for layout algorithm
 #define DEBUG_LAYOUT
 
+#define TEST_BUILD
+
 #include <chrono>
 #include <cstdarg>
 #include <fstream>
@@ -13,9 +15,11 @@
 // Include mock implementations (they check for ARDUINO internally)
 #include <fstream>
 
+#include "../src/EInkDisplay.h"
 #include "Adafruit_GFX.h"
 #include "Arduino.h"
 #include "WString.h"
+#include "gfxfont.h"
 
 // Define Serial object
 MockSerial Serial;
@@ -28,169 +32,53 @@ unsigned long millis() {
   return static_cast<unsigned long>(elapsed.count());
 }
 
-// Mock EInkDisplay
-class EInkDisplay {
- public:
-  // Refresh modes
-  enum RefreshMode {
-    FULL_REFRESH,  // Full refresh with complete waveform
-    HALF_REFRESH,  // Half refresh (1720ms) - balanced quality and speed
-    FAST_REFRESH   // Fast refresh using custom LUT
-  };
+// RefreshMode is provided by `EInkDisplay.h`
 
-  static constexpr int16_t DISPLAY_WIDTH = 800;
-  static constexpr int16_t DISPLAY_HEIGHT = 480;
-  static constexpr int16_t DISPLAY_WIDTH_BYTES = DISPLAY_WIDTH / 8;
-
- private:
-  std::vector<uint8_t> frameBuffer;
-
- public:
-  EInkDisplay() : frameBuffer(DISPLAY_WIDTH_BYTES * DISPLAY_HEIGHT, 0xFF) {}
-
-  uint8_t* getFrameBuffer() {
-    return frameBuffer.data();
-  }
-  void clearScreen(uint8_t value) {
-    std::fill(frameBuffer.begin(), frameBuffer.end(), value);
-  }
-  void displayBuffer(RefreshMode mode = FAST_REFRESH) {
-    const char* modeStr = (mode == FULL_REFRESH) ? "FULL" : (mode == HALF_REFRESH) ? "HALF" : "FAST";
-    std::cout << "[Display buffer updated (mode=" << modeStr << ")]" << std::endl;
-  }
-
-  // Save frame buffer as PPM image
-  void saveAsPPM(const char* filename) {
-    std::ofstream file(filename, std::ios::binary);
-    if (!file) {
-      std::cerr << "Failed to open " << filename << std::endl;
-      return;
-    }
-
-    // PPM header (P6 = binary RGB)
-    file << "P6\n" << DISPLAY_WIDTH << " " << DISPLAY_HEIGHT << "\n255\n";
-
-    // Write pixels (convert 1-bit to RGB)
-    for (int y = 0; y < DISPLAY_HEIGHT; y++) {
-      for (int x = 0; x < DISPLAY_WIDTH; x++) {
-        int byteIndex = y * DISPLAY_WIDTH_BYTES + (x / 8);
-        int bitPosition = 7 - (x % 8);
-        bool isWhite = (frameBuffer[byteIndex] >> bitPosition) & 1;
-
-        // Write RGB values (white=255,255,255 black=0,0,0)
-        unsigned char color = isWhite ? 255 : 0;
-        file.write((char*)&color, 1);
-        file.write((char*)&color, 1);
-        file.write((char*)&color, 1);
-      }
-    }
-
-    file.close();
-    std::cout << "Saved frame buffer to " << filename << std::endl;
-  }
-};
-
-// Mock TextRenderer
-class TextRenderer : public Adafruit_GFX {
- public:
-  static const uint16_t COLOR_BLACK = 0;
-  static const uint16_t COLOR_WHITE = 1;
-
-  TextRenderer(EInkDisplay& display)
-      : Adafruit_GFX(EInkDisplay::DISPLAY_HEIGHT, EInkDisplay::DISPLAY_WIDTH), display(display) {
-    Serial.printf("[%lu] TextRenderer: Constructor called (portrait 480x800)\n", millis());
-  }
-
-  void drawPixel(int16_t x, int16_t y, uint16_t color) override {
-    if (x < 0 || x >= EInkDisplay::DISPLAY_HEIGHT || y < 0 || y >= EInkDisplay::DISPLAY_WIDTH) {
-      return;
-    }
-
-    // Rotate -180 degrees: portrait (480x800) -> landscape (800x480)
-    int16_t rotatedX = y;
-    int16_t rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - x;
-
-    uint8_t* frameBuffer = display.getFrameBuffer();
-    uint16_t byteIndex = rotatedY * EInkDisplay::DISPLAY_WIDTH_BYTES + (rotatedX / 8);
-    uint8_t bitPosition = 7 - (rotatedX % 8);
-
-    if (color == COLOR_BLACK) {
-      frameBuffer[byteIndex] &= ~(1 << bitPosition);
-    } else {
-      frameBuffer[byteIndex] |= (1 << bitPosition);
-    }
-  }
-
-  void clearText() {
-    display.clearScreen(0xFF);
-  }
-  void refresh(EInkDisplay::RefreshMode mode = EInkDisplay::FAST_REFRESH) {
-    display.displayBuffer(mode);
-  }
-
- private:
-  EInkDisplay& display;
-};
+// Use the real `EInkDisplay` implementation from `src/` for the test build.
 
 // Include the actual implementation headers
-#include "../src/KnuthPlassLayoutStrategy.h"
-#include "../src/LayoutStrategy.h"
-#include "../src/TextLayout.h"
-#include "../src/sample_text.h"
+#include "../src/TextRenderer.h"
+#include "../src/screens/text view/GreedyLayoutStrategy.h"
+#include "../src/screens/text view/KnuthPlassLayoutStrategy.h"
+#include "../src/screens/text view/LayoutStrategy.h"
+#include "../src/screens/text view/StringWordProvider.h"
+#include "../src/screens/text view/TextLayout.h"
 
 // Include the font
 #include "FreeSans12pt7b.h"
 
-// Use the same text from the device
-const char* TEST_TEXT = SAMPLE_TEXT;
+// Load test text from the data folder. If the file cannot be opened,
+// fall back to a short inline sample text.
+std::string loadTestText() {
+  // Try a few likely relative paths so the test exe finds the data when
+  // executed from the build output directory (e.g. test/build_msvc/Release).
+  const std::vector<std::string> candidates = {"../../data/chapter one.txt",  // when running from test/build_msvc
+                                               "../data/chapter one.txt",     // when running from test/
+                                               "data/chapter one.txt",        // when running from repo root
+                                               "../data/chapter one.txt"};    // fallback
 
-void saveFrameBufferAsPBM(const EInkDisplay& display, const char* filename) {
-  const uint8_t* buffer = const_cast<EInkDisplay&>(display).getFrameBuffer();
-
-  std::ofstream file(filename, std::ios::binary);
-  if (!file) {
-    std::cerr << "Failed to open " << filename << " for writing" << std::endl;
-    return;
-  }
-
-  // Rotate the image 90 degrees counterclockwise when saving
-  // Original buffer: 800x480 (landscape)
-  // Output image: 480x800 (portrait)
-  file << "P4\n";  // Binary PBM
-  file << EInkDisplay::DISPLAY_HEIGHT << " " << EInkDisplay::DISPLAY_WIDTH << "\n";
-
-  // Create rotated buffer
-  std::vector<uint8_t> rotatedBuffer((EInkDisplay::DISPLAY_HEIGHT / 8) * EInkDisplay::DISPLAY_WIDTH, 0);
-
-  // Rotate: for each pixel in output, find corresponding pixel in input
-  for (int outY = 0; outY < EInkDisplay::DISPLAY_WIDTH; outY++) {
-    for (int outX = 0; outX < EInkDisplay::DISPLAY_HEIGHT; outX++) {
-      // Map output coordinates to input coordinates (-90 degrees = 270 degrees = 90 degrees clockwise)
-      int inX = outY;
-      int inY = EInkDisplay::DISPLAY_HEIGHT - 1 - outX;
-
-      // Read pixel from input buffer
-      int inByteIndex = inY * EInkDisplay::DISPLAY_WIDTH_BYTES + (inX / 8);
-      int inBitPosition = 7 - (inX % 8);
-      bool isWhite = (buffer[inByteIndex] >> inBitPosition) & 1;
-
-      // Write pixel to output buffer (inverted because PBM uses opposite convention)
-      int outByteIndex = outY * (EInkDisplay::DISPLAY_HEIGHT / 8) + (outX / 8);
-      int outBitPosition = 7 - (outX % 8);
-      if (!isWhite) {  // Invert: e-ink white=1 -> PBM black=1
-        rotatedBuffer[outByteIndex] |= (1 << outBitPosition);
-      }
+  for (const auto& path : candidates) {
+    std::ifstream infile(path, std::ios::in | std::ios::binary);
+    if (infile) {
+      std::string contents;
+      infile.seekg(0, std::ios::end);
+      std::streampos size = infile.tellg();
+      if (size > 0)
+        contents.reserve((size_t)size);
+      infile.seekg(0, std::ios::beg);
+      contents.assign((std::istreambuf_iterator<char>(infile)), std::istreambuf_iterator<char>());
+      std::cout << "Loaded test text from '" << path << "' (" << contents.size() << " bytes)" << std::endl;
+      return contents;
     }
   }
 
-  // Write the rotated and inverted buffer
-  file.write(reinterpret_cast<const char*>(rotatedBuffer.data()), rotatedBuffer.size());
-
-  file.close();
-  std::cout << "Saved framebuffer to " << filename << std::endl;
-  std::cout << "You can view it with an image viewer that supports PBM format," << std::endl;
-  std::cout << "or convert it with: magick " << filename << " output.png" << std::endl;
+  std::cerr << "Warning: failed to open chapter text in data folder. Using fallback text." << std::endl;
+  return std::string(
+      "This is a test text for layout. It has multiple sentences. This should work for testing the layout algorithm on "
+      "Windows.");
 }
+
+// Use the EInkDisplay helper to save to PBM instead of duplicating logic here.
 
 void printLayoutInfo(const TextLayout& layout, const TextRenderer& renderer) {
   (void)layout;  // Unused for now
@@ -202,7 +90,7 @@ void printLayoutInfo(const TextLayout& layout, const TextRenderer& renderer) {
   std::cout << "The output should match what you see on the real device." << std::endl;
 }
 
-int main() {
+int main(int argc, char** argv) {
   std::cout << "TextLayout Windows Test Harness" << std::endl;
   std::cout << "===============================" << std::endl;
 
@@ -225,8 +113,8 @@ int main() {
   std::cout << "  Line height: " << config.lineHeight << std::endl;
   std::cout << "  Min space width: " << config.minSpaceWidth << std::endl;
 
-  // Split text into pages by ---PAGE--- delimiter
-  std::string fullTextStr(TEST_TEXT);
+  // Load the text to render from the data file (or fallback)
+  std::string fullTextStr = loadTestText();
   std::vector<std::string> pages;
   size_t start = 0;
 
@@ -259,18 +147,37 @@ int main() {
     std::cout << "Characters: " << pages[pageNum].length() << std::endl;
 
     // Create fresh display and renderer for each page
-    EInkDisplay display;
+    // Provide dummy pin numbers for the hardware constructor when testing on PC.
+    EInkDisplay display(0, 1, 2, 3, 4, 5);
     TextRenderer renderer(display);
     renderer.setFont(&FreeSans12pt7b);
     renderer.setTextColor(TextRenderer::COLOR_BLACK);
 
-    // Create layout engine
+    // Create layout engine. Default to GreedyLayoutStrategy; allow override
+    // via command-line: pass "--knuth" to use Knuth-Plass instead.
     TextLayout layout;
+    bool useKnuth = false;
+    for (int i = 1; i < argc; ++i) {
+      std::string a = argv[i];
+      if (a == "--knuth") {
+        useKnuth = true;
+        break;
+      }
+    }
 
-    String text(pages[pageNum].c_str());
+    if (useKnuth) {
+      layout.setStrategy(new KnuthPlassLayoutStrategy());
+      std::cout << "Using Knuth-Plass layout strategy" << std::endl;
+    } else {
+      // ensure Greedy strategy is used explicitly
+      layout.setStrategy(new GreedyLayoutStrategy());
+      std::cout << "Using Greedy layout strategy" << std::endl;
+    }
+
+    StringWordProvider provider(pages[pageNum].c_str());
 
     auto startTime = std::chrono::high_resolution_clock::now();
-    layout.layoutText(text, renderer, config);
+    layout.layoutText(provider, renderer, config);
     auto endTime = std::chrono::high_resolution_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
@@ -278,11 +185,12 @@ int main() {
 
     // Save to file with page number
     std::string filename = "output_page_" + std::to_string(pageNum + 1) + ".pbm";
-    saveFrameBufferAsPBM(display, filename.c_str());
+    display.saveFrameBufferAsPBM(filename.c_str());
     std::cout << std::endl;
   }
 
-  printLayoutInfo(TextLayout(), TextRenderer(*new EInkDisplay()));
+  EInkDisplay tempDisplay(0, 1, 2, 3, 4, 5);
+  printLayoutInfo(TextLayout(), TextRenderer(tempDisplay));
 
   std::cout << "\n=== Test Complete ===" << std::endl;
   std::cout << "Generated " << pages.size() << " output files." << std::endl;

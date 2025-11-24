@@ -1,5 +1,8 @@
 #include "EInkDisplay.h"
 
+#include <fstream>
+#include <vector>
+
 // SSD1677 RAM buffer commands
 #define CMD_WRITE_RAM_BW 0x24   // Write to BW RAM (current frame)
 #define CMD_WRITE_RAM_RED 0x26  // Write to RED RAM (used for fast refresh)
@@ -462,4 +465,53 @@ void EInkDisplay::debugPrintFramebuffer() {
     Serial.printf("%02X ", frameBuffer[i]);
   }
   Serial.println("\n=== END FRAMEBUFFER DUMP ===");
+}
+
+void EInkDisplay::saveFrameBufferAsPBM(const char* filename) {
+#ifndef ARDUINO
+  const uint8_t* buffer = getFrameBuffer();
+
+  std::ofstream file(filename, std::ios::binary);
+  if (!file) {
+    Serial.printf("Failed to open %s for writing\n", filename);
+    return;
+  }
+
+  // Rotate the image 90 degrees counterclockwise when saving
+  // Original buffer: 800x480 (landscape)
+  // Output image: 480x800 (portrait)
+  const int DISPLAY_WIDTH_LOCAL = DISPLAY_WIDTH;    // 800
+  const int DISPLAY_HEIGHT_LOCAL = DISPLAY_HEIGHT;  // 480
+  const int DISPLAY_WIDTH_BYTES_LOCAL = DISPLAY_WIDTH_LOCAL / 8;
+
+  file << "P4\n";  // Binary PBM
+  file << DISPLAY_HEIGHT_LOCAL << " " << DISPLAY_WIDTH_LOCAL << "\n";
+
+  // Create rotated buffer
+  std::vector<uint8_t> rotatedBuffer((DISPLAY_HEIGHT_LOCAL / 8) * DISPLAY_WIDTH_LOCAL, 0);
+
+  for (int outY = 0; outY < DISPLAY_WIDTH_LOCAL; outY++) {
+    for (int outX = 0; outX < DISPLAY_HEIGHT_LOCAL; outX++) {
+      int inX = outY;
+      int inY = DISPLAY_HEIGHT_LOCAL - 1 - outX;
+
+      int inByteIndex = inY * DISPLAY_WIDTH_BYTES_LOCAL + (inX / 8);
+      int inBitPosition = 7 - (inX % 8);
+      bool isWhite = (buffer[inByteIndex] >> inBitPosition) & 1;
+
+      int outByteIndex = outY * (DISPLAY_HEIGHT_LOCAL / 8) + (outX / 8);
+      int outBitPosition = 7 - (outX % 8);
+      if (!isWhite) {  // Invert: e-ink white=1 -> PBM black=1
+        rotatedBuffer[outByteIndex] |= (1 << outBitPosition);
+      }
+    }
+  }
+
+  file.write(reinterpret_cast<const char*>(rotatedBuffer.data()), rotatedBuffer.size());
+  file.close();
+  Serial.printf("Saved framebuffer to %s\n", filename);
+#else
+  (void)filename;
+  Serial.println("saveFrameBufferAsPBM is not supported on Arduino builds.");
+#endif
 }

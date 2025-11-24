@@ -14,14 +14,16 @@ include_directories(${CMAKE_SOURCE_DIR})  # For Arduino.h mock and font files
 add_executable(textlayout_test
     windows_test_simple.cpp
     Adafruit_GFX.cpp
-    ../src/screens/text\ view/KnuthPlassLayoutStrategy.cpp
-    ../src/screens/text\ view/GreedyLayoutStrategy.cpp
-    ../src/screens/text\ view/TextLayout.cpp
-    ../src/screens/text\ view/StringWordProvider.cpp
+    ../src/TextRenderer.cpp
+    ../src/EInkDisplay.cpp
+    "../src/screens/text view/KnuthPlassLayoutStrategy.cpp"
+    "../src/screens/text view/GreedyLayoutStrategy.cpp"
+    "../src/screens/text view/TextLayout.cpp"
+    "../src/screens/text view/StringWordProvider.cpp"
 )
 
 # Define DEBUG_LAYOUT for debugging
-target_compile_definitions(textlayout_test PRIVATE DEBUG_LAYOUT)
+target_compile_definitions(textlayout_test PRIVATE DEBUG_LAYOUT TEST_BUILD)
 
 # Link math library if needed
 if(UNIX)

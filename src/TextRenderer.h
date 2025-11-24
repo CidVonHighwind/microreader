@@ -5,10 +5,24 @@
 #include <Adafruit_GFX.h>
 #else
 // For non-Arduino builds, include the mock
-#include <Adafruit_GFX.h>
+#include "Adafruit_GFX.h"
 #endif
 
+#ifdef TEST_BUILD
+#include "Arduino.h"
+#endif
+
+class EInkDisplay;  // Forward declaration
+
+// Define RefreshMode for all builds
+#ifndef REFRESH_MODE_DEFINED
+enum RefreshMode { FULL_REFRESH, HALF_REFRESH, FAST_REFRESH };
+#define REFRESH_MODE_DEFINED
+#endif
+
+#ifndef TEST_BUILD
 #include "EInkDisplay.h"
+#endif
 
 class TextRenderer : public Adafruit_GFX {
  public:
@@ -20,7 +34,7 @@ class TextRenderer : public Adafruit_GFX {
 
   // Helper methods
   void clearText();
-  void refresh(EInkDisplay::RefreshMode mode = EInkDisplay::FAST_REFRESH);
+  void refresh(RefreshMode mode = FAST_REFRESH);
 
   // Color constants (0 = black, 1 = white for 1-bit display)
   static const uint16_t COLOR_BLACK = 0;

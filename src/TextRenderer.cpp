@@ -37,6 +37,6 @@ void TextRenderer::clearText() {
   display.clearScreen(0xFF);
 }
 
-void TextRenderer::refresh(EInkDisplay::RefreshMode mode) {
+void TextRenderer::refresh(RefreshMode mode) {
   display.displayBuffer(mode);
 }

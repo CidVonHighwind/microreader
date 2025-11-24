@@ -7,15 +7,7 @@
 #ifdef ARDUINO
 #include <Arduino.h>
 #else
-// Mock Arduino functions for non-Arduino builds
-extern unsigned long millis();
-struct MockSerial {
-  void print(const char*);
-  void print(unsigned long);
-  void println(const char*);
-  void printf(const char*, ...);
-};
-extern MockSerial Serial;
+#include "Arduino.h"
 #endif
 
 // Define static constants

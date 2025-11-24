@@ -110,20 +110,75 @@ void Adafruit_GFX::print(const char* str) {
     return;
 
   if (gfxFont) {
-    // Use GFX font
-    for (const char* p = str; *p; p++) {
-      uint8_t c = *p;
+    // Use GFX font. Decode UTF-8 and handle unsupported codepoints by
+    // skipping them (no advance) instead of substituting spaces.
+    const char* p = str;
+    while (*p) {
+      // Decode next UTF-8 codepoint
+      unsigned char c0 = static_cast<unsigned char>(*p);
+      uint32_t codepoint = 0;
+      int seqlen = 1;
 
-      // Check if character is in font range
-      if (c < gfxFont->first || c > gfxFont->last) {
-        c = ' ';  // Default to space if out of range
-        if (c < gfxFont->first || c > gfxFont->last)
-          continue;  // Skip if space is also not available
+      if (c0 < 0x80) {
+        codepoint = c0;
+        seqlen = 1;
+      } else if ((c0 & 0xE0) == 0xC0) {
+        unsigned char c1 = static_cast<unsigned char>(*(p + 1));
+        if ((c1 & 0xC0) == 0x80) {
+          codepoint = ((c0 & 0x1F) << 6) | (c1 & 0x3F);
+          seqlen = 2;
+        } else {
+          // invalid sequence — skip byte
+          p++;
+          continue;
+        }
+      } else if ((c0 & 0xF0) == 0xE0) {
+        unsigned char c1 = static_cast<unsigned char>(*(p + 1));
+        unsigned char c2 = static_cast<unsigned char>(*(p + 2));
+        if (((c1 & 0xC0) == 0x80) && ((c2 & 0xC0) == 0x80)) {
+          codepoint = ((c0 & 0x0F) << 12) | ((c1 & 0x3F) << 6) | (c2 & 0x3F);
+          seqlen = 3;
+        } else {
+          p++;
+          continue;
+        }
+      } else if ((c0 & 0xF8) == 0xF0) {
+        unsigned char c1 = static_cast<unsigned char>(*(p + 1));
+        unsigned char c2 = static_cast<unsigned char>(*(p + 2));
+        unsigned char c3 = static_cast<unsigned char>(*(p + 3));
+        if (((c1 & 0xC0) == 0x80) && ((c2 & 0xC0) == 0x80) && ((c3 & 0xC0) == 0x80)) {
+          codepoint = ((c0 & 0x07) << 18) | ((c1 & 0x3F) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F);
+          seqlen = 4;
+        } else {
+          p++;
+          continue;
+        }
+      } else {
+        // continuation or invalid leading byte — skip
+        p++;
+        continue;
       }
 
-      c -= gfxFont->first;
+      // For fonts encoded as single-byte glyphs (typical GFX fonts), only
+      // codepoints in the 0..255 range can be mapped. Map those directly
+      // and skip unsupported codepoints without inserting a space.
+      if (codepoint > 0xFF) {
+        p += seqlen;
+        continue;  // unsupported, skip
+      }
+
+      uint8_t ch = static_cast<uint8_t>(codepoint);
+
+      // Check if character is in font range
+      if (ch < gfxFont->first || ch > gfxFont->last) {
+        // Unsupported in this font: skip (no horizontal advance)
+        p += seqlen;
+        continue;
+      }
+
+      uint8_t c = ch - static_cast<uint8_t>(gfxFont->first);
       GFXglyph* glyph = &gfxFont->glyph[c];
-      uint8_t* bitmap = gfxFont->bitmap;
+      const uint8_t* bitmap = gfxFont->bitmap;
 
       uint16_t bo = glyph->bitmapOffset;
       uint8_t w = glyph->width;
@@ -146,6 +201,7 @@ void Adafruit_GFX::print(const char* str) {
       }
 
       cursor_x += glyph->xAdvance;
+      p += seqlen;
     }
   } else {
     // Use built-in 5x7 font
