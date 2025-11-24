@@ -32,8 +32,13 @@ class TextLayout {
   // Set the layout strategy (takes ownership)
   void setStrategy(LayoutStrategy* strategy);
 
+  // Get the current layout strategy (for advanced usage)
+  LayoutStrategy* getStrategy() {
+    return strategy_;
+  }
+
   // Layout text on a page using the current layout strategy
-  void layoutText(const String& text, TextRenderer& renderer, const LayoutConfig& config);
+  void layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config);
 
  private:
   // Layout strategy (owned by this object)

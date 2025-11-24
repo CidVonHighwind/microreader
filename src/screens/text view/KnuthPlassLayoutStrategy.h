@@ -15,7 +15,11 @@ class KnuthPlassLayoutStrategy : public LayoutStrategy {
   }
 
   // Main interface implementation
-  void layoutText(const String& text, TextRenderer& renderer, const LayoutConfig& config) override;
+  void layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) override;
+
+  // Calculate the start position of the previous page
+  int getPreviousPageStart(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config,
+                           int currentEndPosition) override;
 
  private:
   int16_t spaceWidth_;
@@ -35,7 +39,6 @@ class KnuthPlassLayoutStrategy : public LayoutStrategy {
   };
 
   // Helper methods
-  std::vector<Word> tokenizeAndMeasure(const String& paragraph, TextRenderer& renderer);
   int16_t layoutAndRender(const std::vector<Word>& words, TextRenderer& renderer, int16_t x, int16_t y,
                           int16_t maxWidth, int16_t lineHeight, int16_t maxY, TextAlignment alignment);
   std::vector<size_t> calculateBreaks(const std::vector<Word>& words, int16_t maxWidth);

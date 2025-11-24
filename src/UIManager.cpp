@@ -14,7 +14,8 @@ UIManager::UIManager(EInkDisplay& display, SDCardManager& sdManager)
   screens[ScreenId::FileBrowser] =
       std::unique_ptr<Screen>(new FileBrowserScreen(display, textRenderer, sdManager, *this));
   screens[ScreenId::ImageViewer] = std::unique_ptr<Screen>(new ImageViewerScreen(display));
-  screens[ScreenId::TextViewer] = std::unique_ptr<Screen>(new TextViewerScreen(display, textRenderer, sdManager));
+  screens[ScreenId::TextViewer] =
+      std::unique_ptr<Screen>(new TextViewerScreen(display, textRenderer, sdManager, *this));
   Serial.printf("[%lu] UIManager: Constructor called\n", millis());
 }
 

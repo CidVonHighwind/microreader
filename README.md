@@ -59,13 +59,13 @@ This project uses PlatformIO in a virtual environment:
 
 ```powershell
 # Build
-C:/Users/Patrick/Desktop/microreader/.venv/Scripts/platformio.exe run
+C:\Users\Patrick\.platformio\penv\Scripts\platformio.exe run
 
 # Upload to device (COM4)
-C:/Users/Patrick/Desktop/microreader/.venv/Scripts/platformio.exe run -t upload
+C:\Users\Patrick\.platformio\penv\Scripts\platformio.exe run -t upload
 
 # Monitor serial output
-C:/Users/Patrick/Desktop/microreader/.venv/Scripts/platformio.exe device monitor
+C:\Users\Patrick\.platformio\penv\Scripts\platformio.exe device monitor
 ```
 
 ### Testing Text Layout on Windows

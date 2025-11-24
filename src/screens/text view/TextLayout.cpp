@@ -2,6 +2,7 @@
 
 #include "GreedyLayoutStrategy.h"
 #include "TextRenderer.h"
+#include "WordProvider.h"
 
 #ifdef ARDUINO
 #include <Arduino.h>
@@ -34,15 +35,15 @@ void TextLayout::setStrategy(LayoutStrategy* strategy) {
   strategy_ = strategy;
 }
 
-void TextLayout::layoutText(const String& text, TextRenderer& renderer, const LayoutConfig& config) {
+void TextLayout::layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) {
   unsigned long startTime = millis();
 
 #ifdef DEBUG_LAYOUT
-  Serial.printf("[TL] Delegating layout to strategy\n");
+  Serial.printf("[TL] Delegating layout to strategy (provider)\n");
 #endif
 
   // Delegate all layout work to the strategy
-  strategy_->layoutText(text, renderer, config);
+  strategy_->layoutText(provider, renderer, config);
 
   unsigned long totalTime = millis() - startTime;
 #ifdef ARDUINO

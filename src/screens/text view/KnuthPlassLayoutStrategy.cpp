@@ -1,6 +1,7 @@
 #include "KnuthPlassLayoutStrategy.h"
 
 #include "TextRenderer.h"
+#include "WordProvider.h"
 
 #ifdef ARDUINO
 #include <Arduino.h>
@@ -16,112 +17,34 @@ KnuthPlassLayoutStrategy::KnuthPlassLayoutStrategy() : spaceWidth_(4) {}
 
 KnuthPlassLayoutStrategy::~KnuthPlassLayoutStrategy() {}
 
-void KnuthPlassLayoutStrategy::layoutText(const String& text, TextRenderer& renderer, const LayoutConfig& config) {
+void KnuthPlassLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) {
   const int16_t maxWidth = config.pageWidth - config.marginLeft - config.marginRight;
 
 #ifdef DEBUG_LAYOUT
-  Serial.printf("[KP] layoutText called: text length=%d, maxWidth=%d\n", text.length(), maxWidth);
+  Serial.printf("[KP] layoutText (provider) called: maxWidth=%d\n", maxWidth);
 #endif
 
-  // Split text into paragraphs (separated by double newlines)
-  std::vector<String> paragraphs;
-  int startIdx = 0;
-
-  while (startIdx < text.length()) {
-    // Skip any leading whitespace
-    while (startIdx < text.length() && (text[startIdx] == ' ' || text[startIdx] == '\n')) {
-      startIdx++;
+  // Collect all words from provider (treat as one paragraph for simplicity)
+  std::vector<Word> words;
+  while (provider.hasNextWord()) {
+    Word word = provider.getNextWord(renderer);
+    // Skip break words for Knuth-Plass (treat as one paragraph)
+    if (word.text == "\n" || word.text == "\n\n") {
+      continue;
     }
-
-    if (startIdx >= text.length())
-      break;
-
-    // Find the end of this paragraph (double newline or end of text)
-    int endIdx = startIdx;
-    int consecutiveNewlines = 0;
-
-    while (endIdx < text.length()) {
-      if (text[endIdx] == '\n') {
-        consecutiveNewlines++;
-        if (consecutiveNewlines >= 2) {
-          break;
-        }
-      } else if (text[endIdx] != ' ') {
-        consecutiveNewlines = 0;
-      }
-      endIdx++;
-    }
-
-    // Extract paragraph
-    String paragraph = text.substring(startIdx, endIdx);
-    paragraph.trim();
-    if (paragraph.length() > 0) {
-      paragraphs.push_back(paragraph);
-    }
-
-    startIdx = endIdx;
+    words.push_back(word);
   }
 
-  // Layout each paragraph independently
+  if (words.empty()) {
+    return;
+  }
+
+  // Layout the words
   int16_t y = config.marginTop;
   const int16_t maxY = config.pageHeight - config.marginBottom;
-
-  // Set space width parameter
   spaceWidth_ = config.minSpaceWidth;
 
-  for (size_t p = 0; p < paragraphs.size() && y < maxY; p++) {
-    // Tokenize and measure words
-    std::vector<Word> words = tokenizeAndMeasure(paragraphs[p], renderer);
-
-    if (words.empty())
-      continue;
-
-    // Use Knuth-Plass line breaking algorithm
-    y = layoutAndRender(words, renderer, config.marginLeft, y, maxWidth, config.lineHeight, maxY, config.alignment);
-
-    // Add spacing between paragraphs
-    if (p < paragraphs.size() - 1) {
-      y += config.lineHeight / 2;
-    }
-  }
-}
-
-std::vector<LayoutStrategy::Word> KnuthPlassLayoutStrategy::tokenizeAndMeasure(const String& paragraph,
-                                                                               TextRenderer& renderer) {
-  std::vector<Word> words;
-  int wordStart = 0;
-
-  while (wordStart < paragraph.length()) {
-    // Skip whitespace
-    while (wordStart < paragraph.length() && (paragraph[wordStart] == ' ' || paragraph[wordStart] == '\n')) {
-      wordStart++;
-    }
-
-    if (wordStart >= paragraph.length())
-      break;
-
-    // Find next word
-    int wordEnd = wordStart;
-    while (wordEnd < paragraph.length() && paragraph[wordEnd] != ' ' && paragraph[wordEnd] != '\n') {
-      wordEnd++;
-    }
-
-    if (wordEnd > wordStart) {
-      String word = paragraph.substring(wordStart, wordEnd);
-
-      // Measure word width
-      int16_t x1, y1;
-      uint16_t w, h;
-      renderer.getTextBounds(word.c_str(), 0, 0, &x1, &y1, &w, &h);
-      int16_t actualWidth = x1 + w;
-
-      words.push_back({word, actualWidth});
-    }
-
-    wordStart = wordEnd;
-  }
-
-  return words;
+  y = layoutAndRender(words, renderer, config.marginLeft, y, maxWidth, config.lineHeight, maxY, config.alignment);
 }
 
 int16_t KnuthPlassLayoutStrategy::layoutAndRender(const std::vector<Word>& words, TextRenderer& renderer, int16_t x,
@@ -370,4 +293,49 @@ float KnuthPlassLayoutStrategy::calculateDemerits(float badness, bool isLastLine
   float demerits = (1.0f + badness) * (1.0f + badness);
 
   return demerits;
+}
+
+int KnuthPlassLayoutStrategy::getPreviousPageStart(WordProvider& provider, TextRenderer& renderer,
+                                                   const LayoutConfig& config, int currentEndPosition) {
+  // For Knuth-Plass, use the same approximate approach as Greedy for now
+  // Save current provider state
+  int savedPosition = provider.getCurrentIndex();
+
+  // Set provider to the end of current page
+  provider.setPosition(currentEndPosition);
+
+  const int16_t maxWidth = config.pageWidth - config.marginLeft - config.marginRight;
+  const int16_t maxY = config.pageHeight - config.marginBottom;
+  int16_t y = config.marginTop;
+  spaceWidth_ = config.minSpaceWidth;
+
+  // Go backwards collecting words until we fill a page
+  while (provider.getCurrentIndex() > 0 && y < maxY) {
+    Word word = provider.getPrevWord(renderer);
+
+    if (word.text.length() == 0)
+      break;  // No more words
+
+    // Check for paragraph breaks
+    if (word.text == "\n\n") {
+      y += config.lineHeight / 2;
+      if (y >= maxY)
+        break;
+    } else if (word.text == "\n") {
+      if (y >= maxY)
+        break;
+    }
+
+    // Simulate adding this word to a line
+    // For simplicity, assume each word takes one line (this is approximate)
+    y += config.lineHeight;
+  }
+
+  // The current position is where the previous page starts
+  int previousPageStart = provider.getCurrentIndex();
+
+  // Restore provider state
+  provider.setPosition(savedPosition);
+
+  return previousPageStart;
 }

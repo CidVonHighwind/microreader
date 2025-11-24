@@ -7,6 +7,7 @@
 
 // Forward declarations
 class TextRenderer;
+class WordProvider;
 
 /**
  * Abstract base class for line breaking strategies.
@@ -39,14 +40,15 @@ class LayoutStrategy {
   virtual ~LayoutStrategy() = default;
   virtual Type getType() const = 0;
 
-  // Main layout method: takes full text and renders it
-  virtual void layoutText(const String& text, TextRenderer& renderer, const LayoutConfig& config) = 0;
+  // Main layout method: takes words from a provider and renders them
+  virtual void layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) = 0;
+
+  // Calculate the start position of the previous page given current position
+  virtual int getPreviousPageStart(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config,
+                                   int currentEndPosition) = 0;
 
   // Optional lower-level methods for strategies that need them
   virtual void setSpaceWidth(float spaceWidth) {}
-  virtual std::vector<Word> tokenizeAndMeasure(const String& paragraph, TextRenderer& renderer) {
-    return std::vector<Word>();
-  }
   virtual int16_t layoutAndRender(const std::vector<Word>& words, TextRenderer& renderer, int16_t x, int16_t y,
                                   int16_t maxWidth, int16_t lineHeight, int16_t maxY) {
     return y;

@@ -1,17 +1,16 @@
 #ifndef TEXT_VIEWER_SCREEN_H
 #define TEXT_VIEWER_SCREEN_H
 
-#include <vector>
-
 #include "../SDCardManager.h"
 #include "../TextRenderer.h"
+#include "../UIManager.h"
 #include "EInkDisplay.h"
 #include "Screen.h"
-#include "text view/TextLayout.h"
+#include "text view/StringWordProvider.h"
 
 class TextViewerScreen : public Screen {
  public:
-  TextViewerScreen(EInkDisplay& display, TextRenderer& renderer, SDCardManager& sdManager);
+  TextViewerScreen(EInkDisplay& display, TextRenderer& renderer, SDCardManager& sdManager, UIManager& uiManager);
   ~TextViewerScreen();
   // Load content from SD by path and display it
   void openFile(const String& sdPath);
@@ -20,9 +19,9 @@ class TextViewerScreen : public Screen {
   void loadTextFromString(const String& content);
   void begin() override;
   void activate(int context = 0) override;
-  void showPage(int page);
-  int nextPage();
-  int prevPage();
+  void showPage();
+  void nextPage();
+  void prevPage();
   int getTotalPages() const;
 
   // Generic show renders the current page
@@ -30,16 +29,18 @@ class TextViewerScreen : public Screen {
 
   void handleButtons(class Buttons& buttons) override;
 
-  int currentPage = 0;
+  int pageStartIndex = 0;
+  int currentIndex = 0;
 
  private:
   EInkDisplay& display;
   TextRenderer& textRenderer;
   TextLayout* textLayout;
   SDCardManager& sdManager;
+  UIManager& uiManager;
 
-  std::vector<String> pages;
-  int totalPages = 0;
+  StringWordProvider* provider = nullptr;
+  TextLayout::LayoutConfig layoutConfig;
 };
 
 #endif

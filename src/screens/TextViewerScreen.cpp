@@ -8,12 +8,30 @@
 #include "Buttons.h"
 #include "sample_text.h"
 #include "text view/KnuthPlassLayoutStrategy.h"
+#include "text view/StringWordProvider.h"
 
-TextViewerScreen::TextViewerScreen(EInkDisplay& display, TextRenderer& renderer, SDCardManager& sdManager)
-    : display(display), textRenderer(renderer), textLayout(new TextLayout()), sdManager(sdManager) {}
+TextViewerScreen::TextViewerScreen(EInkDisplay& display, TextRenderer& renderer, SDCardManager& sdManager,
+                                   UIManager& uiManager)
+    : display(display),
+      textRenderer(renderer),
+      textLayout(new TextLayout()),
+      sdManager(sdManager),
+      uiManager(uiManager) {
+  // Initialize layout config
+  layoutConfig.marginLeft = 10;
+  layoutConfig.marginRight = 10;
+  layoutConfig.marginTop = 40;
+  layoutConfig.marginBottom = 40;
+  layoutConfig.lineHeight = 30;
+  layoutConfig.minSpaceWidth = 10;
+  layoutConfig.pageWidth = 480;
+  layoutConfig.pageHeight = 800;
+  layoutConfig.alignment = LayoutStrategy::ALIGN_LEFT;
+}
 
 TextViewerScreen::~TextViewerScreen() {
   delete textLayout;
+  delete provider;
 }
 
 void TextViewerScreen::begin() {
@@ -21,18 +39,16 @@ void TextViewerScreen::begin() {
 }
 
 void TextViewerScreen::activate(int context) {
-  // context is page index
-  int page = context;
-  if (page < 0)
-    page = 0;
-  if (page >= totalPages)
-    page = max(0, totalPages - 1);
-  showPage(page);
+  // Ignore context for now, just start from beginning
+  currentIndex = 0;
+  show();
 }
 
 // Ensure member function is in class scope
 void TextViewerScreen::handleButtons(Buttons& buttons) {
-  if (buttons.wasPressed(Buttons::LEFT)) {
+  if (buttons.wasPressed(Buttons::BACK)) {
+    uiManager.showScreen(UIManager::ScreenId::FileBrowser);
+  } else if (buttons.wasPressed(Buttons::LEFT)) {
     nextPage();
   } else if (buttons.wasPressed(Buttons::RIGHT)) {
     prevPage();
@@ -40,76 +56,86 @@ void TextViewerScreen::handleButtons(Buttons& buttons) {
 }
 
 void TextViewerScreen::show() {
-  showPage(currentPage);
+  showPage();
 }
 
-void TextViewerScreen::showPage(int page) {
-  currentPage = page;
-
+void TextViewerScreen::showPage() {
   Serial.println("showPage start");
+
+  if (!provider)
+    return;
+
+  float displayPercentage = provider->getPercentage();
+  provider->setPosition(currentIndex);
 
   textRenderer.clearText();
   textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
   textRenderer.setFont(&FreeSans12pt7b);
 
-  if (page >= 0 && page < totalPages) {
-    String pageText = pages[page];
+  pageStartIndex = provider->getCurrentIndex();
 
-    // print out page length
-    Serial.printf("Layout page %d/%d, length=%d\n", page + 1, totalPages, pageText.length());
+  // print out current percentage
+  float currentPercentage = provider->getPercentage();
+  Serial.printf("Layout at %.1f%%\n", currentPercentage * 100.0f);
 
-    TextLayout::LayoutConfig config;
-    config.marginLeft = 10;
-    config.marginRight = 10;
-    config.marginTop = 40;
-    config.marginBottom = 40;
-    config.lineHeight = 30;
-    config.minSpaceWidth = 10;
-    config.pageWidth = 480;
-    config.pageHeight = 800;
-    config.alignment = LayoutStrategy::ALIGN_LEFT;
-
-    Serial.println("Before layout");
-    try {
-      textLayout->layoutText(pageText, textRenderer, config);
-    } catch (const std::exception& e) {
-      Serial.printf("Exception during layout: %s\n", e.what());
-      abort();
-    } catch (...) {
-      Serial.println("Unknown exception during layout");
-      abort();
-    }
-    Serial.println("After layout");
+  Serial.println("Before layout");
+  try {
+    textLayout->layoutText(*provider, textRenderer, layoutConfig);
+  } catch (const std::exception& e) {
+    Serial.printf("Exception during layout: %s\n", e.what());
+    abort();
+  } catch (...) {
+    Serial.println("Unknown exception during layout");
+    abort();
   }
+  Serial.println("After layout");
 
-  // page indicator
-  Serial.println("Before page indicator");
-  textRenderer.setFont();
-  String pageIndicator = String(page + 1) + "/" + String(totalPages);
-  int16_t x1, y1;
-  uint16_t w, h;
-  textRenderer.getTextBounds(pageIndicator.c_str(), 0, 0, &x1, &y1, &w, &h);
-  int16_t centerX = (480 - w) / 2;
-  textRenderer.setCursor(centerX, 780);
-  textRenderer.print(pageIndicator);
+  // Update currentIndex to where the layout ended
+  currentIndex = provider->getCurrentIndex();
+
+  // page indicator - now shows percentage
+  {
+    Serial.println("Before page indicator");
+    textRenderer.setFont();
+    if (!provider->hasNextWord()) {
+      displayPercentage = 1.0f;  // Show 100% if we've reached the end
+    }
+    String percentageIndicator = String((int)(displayPercentage * 100)) + "%";
+    int16_t x1, y1;
+    uint16_t w, h;
+    textRenderer.getTextBounds(percentageIndicator.c_str(), 0, 0, &x1, &y1, &w, &h);
+    int16_t centerX = (480 - w) / 2;
+    textRenderer.setCursor(centerX, 780);
+    textRenderer.print(percentageIndicator);
+  }
 
   Serial.println("Before display");
   display.displayBuffer(EInkDisplay::FAST_REFRESH);
   Serial.println("After display");
 }
 
-int TextViewerScreen::nextPage() {
-  currentPage = (currentPage + 1) % max(1, totalPages);
-  showPage(currentPage);
-  return currentPage;
+void TextViewerScreen::nextPage() {
+  // Check if there are more words before advancing
+  if (provider && provider->hasNextWord()) {
+    currentIndex = provider->getCurrentIndex();
+    showPage();
+  }
 }
 
-int TextViewerScreen::prevPage() {
-  if (totalPages <= 0)
-    return currentPage;
-  currentPage = (currentPage - 1 + totalPages) % totalPages;
-  showPage(currentPage);
-  return currentPage;
+void TextViewerScreen::prevPage() {
+  if (!provider || currentIndex <= 0)
+    return;
+
+  // Use the layout strategy to find the exact start of the previous page
+  // Find where the previous page starts
+  int previousPageStart =
+      textLayout->getStrategy()->getPreviousPageStart(*provider, textRenderer, layoutConfig, pageStartIndex);
+
+  // Set currentIndex to the start of the previous page
+  currentIndex = previousPageStart;
+
+  // Do normal forward layout from this position
+  showPage();
 }
 
 void TextViewerScreen::loadTextFromProgmem() {
@@ -121,64 +147,24 @@ void TextViewerScreen::loadTextFromProgmem() {
     i++;
   }
 
-  String currentPageText = "";
-  int startIndex = 0;
-
-  while (startIndex < fullText.length()) {
-    int pageDelimiter = fullText.indexOf("---PAGE---", startIndex);
-    if (pageDelimiter == -1) {
-      currentPageText = fullText.substring(startIndex);
-      currentPageText.trim();
-      if (currentPageText.length() > 0) {
-        pages.push_back(currentPageText);
-      }
-      break;
-    } else {
-      currentPageText = fullText.substring(startIndex, pageDelimiter);
-      currentPageText.trim();
-      if (currentPageText.length() > 0) {
-        pages.push_back(currentPageText);
-      }
-      startIndex = pageDelimiter + 10;
-    }
-  }
-
-  totalPages = pages.size();
+  // Create provider for the entire content
+  delete provider;
+  provider = new StringWordProvider(fullText);
+  currentIndex = 0;
+  showPage();
 }
 
 void TextViewerScreen::loadTextFromString(const String& content) {
-  pages.clear();
-  totalPages = 0;
-
+  // Create provider for the entire content
+  delete provider;
   String fullText = content;
-  fullText.trim();
-
-  int startIndex = 0;
-  while (startIndex < fullText.length()) {
-    int pageDelimiter = fullText.indexOf("---PAGE---", startIndex);
-    String currentPageText;
-    if (pageDelimiter == -1) {
-      currentPageText = fullText.substring(startIndex);
-      currentPageText.trim();
-      if (currentPageText.length() > 0) {
-        pages.push_back(currentPageText);
-      }
-      break;
-    } else {
-      currentPageText = fullText.substring(startIndex, pageDelimiter);
-      currentPageText.trim();
-      if (currentPageText.length() > 0) {
-        pages.push_back(currentPageText);
-      }
-      startIndex = pageDelimiter + 10;  // length of "---PAGE---"
-    }
+  if (fullText.length() > 0) {
+    provider = new StringWordProvider(fullText);
+  } else {
+    provider = nullptr;
   }
 
-  totalPages = pages.size();
-  currentPage = 0;
-  if (totalPages > 0) {
-    showPage(0);
-  }
+  currentIndex = 0;
 }
 
 void TextViewerScreen::openFile(const String& sdPath) {
