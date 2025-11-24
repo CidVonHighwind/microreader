@@ -92,12 +92,19 @@ void TextRenderer::getTextBounds(const char* str, int16_t x, int16_t y, int16_t*
     uint16_t tot = 0;
     for (const char* p = str; *p; ++p) {
       unsigned char c = (unsigned char)*p;
-      if (c >= f->first && c <= f->last) {
-        const SimpleGFXglyph* glyph = &f->glyph[c - f->first];
+      // Find glyph by scanning per-glyph codepoint field
+      int idx = -1;
+      for (uint16_t i = 0; i < f->glyphCount; ++i) {
+        if (f->glyph[i].codepoint == (uint16_t)c) {
+          idx = (int)i;
+          break;
+        }
+      }
+      if (idx >= 0) {
+        const SimpleGFXglyph* glyph = &f->glyph[idx];
         tot += glyph->xAdvance;
       } else {
-        // fallback fixed width
-        tot += 6;
+        tot += 6;  // fallback
       }
     }
     width = tot;
@@ -124,14 +131,20 @@ void TextRenderer::drawCharGFX(char c) {
   if (!currentFont)
     return;
   const SimpleGFXfont* f = currentFont;
-  unsigned char uc = (unsigned char)c;
-  if (uc < f->first || uc > f->last) {
-    // unsupported, advance by 6
-    cursorX += 6;
+  unsigned int code = (unsigned char)c;
+  int glyphIndex = -1;
+  for (uint16_t i = 0; i < f->glyphCount; ++i) {
+    if (f->glyph[i].codepoint == (uint16_t)code) {
+      glyphIndex = (int)i;
+      break;
+    }
+  }
+  if (glyphIndex < 0) {
+    cursorX += 6;  // unsupported
     return;
   }
 
-  const SimpleGFXglyph* glyph = &f->glyph[uc - f->first];
+  const SimpleGFXglyph* glyph = &f->glyph[glyphIndex];
   const uint8_t* bitmap = f->bitmap;
   uint16_t bo = glyph->bitmapOffset;
   uint8_t w = glyph->width;
