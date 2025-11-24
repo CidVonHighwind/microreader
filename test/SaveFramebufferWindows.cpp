@@ -3,6 +3,8 @@
 
 #include "../src/EInkDisplay.h"
 #include "../src/Fonts/Font16.h"
+#include "../src/Fonts/Font20.h"
+#include "../src/Fonts/Font24.h"
 #include "../src/Fonts/Font27.h"
 #include "../src/text_renderer/TextRenderer.h"
 #include "WString.h"
@@ -22,7 +24,7 @@ int main() {
   // Render some text onto the frame buffer using the TextRenderer
   TextRenderer renderer(display);
   // Use our local font
-  renderer.setFont(&Font16);
+  renderer.setFont(&Font24);
   renderer.setTextColor(TextRenderer::COLOR_BLACK);
   // Print a full printable ASCII range for font testing character-by-character
   // and wrap to the next line when characters do not fit.
@@ -42,7 +44,7 @@ int main() {
     }
     renderer.setCursor(x, y);
     renderer.print(s);
-    x += bw;
+    x += bw + 1;
   }
 
   display.displayBuffer(EInkDisplay::FAST_REFRESH);

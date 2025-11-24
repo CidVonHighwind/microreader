@@ -54,10 +54,7 @@ size_t TextRenderer::print(const char* s) {
   size_t count = 0;
   for (const char* p = s; *p; ++p) {
     char c = *p;
-    if (currentFont)
-      drawCharGFX(c);
-    else
-      drawCharSimple(c);
+    drawChar(c);
     count++;
   }
   return count;
@@ -126,8 +123,7 @@ void TextRenderer::getTextBounds(const char* str, int16_t x, int16_t y, int16_t*
     *h = height;
 }
 
-// Internal: draw a character using SimpleGFXfont bitmap data
-void TextRenderer::drawCharGFX(char c) {
+void TextRenderer::drawChar(char c) {
   if (!currentFont)
     return;
   const SimpleGFXfont* f = currentFont;
@@ -168,28 +164,5 @@ void TextRenderer::drawCharGFX(char c) {
   }
 
   // Advance cursor by xAdvance
-  cursorX += glyph->xAdvance;
-}
-
-// Internal: draw a very small simple glyph for fallback (digits, percent, letters approximate)
-void TextRenderer::drawCharSimple(char c) {
-  // Draw a very simple representation: for printable chars draw a 3x5 block pattern
-  if (c == ' ') {
-    cursorX += 6;
-    return;
-  }
-
-  // Basic 3x5 patterns for 0-9 and '%' and letters A-Z (approx)
-  // For simplicity, draw an outline rectangle for other chars
-  int16_t x0 = cursorX;
-  int16_t y0 = cursorY;
-  for (int16_t xx = 0; xx < 4; xx++) {
-    for (int16_t yy = 0; yy < 8; yy++) {
-      // draw a coarse letter block for visibility
-      if (xx == 0 || xx == 3 || yy == 0 || yy == 7) {
-        drawPixel(x0 + xx, y0 + yy, textColor);
-      }
-    }
-  }
-  cursorX += 6;
+  cursorX += glyph->xAdvance + 2;
 }

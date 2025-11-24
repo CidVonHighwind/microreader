@@ -29,6 +29,77 @@ except Exception:
     PIL_AVAILABLE = False
 
 
+def render_preview_from_data(codes, glyphs, bitmap_all, out_path, cols=16, pad=4):
+    """Render a monochrome PNG from the raw glyph bitmaps and save to out_path.
+
+    `glyphs` is a list of dicts with keys: bitmapOffset,width,height,xAdvance,xOffset,yOffset
+    `bitmap_all` is a flat list of bytes containing packed rows for each glyph.
+    """
+    if not PIL_AVAILABLE:
+        print(
+            "ERROR: Pillow (PIL) is required to render previews. Install with `pip install pillow`."
+        )
+        return 1
+
+    # Determine cell size from max glyph dimensions
+    max_w = max(g["width"] for g in glyphs) if glyphs else 0
+    max_h = max(g["height"] for g in glyphs) if glyphs else 0
+    if max_w == 0 or max_h == 0:
+        print("No glyphs to render")
+        return 1
+
+    cols = int(cols)
+    n = len(codes)
+    rows = (n + cols - 1) // cols
+
+    cell_w = max_w + pad * 2
+    cell_h = max_h + pad * 2
+    img_w = cols * cell_w
+    img_h = rows * cell_h
+
+    img = Image.new("RGB", (img_w, img_h), "white")
+    draw = ImageDraw.Draw(img)
+    pixels = img.load()
+
+    for idx, ch in enumerate(codes):
+        if idx >= len(glyphs):
+            break
+        g = glyphs[idx]
+        start = g["bitmapOffset"]
+        w = g["width"]
+        h = g["height"]
+        bpr = bytes_per_row(w)
+        r = idx // cols
+        c = idx % cols
+        base_x = c * cell_w + pad
+        base_y = r * cell_h + pad
+        # center glyph inside the cell
+        offset_x = base_x + (max_w - w) // 2
+        offset_y = base_y + (max_h - h) // 2
+
+        # draw pink background sized to this glyph (w x h), centered in cell
+        pink = (255, 192, 203)
+        bg_x = offset_x
+        bg_y = offset_y
+        draw.rectangle([bg_x, bg_y, bg_x + w - 1, bg_y + h - 1], fill=pink)
+
+        # draw each pixel from packed bitmap: set black for bits set
+        for yy in range(h):
+            for xx in range(w):
+                byte_idx = start + yy * bpr + (xx // 8)
+                if byte_idx >= len(bitmap_all):
+                    continue
+                byte = bitmap_all[byte_idx]
+                bit = 7 - (xx % 8)
+                if (byte >> bit) & 1:
+                    pixels[offset_x + xx, offset_y + yy] = (0, 0, 0)
+
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    img.save(out_path)
+    print(f"Wrote preview image (monochrome): {out_path}")
+    return 0
+
+
 def bytes_per_row(width):
     return (width + 7) // 8
 
@@ -56,7 +127,11 @@ def render_glyph_from_ttf(ch, font, size):
     draw = ImageDraw.Draw(img)
     draw.text((0, 0), s, font=font, fill=255)
     bbox = img.getbbox()
-    ascent, descent = font.getmetrics()
+    try:
+        ascent, descent = font.getmetrics()
+    except Exception:
+        ascent = size
+        descent = 0
     if bbox is None:
         # empty glyph (e.g., space). Use a blank width heuristic
         width = max(1, size // 2)
@@ -83,15 +158,15 @@ def render_glyph_from_ttf(ch, font, size):
                 row_bytes[byte_idx] |= 1 << bit
         bitmap.extend(row_bytes)
 
-    # compute xAdvance using font metrics where possible
-    try:
-        xadvance = font.getsize(s)[0]
-    except Exception:
-        xadvance = max(1, width + 1)
+        # compute xAdvance using font metrics where possible
+        # try:
+        #     xadvance = font.getsize(s)[0]
+        # except Exception:
+        xadvance = max(1, width)
 
     # xOffset: distance from cursor to UL corner. We render glyph at (0,0) so
     # left is the horizontal offset of the glyph; use negative left so UL = cursor + xOffset
-    xoffset = -left
+    xoffset = 0
     # yOffset: want UL such that cursorY is baseline -> UL = baseline + yOffset
     # ascent is distance from baseline to top of font; the glyph top is `upper` relative to draw origin
     yoffset = upper - ascent
@@ -203,6 +278,8 @@ const SimpleGFXfont {font_name} PROGMEM = {{(const uint8_t*){font_name}Bitmaps, 
     with open(out_path, "w", newline="\n") as f:
         f.write(header)
     print(f"Wrote {out_path}")
+    # return generated data so callers can render a preview using the same bytes
+    return glyphs, bitmap_all
 
 
 def write_header_from_data(font_name, out_path, chars, glyphs, bitmap_all, yadvance):
@@ -262,6 +339,7 @@ const SimpleGFXfont {font_name} PROGMEM = {{(const uint8_t*){font_name}Bitmaps, 
     with open(out_path, "w", newline="\n") as f:
         f.write(header)
     print(f"Wrote {out_path}")
+    return
 
 
 if __name__ == "__main__":
@@ -294,8 +372,12 @@ if __name__ == "__main__":
         "--fill",
         type=int,
         choices=[0, 1],
-        default=1,
+        default=0,
         help="Fill bitmap: 1 => 0xFF, 0 => 0x00",
+    )
+    p.add_argument(
+        "--preview-output",
+        help="Optional PNG path to render an image showing all characters passed to the generator",
     )
 
     args = p.parse_args()
@@ -391,6 +473,13 @@ if __name__ == "__main__":
 
         yadvance = args.size + 2
         write_header_from_data(args.name, args.out, codes, glyphs, bitmap_all, yadvance)
+        # optional preview image showing the same characters (use generated bytes)
+        if args.preview_output:
+            rc = render_preview_from_data(
+                codes, glyphs, bitmap_all, args.preview_output
+            )
+            if rc != 0:
+                sys.exit(rc)
         sys.exit(0)
 
     # Ensure minimum readable sizes
@@ -400,8 +489,51 @@ if __name__ == "__main__":
     xadvance = max(1, width)
     # yAdvance: slightly larger than height to allow line spacing
     yadvance = height + 2
+    # If Pillow is available, rasterize glyphs using PIL's font even when
+    # no TTF path was provided. This avoids producing all-zero (blank)
+    # glyphs or all-ones (filled rectangles) when the caller didn't
+    # supply a true font file.
+    if PIL_AVAILABLE:
+        try:
+            # prefer a truetype if provided by the environment; otherwise use
+            # Pillow's default bitmap font
+            font = ImageFont.load_default()
+        except Exception:
+            font = None
 
-    generate_header(
+        if font is not None:
+            bitmap_all = []
+            glyphs = []
+            offset = 0
+            for i, ch in enumerate(codes):
+                w, h, bm, xadv, xoff, yoff = render_glyph_from_ttf(ch, font, args.size)
+                glyph = {
+                    "bitmapOffset": offset,
+                    "width": w,
+                    "height": h,
+                    "xAdvance": xadv,
+                    "xOffset": xoff,
+                    "yOffset": yoff,
+                }
+                glyphs.append(glyph)
+                bitmap_all.extend(bm)
+                offset += len(bm)
+
+            yadvance = args.size + 2
+            write_header_from_data(
+                args.name, args.out, codes, glyphs, bitmap_all, yadvance
+            )
+
+            if args.preview_output:
+                rc = render_preview_from_data(
+                    codes, glyphs, bitmap_all, args.preview_output
+                )
+                if rc != 0:
+                    sys.exit(rc)
+            sys.exit(0)
+
+    # Fallback: generate uniform bitmaps (old behavior)
+    glyphs, bitmap_all = generate_header(
         args.name,
         args.out,
         codes,
@@ -413,3 +545,9 @@ if __name__ == "__main__":
         args.yoffset,
         args.fill,
     )
+
+    # optional preview image showing the same characters (use generated bytes)
+    if args.preview_output:
+        rc = render_preview_from_data(codes, glyphs, bitmap_all, args.preview_output)
+        if rc != 0:
+            sys.exit(rc)

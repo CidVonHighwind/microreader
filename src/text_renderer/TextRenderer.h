@@ -43,9 +43,7 @@ class TextRenderer {
   int16_t cursorY = 0;
   uint16_t textColor = COLOR_BLACK;
 
-  // internal helpers
-  void drawCharGFX(char c);
-  void drawCharSimple(char c);
+  void drawChar(char c);
 };
 
 #endif

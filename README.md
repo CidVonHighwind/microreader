@@ -68,6 +68,8 @@ C:\Users\Patrick\.platformio\penv\Scripts\platformio.exe run -t upload
 C:\Users\Patrick\.platformio\penv\Scripts\platformio.exe device monitor
 ```
 
+python .\scripts\generate_simplefont.py --out src/Fonts/Font16.h --name Font16 --size 16 --chars-file .\scripts\chars_input.txt --ttf .\data\Sonic.ttf
+
 ### Testing Text Layout on Windows
 
 Test the text layout algorithm without uploading to the device:

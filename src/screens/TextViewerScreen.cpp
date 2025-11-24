@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Fonts/Font16.h>
+#include <Fonts/Font24.h>
 #include <Fonts/Font27.h>
 
 #include "../SDCardManager.h"
@@ -70,7 +71,7 @@ void TextViewerScreen::showPage() {
 
   display.clearScreen(0xFF);
   textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
-  textRenderer.setFont(&Font27);
+  textRenderer.setFont(&Font24);
 
   pageStartIndex = provider->getCurrentIndex();
 
