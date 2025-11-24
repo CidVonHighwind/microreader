@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "../SDCardManager.h"
-#include "../TextRenderer.h"
+#include "../text_renderer/TextRenderer.h"
 #include "EInkDisplay.h"
 #include "Screen.h"
 

@@ -1,5 +1,6 @@
 #include "EInkDisplay.h"
 
+#include <cstring>
 #include <fstream>
 #include <vector>
 

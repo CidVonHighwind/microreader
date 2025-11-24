@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
   if (argc >= 2)
     path = argv[1];
   else
-    path = "../data/chapter one.txt";
+    path = "data/chapter one.txt";
 
   std::string content = readFile(path);
   if (content.empty()) {
@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
 
   std::string rebuilt;
   while (provider.hasNextWord()) {
-    std::string w = provider.getNextWord(renderer);
+    std::string w = provider.getNextWord(renderer).c_str();
     if (w.length() == 0)
       break;
     // Append token exactly as returned. w may contain whitespace tokens
@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
   provider.setPosition(static_cast<int>(content.length()));
   std::string rebuiltBack;
   while (true) {
-    std::string w = provider.getPrevWord(renderer);
+    std::string w = provider.getPrevWord(renderer).c_str();
     if (w.length() == 0)
       break;
     // Prepend token since getPrevWord returns tokens in reverse order

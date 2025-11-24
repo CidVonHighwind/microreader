@@ -1,8 +1,8 @@
 #include "TextLayout.h"
 
 #include "GreedyLayoutStrategy.h"
-#include "TextRenderer.h"
 #include "WordProvider.h"
+#include "text_renderer/TextRenderer.h"
 
 #ifdef ARDUINO
 #include <Arduino.h>

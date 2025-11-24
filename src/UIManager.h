@@ -6,9 +6,9 @@
 
 #include "Buttons.h"
 #include "EInkDisplay.h"
-#include "TextRenderer.h"
 #include "screens/Screen.h"
 #include "screens/text view/TextLayout.h"
+#include "text_renderer/TextRenderer.h"
 
 class SDCardManager;
 

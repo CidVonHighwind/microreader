@@ -2,8 +2,8 @@
 #define TEXT_VIEWER_SCREEN_H
 
 #include "../SDCardManager.h"
-#include "../TextRenderer.h"
 #include "../UIManager.h"
+#include "../text_renderer/TextRenderer.h"
 #include "EInkDisplay.h"
 #include "Screen.h"
 #include "text view/StringWordProvider.h"
