@@ -74,6 +74,7 @@ struct MockSerial {
   void println(int v);
   void println(unsigned long v);
   void println(const String& s);
+  void println();
   void print(const char*);
   void print(int v);
   void print(const String& s);

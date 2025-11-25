@@ -44,6 +44,32 @@
             "problemMatcher": [
                 "$gcc"
             ]
+        },
+        {
+            "label": "build GreedyLayoutStrategyTest",
+            "type": "shell",
+            "command": "g++",
+            "args": [
+                "-g",
+                "-Itest/include",
+                "-Isrc",
+                "-Isrc/screens/text view",
+                "test/GreedyLayoutStrategyTest.cpp",
+                "src/screens/text view/StringWordProvider.cpp",
+                "src/screens/text view/GreedyLayoutStrategy.cpp",
+                "src/EInkDisplay.cpp",
+                "src/text_renderer/TextRenderer.cpp",
+                "test/platform_stubs.cpp",
+                "-o",
+                "test/build/GreedyLayoutStrategyTest.exe"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
         }
     ]
 }

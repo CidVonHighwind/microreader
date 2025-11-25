@@ -109,7 +109,6 @@ size_t TextRenderer::print(const char* s) {
 }
 
 size_t TextRenderer::print(const String& s) {
-  Serial.printf("[%lu] TextRenderer: print(String) called: '%s' at (%d, %d)\n", millis(), s.c_str(), cursorX, cursorY);
   return print(s.c_str());
 }
 

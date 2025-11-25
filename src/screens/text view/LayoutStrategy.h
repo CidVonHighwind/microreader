@@ -3,6 +3,7 @@
 
 #include <WString.h>
 
+#include <cstdint>
 #include <vector>
 
 // Forward declarations

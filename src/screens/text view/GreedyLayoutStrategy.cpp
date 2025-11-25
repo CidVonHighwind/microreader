@@ -7,6 +7,10 @@
 #ifdef ARDUINO
 #include <Arduino.h>
 #endif
+#ifndef ARDUINO
+#include "../../../test/platform_stubs.h"
+#endif
+#include <cmath>
 
 GreedyLayoutStrategy::GreedyLayoutStrategy() {}
 
@@ -26,8 +30,8 @@ int GreedyLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& rende
 
   int startIndex = provider.getCurrentIndex();
   while (y < maxY) {
-    bool isParagraphBreak, isLineBreak;
-    std::vector<LayoutStrategy::Word> line = getNextLine(provider, renderer, maxWidth, isParagraphBreak, isLineBreak);
+    bool isParagraphEnd = false;
+    std::vector<LayoutStrategy::Word> line = getNextLine(provider, renderer, maxWidth, isParagraphEnd);
 
     // Render the line
     y = renderLine(line, renderer, x, y, maxWidth, config.lineHeight, alignment);
@@ -40,10 +44,8 @@ int GreedyLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& rende
 }
 
 std::vector<LayoutStrategy::Word> GreedyLayoutStrategy::getNextLine(WordProvider& provider, TextRenderer& renderer,
-                                                                    int16_t maxWidth, bool& isParagraphBreak,
-                                                                    bool& isLineBreak) {
-  isParagraphBreak = false;
-  isLineBreak = false;
+                                                                    int16_t maxWidth, bool& isParagraphEnd) {
+  isParagraphEnd = false;
 
   std::vector<LayoutStrategy::Word> line;
   int16_t currentWidth = 0;
@@ -58,7 +60,7 @@ std::vector<LayoutStrategy::Word> GreedyLayoutStrategy::getNextLine(WordProvider
 
     // Check for breaks - breaks are returned as special words
     if (word.text == String("\n")) {
-      isLineBreak = true;
+      isParagraphEnd = true;
       break;
     }
     if (word.text[0] == ' ') {
@@ -83,18 +85,14 @@ std::vector<LayoutStrategy::Word> GreedyLayoutStrategy::getNextLine(WordProvider
 }
 
 std::vector<LayoutStrategy::Word> GreedyLayoutStrategy::getPrevLine(WordProvider& provider, TextRenderer& renderer,
-                                                                    int16_t maxWidth, bool& isParagraphBreak,
-                                                                    bool& isLineBreak) {
-  isParagraphBreak = false;
-  isLineBreak = false;
+                                                                    int16_t maxWidth, bool& isParagraphEnd) {
+  isParagraphEnd = false;
 
   std::vector<LayoutStrategy::Word> line;
   int16_t currentWidth = 0;
 
   while (provider.getCurrentIndex() > 0) {
     String text = provider.getPrevWord(renderer);
-    if (text.length() == 0)
-      break;
     // Measure the rendered width using the renderer
     int16_t bx = 0, by = 0;
     uint16_t bw = 0, bh = 0;
@@ -103,8 +101,11 @@ std::vector<LayoutStrategy::Word> GreedyLayoutStrategy::getPrevLine(WordProvider
 
     // Check for breaks - breaks are returned as special words
     if (word.text == String("\n")) {
-      isLineBreak = true;
+      isParagraphEnd = true;
       break;
+    }
+    if (word.text[0] == ' ') {
+      continue;
     }
 
     // Try to add word to the beginning of the line
@@ -113,84 +114,107 @@ std::vector<LayoutStrategy::Word> GreedyLayoutStrategy::getPrevLine(WordProvider
       // Word doesn't fit, put it back
       provider.ungetWord();
       break;
+    } else {
+      line.insert(line.begin(), word);
+      currentWidth += spaceNeeded;
     }
-
-    line.insert(line.begin(), word);
-    currentWidth += spaceNeeded;
   }
 
   return line;
 }
 
 int GreedyLayoutStrategy::getPreviousPageStart(WordProvider& provider, TextRenderer& renderer,
-                                               const LayoutConfig& config, int currentEndPosition) {
+                                               const LayoutConfig& config, int currentStartPosition) {
   // Save current provider state
   int savedPosition = provider.getCurrentIndex();
   Serial.print("Pre start: ");
   Serial.println(savedPosition);
 
   // Set provider to the end of current page
-  provider.setPosition(currentEndPosition);
+  provider.setPosition(currentStartPosition);
+  String word = provider.getPrevWord(renderer);
+  if (word != String("\n")) {
+    provider.ungetWord();
+  }
 
   const int16_t maxWidth = config.pageWidth - config.marginLeft - config.marginRight;
-  spaceWidth_ = config.minSpaceWidth;
+  renderer.getTextBounds(" ", 0, 0, nullptr, nullptr, &spaceWidth_, nullptr);
 
   // Calculate how many lines fit on the screen
   const int16_t availableHeight = config.pageHeight - config.marginTop - config.marginBottom;
-  const int maxLines = availableHeight / config.lineHeight;
+  const int maxLines = ceil(availableHeight / (double)config.lineHeight);
+
+  // Debug output
+  Serial.printf("[Greedy] getPreviousPageStart called: spaceWidth_=%d, maxWidth=%d, maxLines=%d\n", spaceWidth_,
+                maxWidth, maxLines);
 
   // Go backwards, laying out lines in reverse order
   // Stop after reaching a paragraph break
   int linesBack = 0;
+  // position after going backwards to the paragraph break
+  int positionAtBreak = 0;
 
   while (provider.getCurrentIndex() > 0) {
-    bool isParagraphBreak;
-    bool isLineBreak;
-    std::vector<LayoutStrategy::Word> line = getPrevLine(provider, renderer, maxWidth, isParagraphBreak, isLineBreak);
+    bool isParagraphEnd;
+    std::vector<LayoutStrategy::Word> line = getPrevLine(provider, renderer, maxWidth, isParagraphEnd);
 
-    // print out the line for debugging
-    Serial.print("[Layout] Previous line: ");
-    for (const auto& word : line) {
-      Serial.print(word.text);
-      Serial.print("-");
-    }
+    // // print out the line for debugging
+    // Serial.print("[Layout] Previous line at position ");
+    // Serial.print(provider.getCurrentIndex());
+    // Serial.print(": ");
+    // for (const auto& word : line) {
+    //   Serial.print("\"");
+    //   Serial.print(word.text);
+    //   Serial.print("\"");
+
+    //   // reached the end
+    //   if (&word != &line.back())
+    //     Serial.print(" - ");
+    // }
+    // Serial.println();
 
     linesBack++;
-    if (isParagraphBreak)
-      linesBack++;
 
     // Stop if we hit a paragraph break
-    if (isParagraphBreak && linesBack >= maxLines) {
+    if (isParagraphEnd && linesBack >= maxLines) {
+      positionAtBreak = provider.getCurrentIndex() + 1;
+      provider.setPosition(positionAtBreak);
       break;
     }
   }
 
-  Serial.print("linesBack: ");
-  Serial.println(linesBack);
+  // Serial.print("linesBack: ");
+  // Serial.println(linesBack);
 
-  // Now we have the position after going backwards to the paragraph break
-  int positionAtBreak = provider.getCurrentIndex();
   int linesMoved = 0;
 
   // Move forward the difference between screen lines and lines we moved back
   int linesToMoveForward = linesBack - maxLines;
   if (linesToMoveForward > 0) {
-    // Move forward by laying out that many lines
-    provider.setPosition(positionAtBreak);
-
     while (provider.hasNextWord() && linesMoved < linesToMoveForward) {
-      bool dummyParagraphBreak, dummyLineBreak;
-      std::vector<LayoutStrategy::Word> line =
-          getNextLine(provider, renderer, maxWidth, dummyParagraphBreak, dummyLineBreak);
+      bool dummyParagraphEnd;
+      std::vector<LayoutStrategy::Word> line = getNextLine(provider, renderer, maxWidth, dummyParagraphEnd);
+
+      // Serial.print("[Layout] Backward line at position ");
+      // Serial.print(provider.getCurrentIndex());
+      // Serial.print(": ");
+      // for (const auto& word : line) {
+      //   Serial.print("\"");
+      //   Serial.print(word.text);
+      //   Serial.print("\"");
+
+      //   // reached the end
+      //   if (&word != &line.back())
+      //     Serial.print(" - ");
+      // }
+      // Serial.println();
 
       linesMoved++;
-      if (dummyParagraphBreak)
-        linesMoved++;
     }
   }
 
-  Serial.print("linesMoved: ");
-  Serial.println(linesMoved);
+  // Serial.print("linesMoved: ");
+  // Serial.println(linesMoved);
 
   // The current position is where the previous page starts
   int previousPageStart = provider.getCurrentIndex();
@@ -198,8 +222,8 @@ int GreedyLayoutStrategy::getPreviousPageStart(WordProvider& provider, TextRende
   // Restore provider state
   provider.setPosition(savedPosition);
 
-  Serial.print("Page start: ");
-  Serial.println(previousPageStart);
+  // Serial.print("Page start: ");
+  // Serial.println(previousPageStart);
 
   return previousPageStart;
 }
@@ -229,10 +253,6 @@ int16_t GreedyLayoutStrategy::renderLine(const std::vector<LayoutStrategy::Word>
 
   int16_t currentX = xPos;
   for (size_t i = 0; i < line.size(); i++) {
-    // print out
-    Serial.print(line[i].text);
-    Serial.print("'");
-
     renderer.setCursor(currentX, y);
     renderer.print(line[i].text);
     currentX += line[i].width;
@@ -240,11 +260,17 @@ int16_t GreedyLayoutStrategy::renderLine(const std::vector<LayoutStrategy::Word>
       currentX += spaceWidth_;
     }
   }
-  Serial.println("'");
-
-#ifdef DEBUG_LAYOUT
-  Serial.printf("[Layout] Rendered line: width=%d, words=%d\n", lineWidth, line.size());
-#endif
 
   return y + lineHeight;
+}
+
+// Test wrappers
+std::vector<LayoutStrategy::Word> GreedyLayoutStrategy::test_getNextLine(WordProvider& provider, TextRenderer& renderer,
+                                                                         int16_t maxWidth, bool& isParagraphEnd) {
+  return getNextLine(provider, renderer, maxWidth, isParagraphEnd);
+}
+
+std::vector<LayoutStrategy::Word> GreedyLayoutStrategy::test_getPrevLine(WordProvider& provider, TextRenderer& renderer,
+                                                                         int16_t maxWidth, bool& isParagraphEnd) {
+  return getPrevLine(provider, renderer, maxWidth, isParagraphEnd);
 }

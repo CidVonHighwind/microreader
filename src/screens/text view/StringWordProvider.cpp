@@ -30,6 +30,7 @@ String StringWordProvider::scanWord(int direction, TextRenderer& /*renderer*/) {
   if ((direction == 1 && currentPos >= text_.length()) || (direction == -1 && currentPos < 0)) {
     return String("");
   }
+
   char c = text_[currentPos];
 
   if (c == ' ') {
@@ -101,7 +102,9 @@ void StringWordProvider::setPosition(int index) {
     index = 0;
   if (index > text_.length())
     index = text_.length();
+
   index_ = index;
+  prevIndex_ = index;
 }
 
 void StringWordProvider::reset() {

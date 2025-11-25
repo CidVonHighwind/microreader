@@ -25,6 +25,10 @@ void MockSerial::println(const char* s) {
     printf("\n");
 }
 
+void MockSerial::println() {
+  printf("\n");
+}
+
 void MockSerial::print(const char* s) {
   if (s)
     printf("%s", s);

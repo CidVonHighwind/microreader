@@ -118,13 +118,12 @@ void TextViewerScreen::prevPage() {
   if (!provider || pageStartIndex <= 0)
     return;
 
-  // // Use the layout strategy to find the exact start of the previous page
-  // // Find where the previous page starts
-  // int previousPageStart = layoutStrategy->getPreviousPageStart(*provider, textRenderer, layoutConfig,
-  // pageStartIndex);
+  // Use the layout strategy to find the exact start of the previous page
+  // Find where the previous page starts
+  pageStartIndex = layoutStrategy->getPreviousPageStart(*provider, textRenderer, layoutConfig, pageStartIndex);
 
-  // // Set currentIndex to the start of the previous page
-  // currentIndex = previousPageStart;
+  // Set currentIndex to the start of the previous page
+  provider->setPosition(pageStartIndex);
 
   // Do normal forward layout from this position
   showPage();

@@ -1,8 +1,10 @@
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "../src/EInkDisplay.h"
 #include "../src/Fonts/Font16.h"
@@ -54,13 +56,13 @@ int main() {
   std::filesystem::create_directories("test/output");
 
   int page = 0;
-  bool drewAny = false;
 
-  auto savePage = [&](int pageIndex) {
+  auto savePage = [&](int pageIndex, String postfix) {
     // refresh (no-op for host stubs) then save
     display.displayBuffer(EInkDisplay::FAST_REFRESH);
     std::ostringstream ss;
-    ss << "test/output/test_output_" << pageIndex << ".pbm";
+    ss << "test/output/output_" << std::setw(3) << std::setfill('0') << pageIndex << std::setfill(' ')
+       << postfix.c_str() << ".pbm";
     std::string out = ss.str();
     display.saveFrameBufferAsPBM(out.c_str());
     std::cout << "Saved page " << pageIndex << " -> " << out << "\n";
@@ -89,17 +91,76 @@ int main() {
   config.pageHeight = 800;
   config.alignment = LayoutStrategy::ALIGN_LEFT;
 
+  // Traverse the entire document forward, saving each page's start and end indices
+  std::vector<std::pair<int, int>> pageRanges;  // pair<start, end>
+  int pageStart = 0;
   int pageIndex = 0;
-  // Layout pages until provider is exhausted
-  while (provider.getPercentage(pageIndex) < 1.0f) {
+
+  while (true) {
     display.clearScreen(0xFF);
 
-    provider.setPosition(pageIndex);
-    pageIndex = layout.layoutText(provider, renderer, config);
+    provider.setPosition(pageStart);
 
-    savePage(page);
-    ++page;
-    drewAny = true;
+    int endPos = layout.layoutText(provider, renderer, config);
+    // record the start and end positions for this page
+    pageRanges.push_back(std::make_pair(pageStart, endPos));
+
+    savePage(pageIndex, "_0");
+
+    // Stop if we've reached the end of the provider
+    if (provider.getPercentage(endPos) >= 1.0f) {
+      ++pageIndex;
+      break;
+    }
+
+    // Safety: if no progress, break to avoid infinite loop
+    if (endPos <= pageStart) {
+      std::cerr << "No progress while laying out page " << pageIndex << ", stopping traversal.\n";
+      ++pageIndex;
+      break;
+    }
+
+    pageStart = endPos;
+    ++pageIndex;
+  }
+
+  std::cout << "Forward traversal produced " << pageRanges.size() << " pages.\n";
+
+  // Move backward from the last page and verify previous page starts and ends
+  bool mismatch = false;
+  pageIndex--;
+
+  for (int i = (int)pageRanges.size() - 1; i > 0; --i) {
+    int currentStart = pageRanges[i].first;
+    int expectedPrevStart = pageRanges[i - 1].first;
+    int expectedPrevEnd = pageRanges[i - 1].second;
+
+    int computedPrevStart = layout.getPreviousPageStart(provider, renderer, config, currentStart);
+
+    // Render the computed previous page to determine its end position and save it
+    display.clearScreen(0xFF);
+    provider.setPosition(computedPrevStart);
+    int computedPrevEnd = layout.layoutText(provider, renderer, config);
+    pageIndex--;
+    savePage(pageIndex, "_1");
+
+    bool startMatch = (computedPrevStart == expectedPrevStart);
+    bool endMatch = (computedPrevEnd == expectedPrevEnd);
+
+    if (!startMatch || !endMatch) {
+      std::cerr << "Mismatch at page " << i << ":\n"
+                << "  computedPrevStart=" << computedPrevStart << " expectedPrevStart=" << expectedPrevStart << "\n"
+                << "  computedPrevEnd=" << computedPrevEnd << " expectedPrevEnd=" << expectedPrevEnd << "\n";
+      mismatch = true;
+    } else {
+      std::cout << "Page " << i << ": previous start/end match (" << computedPrevStart << ", " << computedPrevEnd
+                << ")\n";
+    }
+  }
+
+  if (mismatch) {
+    std::cerr << "One or more previous-page range checks failed.\n";
+    return 2;
   }
 
   return 0;
