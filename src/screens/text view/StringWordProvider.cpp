@@ -82,6 +82,12 @@ float StringWordProvider::getPercentage() {
   return static_cast<float>(index_) / static_cast<float>(text_.length());
 }
 
+float StringWordProvider::getPercentage(int index) {
+  if (text_.length() == 0)
+    return 1.0f;
+  return static_cast<float>(index) / static_cast<float>(text_.length());
+}
+
 int StringWordProvider::getCurrentIndex() {
   return index_;
 }

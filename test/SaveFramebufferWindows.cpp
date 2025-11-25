@@ -9,8 +9,8 @@
 #include "../src/Fonts/Font20.h"
 #include "../src/Fonts/Font24.h"
 #include "../src/Fonts/Font27.h"
+#include "../src/screens/text view/GreedyLayoutStrategy.h"
 #include "../src/screens/text view/StringWordProvider.h"
-#include "../src/screens/text view/TextLayout.h"
 #include "../src/text_renderer/TextRenderer.h"
 #include "WString.h"
 
@@ -18,7 +18,6 @@
 // single-file test binary links without changing the global build tasks.
 #include "../src/screens/text view/GreedyLayoutStrategy.cpp"
 #include "../src/screens/text view/StringWordProvider.cpp"
-#include "../src/screens/text view/TextLayout.cpp"
 
 int main() {
   std::cout << "Starting SaveFramebufferWindows test...\n";
@@ -44,7 +43,7 @@ int main() {
   const int margin = 4;
   int x = margin;
   int y = 32;
-  const std::string filepath = "data/font test.txt";
+  const std::string filepath = "data/chapter one.txt";
   std::ifstream infile(filepath);
   if (!infile) {
     std::cerr << "Failed to open '" << filepath << "'\n";
@@ -78,30 +77,29 @@ int main() {
   const int lineSpacing = (int)tbh + 4;
 
   StringWordProvider provider(fullText);
-  TextLayout layout;
-  TextLayout::LayoutConfig config;
+  GreedyLayoutStrategy layout;
+  LayoutStrategy::LayoutConfig config;
   config.marginLeft = 10;
   config.marginRight = 10;
   config.marginTop = 40;
-  config.marginBottom = 40;
+  config.marginBottom = 20;
   config.lineHeight = 30;
   config.minSpaceWidth = 8;
   config.pageWidth = 480;
   config.pageHeight = 800;
   config.alignment = LayoutStrategy::ALIGN_LEFT;
 
+  int pageIndex = 0;
   // Layout pages until provider is exhausted
-  while (provider.hasNextWord()) {
+  while (provider.getPercentage(pageIndex) < 1.0f) {
     display.clearScreen(0xFF);
-    layout.layoutText(provider, renderer, config);
+
+    provider.setPosition(pageIndex);
+    pageIndex = layout.layoutText(provider, renderer, config);
+
     savePage(page);
     ++page;
     drewAny = true;
-  }
-
-  // Save last page if anything was drawn (even if empty page exists logically)
-  if (drewAny) {
-    savePage(page);
   }
 
   return 0;

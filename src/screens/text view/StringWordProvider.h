@@ -15,6 +15,7 @@ class StringWordProvider : public WordProvider {
   String getPrevWord(TextRenderer& renderer) override;
 
   float getPercentage() override;
+  float getPercentage(int index) override;
   void setPosition(int index) override;
   int getCurrentIndex() override;
   void ungetWord() override;

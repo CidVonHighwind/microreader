@@ -4,6 +4,9 @@
 #include <Fonts/Font16.h>
 #include <Fonts/Font27.h>
 
+#include <algorithm>
+#include <cstring>
+
 #include "Buttons.h"
 #include "UIManager.h"
 
@@ -36,31 +39,59 @@ void FileBrowserScreen::renderSdBrowser() {
   textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
   textRenderer.setFont(&Font27);
 
-  textRenderer.setCursor(10, 50);
-  textRenderer.print("SD Card");
+  // Center the title horizontally (page width is 480 in portrait coordinate system)
+  {
+    const char* title = "Microreader";
+    int16_t x1, y1;
+    uint16_t w, h;
+    textRenderer.getTextBounds(title, 0, 0, &x1, &y1, &w, &h);
+    int16_t centerX = (480 - (int)w) / 2;
+    textRenderer.setCursor(centerX, 75);
+    textRenderer.print(title);
+  }
 
   textRenderer.setFont(&Font16);
 
-  int lineY = 84;
+  // Render file list centered both horizontally and vertically.
+  textRenderer.setFont(&Font16);
+  const int lineHeight = 28;
   int lines = SD_LINES_PER_SCREEN;
+
+  // Count how many actual rows we'll draw (clamped by available files)
+  int drawable = 0;
   for (int i = 0; i < lines; ++i) {
-    int idx = sdScrollOffset + i;
-    if (idx >= (int)sdFiles.size())
+    if (sdScrollOffset + i >= (int)sdFiles.size())
       break;
+    ++drawable;
+  }
 
-    if (idx == sdSelectedIndex) {
-      textRenderer.setCursor(8, lineY);
-      textRenderer.print(">");
-      textRenderer.setCursor(24, lineY);
-    } else {
-      textRenderer.setCursor(24, lineY);
-    }
+  if (drawable == 0)
+    return;
 
+  int totalHeight = drawable * lineHeight;
+  int startY = (800 - totalHeight) / 2;  // center vertically (pageHeight = 800)
+
+  for (int i = 0; i < drawable; ++i) {
+    int idx = sdScrollOffset + i;
     String name = sdFiles[idx];
     if (name.length() > 30)
       name = name.substring(0, 27) + "...";
-    textRenderer.print(name);
-    lineY += 28;
+
+    String displayName;
+    if (idx == sdSelectedIndex) {
+      // Show both left and right markers around the selection and center the whole string
+      displayName = String(">") + name + String("<");
+    } else {
+      displayName = name;
+    }
+
+    int16_t x1, y1;
+    uint16_t w, h;
+    textRenderer.getTextBounds(displayName.c_str(), 0, 0, &x1, &y1, &w, &h);
+    int16_t centerX = (480 - (int)w) / 2;  // horizontal center (pageWidth = 480)
+    int16_t rowY = startY + i * lineHeight;
+    textRenderer.setCursor(centerX, rowY);
+    textRenderer.print(displayName);
   }
 }
 
@@ -115,6 +146,10 @@ void FileBrowserScreen::loadFolder(int maxFiles) {
   for (auto& name : files) {
     sdFiles.push_back(name);
   }
+
+  // Sort files alphabetically (case-sensitive using strcmp)
+  std::sort(sdFiles.begin(), sdFiles.end(),
+            [](const String& a, const String& b) { return std::strcmp(a.c_str(), b.c_str()) < 0; });
 
   sdSelectedIndex = 0;
   sdScrollOffset = 0;

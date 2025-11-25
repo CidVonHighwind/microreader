@@ -13,14 +13,14 @@ class GreedyLayoutStrategy : public LayoutStrategy {
   }
 
   // Main interface implementation
-  void layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) override;
+  int layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) override;
 
   // Calculate the start position of the previous page
   int getPreviousPageStart(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config,
                            int currentEndPosition) override;
 
  private:
-  int16_t spaceWidth_;
+  uint16_t spaceWidth_;
 
   // Helper methods
   std::vector<LayoutStrategy::Word> getNextLine(WordProvider& provider, TextRenderer& renderer, int16_t maxWidth,

@@ -7,7 +7,7 @@
 #include "Buttons.h"
 #include "EInkDisplay.h"
 #include "screens/Screen.h"
-#include "screens/text view/TextLayout.h"
+#include "screens/text view/LayoutStrategy.h"
 #include "text_renderer/TextRenderer.h"
 
 class SDCardManager;
@@ -47,19 +47,12 @@ class UIManager {
   EInkDisplay& display;
   SDCardManager& sdManager;
   TextRenderer textRenderer;
-  TextLayout textLayout;
 
   ScreenId currentScreen = ScreenId::FileBrowser;
 
   // Map holding owning pointers to the screens; screens are
   // constructed in the .cpp ctor and live for the UIManager lifetime.
   std::unordered_map<ScreenId, std::unique_ptr<Screen>, EnumClassHash> screens;
-
-  // Order for navigation
-  std::vector<ScreenId> screenOrder = {ScreenId::FileBrowser, ScreenId::ImageViewer, ScreenId::TextViewer};
-
-  ScreenId nextScreenId(ScreenId cur) const;
-  ScreenId prevScreenId(ScreenId cur) const;
 };
 
 #endif

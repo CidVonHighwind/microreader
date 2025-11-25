@@ -9,7 +9,7 @@
 #include "screens/TextViewerScreen.h"
 
 UIManager::UIManager(EInkDisplay& display, SDCardManager& sdManager)
-    : display(display), sdManager(sdManager), textRenderer(display), textLayout() {
+    : display(display), sdManager(sdManager), textRenderer(display) {
   // Create concrete screens and store pointers in the map.
   screens[ScreenId::FileBrowser] =
       std::unique_ptr<Screen>(new FileBrowserScreen(display, textRenderer, sdManager, *this));
@@ -35,43 +35,7 @@ void UIManager::begin() {
   Serial.printf("[%lu] UIManager initialized\n", millis());
 }
 
-// navigation helpers (small fixed set; implement by scanning enum list)
-UIManager::ScreenId UIManager::nextScreenId(UIManager::ScreenId cur) const {
-  auto it = std::find(screenOrder.begin(), screenOrder.end(), cur);
-  if (it != screenOrder.end()) {
-    ++it;
-    if (it == screenOrder.end())
-      it = screenOrder.begin();
-    return *it;
-  }
-  return screenOrder[0];
-}
-
-UIManager::ScreenId UIManager::prevScreenId(UIManager::ScreenId cur) const {
-  auto it = std::find(screenOrder.begin(), screenOrder.end(), cur);
-  if (it != screenOrder.end()) {
-    if (it == screenOrder.begin())
-      it = screenOrder.end();
-    --it;
-    return *it;
-  }
-  return screenOrder[0];
-}
-
 void UIManager::handleButtons(Buttons& buttons) {
-  if (buttons.wasPressed(Buttons::VOLUME_UP) || buttons.wasPressed(Buttons::VOLUME_DOWN)) {
-    // Move through the screens vector: UP => previous, DOWN => next (wrap-around).
-    if (buttons.wasPressed(Buttons::VOLUME_UP)) {
-      currentScreen = prevScreenId(currentScreen);
-    } else {  // VOLUME_DOWN
-      currentScreen = nextScreenId(currentScreen);
-    }
-
-    // We guarantee the screen exists, so access directly.
-    screens[currentScreen]->show();
-    return;
-  }
-
   // Pass buttons to the current screen
   // Directly forward to the active screen (must exist)
   screens[currentScreen]->handleButtons(buttons);

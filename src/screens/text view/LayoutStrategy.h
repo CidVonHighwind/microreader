@@ -41,7 +41,8 @@ class LayoutStrategy {
   virtual Type getType() const = 0;
 
   // Main layout method: takes words from a provider and renders them
-  virtual void layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) = 0;
+  // Returns the provider character index at the end of the page (end position)
+  virtual int layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) = 0;
 
   // Calculate the start position of the previous page given current position
   virtual int getPreviousPageStart(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config,

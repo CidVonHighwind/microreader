@@ -17,30 +17,38 @@ KnuthPlassLayoutStrategy::KnuthPlassLayoutStrategy() : spaceWidth_(4) {}
 
 KnuthPlassLayoutStrategy::~KnuthPlassLayoutStrategy() {}
 
-void KnuthPlassLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) {
+int KnuthPlassLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) {
   const int16_t maxWidth = config.pageWidth - config.marginLeft - config.marginRight;
 
 #ifdef DEBUG_LAYOUT
   Serial.printf("[KP] layoutText (provider) called: maxWidth=%d\n", maxWidth);
 #endif
 
-  // Collect all words from provider (treat as one paragraph for simplicity)
+  // Collect words for this page from provider (record end positions so we can update provider to the
+  // position after the last rendered word)
   std::vector<Word> words;
+  std::vector<int> wordEndPositions;
   while (provider.hasNextWord()) {
+    // record index before reading
     String text = provider.getNextWord(renderer);
+    int afterIndex = provider.getCurrentIndex();
+
     // Skip break words for Knuth-Plass (treat as one paragraph)
     if (text == "\n" || text == "\n\n") {
       continue;
     }
+
     // Measure width using renderer
     int16_t bx = 0, by = 0;
     uint16_t bw = 0, bh = 0;
     renderer.getTextBounds(text.c_str(), 0, 0, &bx, &by, &bw, &bh);
     words.push_back(LayoutStrategy::Word{text, static_cast<int16_t>(bw)});
+    wordEndPositions.push_back(afterIndex);
   }
 
+  // If we didn't collect any words, nothing to render
   if (words.empty()) {
-    return;
+    return provider.getCurrentIndex();
   }
 
   // Layout the words
@@ -48,13 +56,24 @@ void KnuthPlassLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& 
   const int16_t maxY = config.pageHeight - config.marginBottom;
   spaceWidth_ = config.minSpaceWidth;
 
-  y = layoutAndRender(words, renderer, config.marginLeft, y, maxWidth, config.lineHeight, maxY, config.alignment);
+  size_t nextWordIndex = 0;
+  y = layoutAndRender(words, renderer, config.marginLeft, y, maxWidth, config.lineHeight, maxY, config.alignment,
+                      nextWordIndex);
+
+  // nextWordIndex is the index (in words[]) of the next word after the last rendered one
+  if (nextWordIndex > 0 && nextWordIndex <= wordEndPositions.size()) {
+    // Move provider position to the character index after the last rendered word
+    provider.setPosition(wordEndPositions[nextWordIndex - 1]);
+  }
+
+  return provider.getCurrentIndex();
 }
 
 int16_t KnuthPlassLayoutStrategy::layoutAndRender(const std::vector<Word>& words, TextRenderer& renderer, int16_t x,
                                                   int16_t y, int16_t maxWidth, int16_t lineHeight, int16_t maxY,
-                                                  TextAlignment alignment) {
+                                                  TextAlignment alignment, size_t& outNextWordIndex) {
   if (words.empty()) {
+    outNextWordIndex = 0;
     return y;
   }
 
@@ -97,6 +116,7 @@ int16_t KnuthPlassLayoutStrategy::layoutAndRender(const std::vector<Word>& words
     Serial.printf("[Layout] Last line right edge: %d (xPos=%d, lineWidth=%d)\n", rightEdge, xPos, lineWidth);
 #endif
 
+    outNextWordIndex = words.size();
     return y + lineHeight;
   }
 
@@ -180,6 +200,8 @@ int16_t KnuthPlassLayoutStrategy::layoutAndRender(const std::vector<Word>& words
     lineStart = lineEnd;
   }
 
+  // After rendering, lineStart is the index of the next word (in words[]) after the last rendered one
+  outNextWordIndex = lineStart;
   return y;
 }
 

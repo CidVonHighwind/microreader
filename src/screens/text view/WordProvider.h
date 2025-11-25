@@ -20,6 +20,7 @@ class WordProvider {
 
   // Returns the current reading progress as a percentage (0.0 to 1.0)
   virtual float getPercentage() = 0;
+  virtual float getPercentage(int index) = 0;
 
   // Sets the reading position to the given index in the text
   virtual void setPosition(int index) = 0;

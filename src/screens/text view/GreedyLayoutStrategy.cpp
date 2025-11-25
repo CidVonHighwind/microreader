@@ -12,19 +12,19 @@ GreedyLayoutStrategy::GreedyLayoutStrategy() {}
 
 GreedyLayoutStrategy::~GreedyLayoutStrategy() {}
 
-void GreedyLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) {
+int GreedyLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) {
   const int16_t maxWidth = config.pageWidth - config.marginLeft - config.marginRight;
   const int16_t x = config.marginLeft;
   int16_t y = config.marginTop;
   const int16_t maxY = config.pageHeight - config.marginBottom;
   const TextAlignment alignment = config.alignment;
-  spaceWidth_ = config.minSpaceWidth;
 
-  Serial.printf("[Greedy] layoutText (provider) called: spaceWidth_=%d\n", spaceWidth_);
-#ifdef DEBUG_LAYOUT
-  Serial.printf("[Greedy] layoutText (provider) called: maxWidth=%d\n", maxWidth);
-#endif
+  // Measure space width using renderer
+  renderer.getTextBounds(" ", 0, 0, nullptr, nullptr, &spaceWidth_, nullptr);
 
+  Serial.printf("[Greedy] layoutText (provider) called: spaceWidth_=%d, maxWidth=%d\n", spaceWidth_, maxWidth);
+
+  int startIndex = provider.getCurrentIndex();
   while (y < maxY) {
     bool isParagraphBreak, isLineBreak;
     std::vector<LayoutStrategy::Word> line = getNextLine(provider, renderer, maxWidth, isParagraphBreak, isLineBreak);
@@ -32,6 +32,11 @@ void GreedyLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& rend
     // Render the line
     y = renderLine(line, renderer, x, y, maxWidth, config.lineHeight, alignment);
   }
+  int endIndex = provider.getCurrentIndex();
+  // reset the provider to the start index
+  provider.setPosition(startIndex);
+
+  return endIndex;
 }
 
 std::vector<LayoutStrategy::Word> GreedyLayoutStrategy::getNextLine(WordProvider& provider, TextRenderer& renderer,
