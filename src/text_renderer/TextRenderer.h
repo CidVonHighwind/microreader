@@ -43,7 +43,9 @@ class TextRenderer {
   int16_t cursorY = 0;
   uint16_t textColor = COLOR_BLACK;
 
-  void drawChar(char c);
+  // Draw a single Unicode codepoint. Accepts a full Unicode codepoint
+  // (decoded from UTF-8) so the renderer can support multi-byte UTF-8 input.
+  void drawChar(uint32_t codepoint);
 };
 
 #endif

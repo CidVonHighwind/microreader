@@ -22,6 +22,20 @@ class String {
   char operator[](size_t i) const {
     return s_[i];
   }
+  bool operator==(const char* rhs) const {
+    if (!rhs)
+      return s_.empty();
+    return s_ == std::string(rhs);
+  }
+  bool operator==(const String& rhs) const {
+    return s_ == rhs.s_;
+  }
+  bool operator!=(const char* rhs) const {
+    return !(*this == rhs);
+  }
+  bool operator!=(const String& rhs) const {
+    return !(*this == rhs);
+  }
   String substring(int start, int end) const {
     if (start < 0)
       start = 0;

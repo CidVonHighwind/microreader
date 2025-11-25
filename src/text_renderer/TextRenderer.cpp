@@ -51,16 +51,65 @@ void TextRenderer::setCursor(int16_t x, int16_t y) {
 size_t TextRenderer::print(const char* s) {
   if (!s)
     return 0;
-  size_t count = 0;
-  for (const char* p = s; *p; ++p) {
-    char c = *p;
-    drawChar(c);
-    count++;
+  size_t written = 0;
+  const unsigned char* p = reinterpret_cast<const unsigned char*>(s);
+  while (*p) {
+    uint32_t cp = 0;
+    unsigned char c = *p;
+
+    if (c < 0x80) {
+      // 1-byte ASCII
+      cp = c;
+      p += 1;
+    } else if ((c & 0xE0) == 0xC0) {
+      // 2-byte sequence
+      unsigned char c1 = p[1];
+      if ((c1 & 0xC0) == 0x80) {
+        cp = ((c & 0x1F) << 6) | (c1 & 0x3F);
+        p += 2;
+      } else {
+        // malformed sequence -> replacement char
+        cp = 0xFFFD;
+        p += 1;
+      }
+    } else if ((c & 0xF0) == 0xE0) {
+      // 3-byte sequence
+      unsigned char c1 = p[1];
+      unsigned char c2 = p[2];
+      if (((c1 & 0xC0) == 0x80) && ((c2 & 0xC0) == 0x80)) {
+        cp = ((c & 0x0F) << 12) | ((c1 & 0x3F) << 6) | (c2 & 0x3F);
+        p += 3;
+      } else {
+        cp = 0xFFFD;
+        p += 1;
+      }
+    } else if ((c & 0xF8) == 0xF0) {
+      // 4-byte sequence
+      unsigned char c1 = p[1];
+      unsigned char c2 = p[2];
+      unsigned char c3 = p[3];
+      if (((c1 & 0xC0) == 0x80) && ((c2 & 0xC0) == 0x80) && ((c3 & 0xC0) == 0x80)) {
+        cp = ((c & 0x07) << 18) | ((c1 & 0x3F) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F);
+        p += 4;
+      } else {
+        cp = 0xFFFD;
+        p += 1;
+      }
+    } else {
+      // invalid leading byte
+      cp = 0xFFFD;
+      p += 1;
+    }
+
+    drawChar(cp);
+    ++written;
   }
-  return count;
+
+  return written;
 }
 
 size_t TextRenderer::print(const String& s) {
+  Serial.printf("[%lu] TextRenderer: print(String) called: '%s' at (%d, %d)\n", millis(), s.c_str(), cursorX, cursorY);
   return print(s.c_str());
 }
 
@@ -84,33 +133,68 @@ void TextRenderer::getTextBounds(const char* str, int16_t x, int16_t y, int16_t*
   uint16_t height = 0;
 
   if (currentFont) {
-    // Measure using SimpleGFXfont xAdvance sums
+    // Measure using SimpleGFXfont xAdvance sums; decode UTF-8 like print()
     const SimpleGFXfont* f = currentFont;
     uint16_t tot = 0;
-    for (const char* p = str; *p; ++p) {
-      unsigned char c = (unsigned char)*p;
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(str);
+    while (*p) {
+      uint32_t cp = 0;
+      unsigned char c = *p;
+      if (c < 0x80) {
+        cp = c;
+        p += 1;
+      } else if ((c & 0xE0) == 0xC0) {
+        unsigned char c1 = p[1];
+        if ((c1 & 0xC0) == 0x80) {
+          cp = ((c & 0x1F) << 6) | (c1 & 0x3F);
+          p += 2;
+        } else {
+          cp = 0xFFFD;
+          p += 1;
+        }
+      } else if ((c & 0xF0) == 0xE0) {
+        unsigned char c1 = p[1];
+        unsigned char c2 = p[2];
+        if (((c1 & 0xC0) == 0x80) && ((c2 & 0xC0) == 0x80)) {
+          cp = ((c & 0x0F) << 12) | ((c1 & 0x3F) << 6) | (c2 & 0x3F);
+          p += 3;
+        } else {
+          cp = 0xFFFD;
+          p += 1;
+        }
+      } else if ((c & 0xF8) == 0xF0) {
+        unsigned char c1 = p[1];
+        unsigned char c2 = p[2];
+        unsigned char c3 = p[3];
+        if (((c1 & 0xC0) == 0x80) && ((c2 & 0xC0) == 0x80) && ((c3 & 0xC0) == 0x80)) {
+          cp = ((c & 0x07) << 18) | ((c1 & 0x3F) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F);
+          p += 4;
+        } else {
+          cp = 0xFFFD;
+          p += 1;
+        }
+      } else {
+        cp = 0xFFFD;
+        p += 1;
+      }
+
       // Find glyph by scanning per-glyph codepoint field
       int idx = -1;
       for (uint16_t i = 0; i < f->glyphCount; ++i) {
-        if (f->glyph[i].codepoint == (uint16_t)c) {
+        if (f->glyph[i].codepoint == cp) {
           idx = (int)i;
           break;
         }
       }
       if (idx >= 0) {
         const SimpleGFXglyph* glyph = &f->glyph[idx];
-        tot += glyph->xAdvance;
+        tot += glyph->xAdvance + 2;
       } else {
         tot += 6;  // fallback
       }
     }
     width = tot;
     height = (f->yAdvance > 0) ? f->yAdvance : 10;
-  } else {
-    // Simple fixed width font (fallback)
-    size_t len = strlen(str);
-    width = (uint16_t)(len * 6);  // 6px per char approx
-    height = 10;
   }
 
   if (x1)
@@ -123,20 +207,20 @@ void TextRenderer::getTextBounds(const char* str, int16_t x, int16_t y, int16_t*
     *h = height;
 }
 
-void TextRenderer::drawChar(char c) {
+void TextRenderer::drawChar(uint32_t codepoint) {
   if (!currentFont)
     return;
   const SimpleGFXfont* f = currentFont;
-  unsigned int code = (unsigned char)c;
   int glyphIndex = -1;
   for (uint16_t i = 0; i < f->glyphCount; ++i) {
-    if (f->glyph[i].codepoint == (uint16_t)code) {
+    if (f->glyph[i].codepoint == codepoint) {
       glyphIndex = (int)i;
       break;
     }
   }
   if (glyphIndex < 0) {
-    cursorX += 6;  // unsupported
+    // unsupported codepoint; advance by a small fallback amount
+    cursorX += 6;
     return;
   }
 

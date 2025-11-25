@@ -4,6 +4,8 @@
 #include <cstdarg>
 #include <cstdio>
 
+#include "WString.h"
+
 // Definitions for the declarations in platform_stubs.h
 
 MockSerial Serial;
@@ -17,12 +19,39 @@ void MockSerial::printf(const char* fmt, ...) {
 }
 
 void MockSerial::println(const char* s) {
-  if (s) printf("%s\n", s);
-  else printf("\n");
+  if (s)
+    printf("%s\n", s);
+  else
+    printf("\n");
 }
 
 void MockSerial::print(const char* s) {
-  if (s) printf("%s", s);
+  if (s)
+    printf("%s", s);
+}
+
+void MockSerial::println(int v) {
+  printf("%d\n", v);
+}
+
+void MockSerial::println(unsigned long v) {
+  printf("%lu\n", v);
+}
+
+void MockSerial::print(int v) {
+  printf("%d", v);
+}
+
+void MockSerial::println(const String& s) {
+  if (s.c_str())
+    printf("%s\n", s.c_str());
+  else
+    printf("\n");
+}
+
+void MockSerial::print(const String& s) {
+  if (s.c_str())
+    printf("%s", s.c_str());
 }
 
 // Provide a concrete SPI object for host tests

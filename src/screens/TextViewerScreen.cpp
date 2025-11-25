@@ -24,7 +24,7 @@ TextViewerScreen::TextViewerScreen(EInkDisplay& display, TextRenderer& renderer,
   layoutConfig.marginTop = 40;
   layoutConfig.marginBottom = 40;
   layoutConfig.lineHeight = 30;
-  layoutConfig.minSpaceWidth = 10;
+  layoutConfig.minSpaceWidth = 8;
   layoutConfig.pageWidth = 480;
   layoutConfig.pageHeight = 800;
   layoutConfig.alignment = LayoutStrategy::ALIGN_LEFT;

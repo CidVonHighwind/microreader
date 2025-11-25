@@ -11,7 +11,7 @@ Numbers:
 0123456789
 
 Common Punctuation:
-. , ; : ! ? ' " - – — ( ) [ ] { } / \ | @ # $ % & * + = _ ~ ` ^ < >
+. , ; : ! ? ' " - – — ( ) [ ] { } / \ | @ # $ % & * + = _ ~ ` ^ < > » «
 
 English Special Characters:
 ' ' " " … • ·

@@ -21,10 +21,15 @@ struct SPISettings {
 
 // Minimal SPI mock
 struct MockSPI {
-  void begin(int sclk = -1, int miso = -1, int mosi = -1, int ssel = -1) { (void)sclk; (void)miso; (void)mosi; (void)ssel; }
-  void beginTransaction(const SPISettings&){ }
-  void endTransaction(){ }
-  void transfer(uint8_t) { }
+  void begin(int sclk = -1, int miso = -1, int mosi = -1, int ssel = -1) {
+    (void)sclk;
+    (void)miso;
+    (void)mosi;
+    (void)ssel;
+  }
+  void beginTransaction(const SPISettings&) {}
+  void endTransaction() {}
+  void transfer(uint8_t) {}
 };
 
 extern MockSPI SPI;
@@ -36,6 +41,9 @@ extern MockSPI SPI;
 #ifndef SPI_MODE0
 #define SPI_MODE0 0
 #endif
+
+// Forward-declare Arduino-like String used by test WString.h
+class String;
 
 // Arduino GPIO and timing stubs (inline so header-only callers work)
 inline void pinMode(int, int) {}
@@ -63,7 +71,12 @@ inline void delay(unsigned long) {}
 struct MockSerial {
   void printf(const char*, ...);
   void println(const char*);
+  void println(int v);
+  void println(unsigned long v);
+  void println(const String& s);
   void print(const char*);
+  void print(int v);
+  void print(const String& s);
 };
 
 extern MockSerial Serial;

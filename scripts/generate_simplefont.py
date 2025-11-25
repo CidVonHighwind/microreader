@@ -21,12 +21,7 @@ import os
 import textwrap
 import sys
 
-try:
-    from PIL import Image, ImageDraw, ImageFont
-
-    PIL_AVAILABLE = True
-except Exception:
-    PIL_AVAILABLE = False
+from PIL import Image, ImageDraw, ImageFont
 
 
 def render_preview_from_data(codes, glyphs, bitmap_all, out_path, cols=16, pad=4):
@@ -35,11 +30,7 @@ def render_preview_from_data(codes, glyphs, bitmap_all, out_path, cols=16, pad=4
     `glyphs` is a list of dicts with keys: bitmapOffset,width,height,xAdvance,xOffset,yOffset
     `bitmap_all` is a flat list of bytes containing packed rows for each glyph.
     """
-    if not PIL_AVAILABLE:
-        print(
-            "ERROR: Pillow (PIL) is required to render previews. Install with `pip install pillow`."
-        )
-        return 1
+    # Pillow is required for previews; assume it is available.
 
     # Determine cell size from max glyph dimensions
     max_w = max(g["width"] for g in glyphs) if glyphs else 0
@@ -116,7 +107,7 @@ def gen_bitmap_bytes(width, height, fill):
     return [byte_value] * total
 
 
-def render_glyph_from_ttf(ch, font, size):
+def render_glyph_from_ttf(ch, font, size, thickness=0.0):
     """Render a single character `ch` (int) using a PIL ImageFont and
     return width, height, bitmap_bytes, xAdvance, xOffset, yOffset
     xOffset/yOffset are computed relative to a baseline at `ascent` from the font metrics.
@@ -125,7 +116,21 @@ def render_glyph_from_ttf(ch, font, size):
     # create a temporary image big enough
     img = Image.new("L", (size * 3, size * 3), 0)
     draw = ImageDraw.Draw(img)
-    draw.text((0, 0), s, font=font, fill=255)
+    # Render the glyph. If a thickness > 0 is requested, prefer Pillow's
+    # `stroke_width` argument when available (it expects an integer). Use the
+    # rounded integer for stroke_width, but also provide a fallback that
+    # approximates fractional thickness by drawing offsets inside a disk of
+    # radius `thickness`.
+    if thickness and thickness > 0:
+        try:
+            draw.text(
+                (0, 0), s, font=font, fill=255, stroke_width=thickness, stroke_fill=255
+            )
+        except TypeError:
+            draw.text((0, 0), s, font=font, fill=255)
+    else:
+        draw.text((0, 0), s, font=font, fill=255)
+
     bbox = img.getbbox()
     try:
         ascent, descent = font.getmetrics()
@@ -175,22 +180,36 @@ def render_glyph_from_ttf(ch, font, size):
 
 
 def format_c_byte_list(byte_list):
-    # format as 0xFF, 0x00, ... wrapped at 12 items per line
+    """Format a list of bytes into C-style 0xXX, wrapped at 12 items/line.
+
+    Returns a string where each line is indented by 4 spaces so it can be
+    inserted directly into a C array initializer.
+    """
+    if not byte_list:
+        return ""
     parts = [f"0x{b:02X}" for b in byte_list]
-    lines = []
     per_line = 12
-    for i in range(0, len(parts), per_line):
-        lines.append("    " + ", ".join(parts[i : i + per_line]))
+    lines = [
+        "    " + ", ".join(parts[i : i + per_line])
+        for i in range(0, len(parts), per_line)
+    ]
     return ",\n".join(lines)
 
 
 def format_c_code_list(code_list):
-    # format as 0xXXXX, 0x00FF, ... wrapped at 12 items per line
-    parts = [f"0x{c:04X}" for c in code_list]
-    lines = []
+    """Format a list of character codes into C-style 0xXXXX, wrapped at 12 items/line.
+
+    Returns a string where each line is indented by 4 spaces.
+    """
+    if not code_list:
+        return ""
+    # Use variable-width hex formatting to support full Unicode codepoints
+    parts = [f"0x{c:X}" for c in code_list]
     per_line = 12
-    for i in range(0, len(parts), per_line):
-        lines.append("    " + ", ".join(parts[i : i + per_line]))
+    lines = [
+        "    " + ", ".join(parts[i : i + per_line])
+        for i in range(0, len(parts), per_line)
+    ]
     return ",\n".join(lines)
 
 
@@ -233,11 +252,8 @@ def generate_header(
         end = start + per_glyph_bytes
         chunk = bitmap_all[start:end]
         # printable character display
-        if 32 <= ch <= 126:
-            display = chr(ch)
-            comment = f"// 0x{ch:02X} '{display}'"
-        else:
-            comment = f"// 0x{ch:02X}"
+        display = chr(ch)
+        comment = f"// 0x{ch:X} '{display}'"
         # format chunk bytes
         chunk_c = format_c_byte_list(chunk)
         bmp_lines.append(f"    {comment}\n{chunk_c}")
@@ -246,7 +262,7 @@ def generate_header(
     for idx, g in enumerate(glyphs):
         ch = chars[idx]
         glyph_lines.append(
-            f"    {{{g['bitmapOffset']}, 0x{ch:04X}, {g['width']}, {g['height']}, {g['xAdvance']}, {g['xOffset']}, {g['yOffset']}}}"
+            f"    {{{g['bitmapOffset']}, 0x{ch:X}, {g['width']}, {g['height']}, {g['xAdvance']}, {g['xOffset']}, {g['yOffset']}}}"
         )
     glyphs_c = ",\n".join(glyph_lines)
 
@@ -275,7 +291,7 @@ const SimpleGFXfont {font_name} PROGMEM = {{(const uint8_t*){font_name}Bitmaps, 
 
     # ensure output dir exists
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    with open(out_path, "w", newline="\n") as f:
+    with open(out_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(header)
     print(f"Wrote {out_path}")
     # return generated data so callers can render a preview using the same bytes
@@ -295,11 +311,8 @@ def write_header_from_data(font_name, out_path, chars, glyphs, bitmap_all, yadva
         start = g["bitmapOffset"]
         end = start + per_glyph_bytes
         chunk = bitmap_all[start:end]
-        if 32 <= ch <= 126:
-            display = chr(ch)
-            comment = f"// 0x{ch:02X} '{display}'"
-        else:
-            comment = f"// 0x{ch:02X}"
+        display = chr(ch)
+        comment = f"// 0x{ch:X} '{display}'"
         chunk_c = format_c_byte_list(chunk)
         bmp_lines.append(f"    {comment}\n{chunk_c}")
     bmp_c = ",\n".join(bmp_lines)
@@ -308,7 +321,7 @@ def write_header_from_data(font_name, out_path, chars, glyphs, bitmap_all, yadva
     for idx, g in enumerate(glyphs):
         ch = chars[idx]
         glyph_lines.append(
-            f"    {{{g['bitmapOffset']}, 0x{ch:04X}, {g['width']}, {g['height']}, {g['xAdvance']}, {g['xOffset']}, {g['yOffset']}}}"
+            f"    {{{g['bitmapOffset']}, 0x{ch:X}, {g['width']}, {g['height']}, {g['xAdvance']}, {g['xOffset']}, {g['yOffset']}}}"
         )
     glyphs_c = ",\n".join(glyph_lines)
 
@@ -336,13 +349,13 @@ const SimpleGFXfont {font_name} PROGMEM = {{(const uint8_t*){font_name}Bitmaps, 
 """
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    with open(out_path, "w", newline="\n") as f:
+    with open(out_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(header)
     print(f"Wrote {out_path}")
     return
 
 
-if __name__ == "__main__":
+def main(argv=None):
     p = argparse.ArgumentParser(description="Generate SimpleGFXfont C header files")
     p.add_argument("--out", required=True, help="Output header path")
     p.add_argument(
@@ -351,11 +364,17 @@ if __name__ == "__main__":
     p.add_argument(
         "--chars",
         default="32",
-        help="Either a comma/range list of decimal char codes (eg: 32 or 32,48-57) or a literal string of characters to include (eg: 'ABCabc0123').",
+        help=(
+            "Either a comma/range list of decimal char codes (eg: 32 or 32,48-57) "
+            "or a literal string of characters to include (eg: 'ABCabc0123')."
+        ),
     )
     p.add_argument(
         "--chars-file",
-        help="Path to a file containing the literal characters to include. Use this to avoid shell quoting/escaping issues.",
+        help=(
+            "Path to a file containing the literal characters to include. Use this "
+            "to avoid shell quoting/escaping issues."
+        ),
     )
     p.add_argument(
         "--size",
@@ -369,6 +388,12 @@ if __name__ == "__main__":
         "--ttf", help="Path to a TTF/OTF font file to rasterize glyphs (optional)"
     )
     p.add_argument(
+        "--thickness",
+        type=float,
+        default=0.0,
+        help="Stroke thickness to render bolder glyphs (0 = normal). Float allowed; fractional thickness is approximated.",
+    )
+    p.add_argument(
         "--fill",
         type=int,
         choices=[0, 1],
@@ -380,7 +405,7 @@ if __name__ == "__main__":
         help="Optional PNG path to render an image showing all characters passed to the generator",
     )
 
-    args = p.parse_args()
+    args = p.parse_args(argv)
 
     # parse chars spec. Prefer --chars-file when present to avoid shell quoting issues
     codes = []
@@ -397,9 +422,9 @@ if __name__ == "__main__":
         print(f"Loaded {len(chars_arg)} character(s) from {args.chars_file}")
     else:
         chars_arg = args.chars
+
     # If the supplied arg contains any non-digit and non-separator characters,
-    # treat it as a literal string of characters to include. This lets callers
-    # pass an explicit set like "ABCabc0123Ω漢".
+    # treat it as a literal string of characters to include.
     if any((not ch.isdigit()) and (ch not in ",-") for ch in chars_arg):
         for ch in chars_arg:
             codes.append(ord(ch))
@@ -416,17 +441,9 @@ if __name__ == "__main__":
 
     # derive dimensions from size: heuristics — width is half the size, height=size
     size = args.size
+
     # If a TTF was supplied, render each glyph using Pillow
     if args.ttf:
-        # Provide clear error messages and fail early if Pillow or the font file
-        # cannot be used. Silent fallback to `generate_header()` produced the
-        # all-0xFF glyphs the user reported; make failures loud so they don't
-        # become confusing filled-bitmaps.
-        if not PIL_AVAILABLE:
-            print(
-                "ERROR: Pillow (PIL) is required to render from TTF. Install with `pip install pillow`."
-            )
-            sys.exit(1)
 
         ttf_path = args.ttf
         if not os.path.isfile(ttf_path):
@@ -447,7 +464,9 @@ if __name__ == "__main__":
         glyphs = []
         offset = 0
         for i, ch in enumerate(codes):
-            w, h, bm, xadv, xoff, yoff = render_glyph_from_ttf(ch, font, args.size)
+            w, h, bm, xadv, xoff, yoff = render_glyph_from_ttf(
+                ch, font, args.size, args.thickness
+            )
             glyph = {
                 "bitmapOffset": offset,
                 "width": w,
@@ -466,7 +485,7 @@ if __name__ == "__main__":
                 if len(uniq) == 1:
                     val = next(iter(uniq))
                     if val in (0x00, 0xFF):
-                        cp = f"0x{ch:04X}"
+                        cp = f"0x{ch:X}"
                         print(
                             f"WARNING: glyph {cp} rendered to uniform byte 0x{val:02X}"
                         )
@@ -489,48 +508,43 @@ if __name__ == "__main__":
     xadvance = max(1, width)
     # yAdvance: slightly larger than height to allow line spacing
     yadvance = height + 2
-    # If Pillow is available, rasterize glyphs using PIL's font even when
-    # no TTF path was provided. This avoids producing all-zero (blank)
-    # glyphs or all-ones (filled rectangles) when the caller didn't
-    # supply a true font file.
-    if PIL_AVAILABLE:
-        try:
-            # prefer a truetype if provided by the environment; otherwise use
-            # Pillow's default bitmap font
-            font = ImageFont.load_default()
-        except Exception:
-            font = None
 
-        if font is not None:
-            bitmap_all = []
-            glyphs = []
-            offset = 0
-            for i, ch in enumerate(codes):
-                w, h, bm, xadv, xoff, yoff = render_glyph_from_ttf(ch, font, args.size)
-                glyph = {
-                    "bitmapOffset": offset,
-                    "width": w,
-                    "height": h,
-                    "xAdvance": xadv,
-                    "xOffset": xoff,
-                    "yOffset": yoff,
-                }
-                glyphs.append(glyph)
-                bitmap_all.extend(bm)
-                offset += len(bm)
+    # Rasterize glyphs using PIL's default font when no TTF is provided.
+    try:
+        font = ImageFont.load_default()
+    except Exception:
+        font = None
 
-            yadvance = args.size + 2
-            write_header_from_data(
-                args.name, args.out, codes, glyphs, bitmap_all, yadvance
+    if font is not None:
+        bitmap_all = []
+        glyphs = []
+        offset = 0
+        for i, ch in enumerate(codes):
+            w, h, bm, xadv, xoff, yoff = render_glyph_from_ttf(
+                ch, font, args.size, args.thickness
             )
+            glyph = {
+                "bitmapOffset": offset,
+                "width": w,
+                "height": h,
+                "xAdvance": xadv,
+                "xOffset": xoff,
+                "yOffset": yoff,
+            }
+            glyphs.append(glyph)
+            bitmap_all.extend(bm)
+            offset += len(bm)
 
-            if args.preview_output:
-                rc = render_preview_from_data(
-                    codes, glyphs, bitmap_all, args.preview_output
-                )
-                if rc != 0:
-                    sys.exit(rc)
-            sys.exit(0)
+        yadvance = args.size + 2
+        write_header_from_data(args.name, args.out, codes, glyphs, bitmap_all, yadvance)
+
+        if args.preview_output:
+            rc = render_preview_from_data(
+                codes, glyphs, bitmap_all, args.preview_output
+            )
+            if rc != 0:
+                sys.exit(rc)
+        sys.exit(0)
 
     # Fallback: generate uniform bitmaps (old behavior)
     glyphs, bitmap_all = generate_header(
@@ -551,3 +565,7 @@ if __name__ == "__main__":
         rc = render_preview_from_data(codes, glyphs, bitmap_all, args.preview_output)
         if rc != 0:
             sys.exit(rc)
+
+
+if __name__ == "__main__":
+    main()

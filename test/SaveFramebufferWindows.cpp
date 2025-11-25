@@ -1,13 +1,24 @@
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <sstream>
+#include <string>
 
 #include "../src/EInkDisplay.h"
 #include "../src/Fonts/Font16.h"
 #include "../src/Fonts/Font20.h"
 #include "../src/Fonts/Font24.h"
 #include "../src/Fonts/Font27.h"
+#include "../src/screens/text view/StringWordProvider.h"
+#include "../src/screens/text view/TextLayout.h"
 #include "../src/text_renderer/TextRenderer.h"
 #include "WString.h"
+
+// For test build convenience we include some implementation units so the
+// single-file test binary links without changing the global build tasks.
+#include "../src/screens/text view/GreedyLayoutStrategy.cpp"
+#include "../src/screens/text view/StringWordProvider.cpp"
+#include "../src/screens/text view/TextLayout.cpp"
 
 int main() {
   std::cout << "Starting SaveFramebufferWindows test...\n";
@@ -26,34 +37,72 @@ int main() {
   // Use our local font
   renderer.setFont(&Font24);
   renderer.setTextColor(TextRenderer::COLOR_BLACK);
-  // Print a full printable ASCII range for font testing character-by-character
-  // and wrap to the next line when characters do not fit.
+  // Print the contents of `data/font test.txt` character-by-character
+  // and wrap to the next line when characters do not fit. When the page
+  // (vertical space) fills, save the current framebuffer and start a new
+  // page. Always use the .txt file; error out if it cannot be opened.
   const int margin = 4;
   int x = margin;
   int y = 32;
-  const char* ascii =
-      " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~äüöÄÜÖß";
-  for (const char* p = ascii; *p; ++p) {
-    char s[2] = {*p, 0};
-    int16_t bx, by;
-    uint16_t bw, bh;
-    renderer.getTextBounds(s, x, y, &bx, &by, &bw, &bh);
-    if (x + (int)bw > (int)EInkDisplay::DISPLAY_HEIGHT - margin) {
-      x = margin;
-      y += bh + 4;
-    }
-    renderer.setCursor(x, y);
-    renderer.print(s);
-    x += bw + 1;
+  const std::string filepath = "data/font test.txt";
+  std::ifstream infile(filepath);
+  if (!infile) {
+    std::cerr << "Failed to open '" << filepath << "'\n";
+    return 1;
   }
 
-  display.displayBuffer(EInkDisplay::FAST_REFRESH);
-
-  // Save framebuffer as PBM to the project test folder
-  // Ensure `test/output` exists so the host test can write the file there
+  // Ensure output directory exists
   std::filesystem::create_directories("test/output");
-  const char* out = "test/output/test_output.pbm";
-  display.saveFrameBufferAsPBM(out);
+
+  int page = 0;
+  bool drewAny = false;
+
+  auto savePage = [&](int pageIndex) {
+    // refresh (no-op for host stubs) then save
+    display.displayBuffer(EInkDisplay::FAST_REFRESH);
+    std::ostringstream ss;
+    ss << "test/output/test_output_" << pageIndex << ".pbm";
+    std::string out = ss.str();
+    display.saveFrameBufferAsPBM(out.c_str());
+    std::cout << "Saved page " << pageIndex << " -> " << out << "\n";
+  };
+
+  // Read entire file into memory and use StringWordProvider + TextLayout
+  std::string content((std::istreambuf_iterator<char>(infile)), std::istreambuf_iterator<char>());
+  String fullText(content.c_str());
+
+  // Precompute a typical line height for spacing and populate layout config
+  int16_t tbx, tby;
+  uint16_t tbw, tbh;
+  renderer.getTextBounds("Ag", x, y, &tbx, &tby, &tbw, &tbh);
+  const int lineSpacing = (int)tbh + 4;
+
+  StringWordProvider provider(fullText);
+  TextLayout layout;
+  TextLayout::LayoutConfig config;
+  config.marginLeft = 10;
+  config.marginRight = 10;
+  config.marginTop = 40;
+  config.marginBottom = 40;
+  config.lineHeight = 30;
+  config.minSpaceWidth = 8;
+  config.pageWidth = 480;
+  config.pageHeight = 800;
+  config.alignment = LayoutStrategy::ALIGN_LEFT;
+
+  // Layout pages until provider is exhausted
+  while (provider.hasNextWord()) {
+    display.clearScreen(0xFF);
+    layout.layoutText(provider, renderer, config);
+    savePage(page);
+    ++page;
+    drewAny = true;
+  }
+
+  // Save last page if anything was drawn (even if empty page exists logically)
+  if (drewAny) {
+    savePage(page);
+  }
 
   return 0;
 }

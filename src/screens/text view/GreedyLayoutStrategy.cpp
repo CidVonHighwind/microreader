@@ -3,14 +3,12 @@
 #include "WString.h"
 #include "WordProvider.h"
 #include "text_renderer/TextRenderer.h"
+
 #ifdef ARDUINO
 #include <Arduino.h>
-#else
-#include "../test/Arduino.h"
-extern unsigned long millis();
 #endif
 
-GreedyLayoutStrategy::GreedyLayoutStrategy() : spaceWidth_(4) {}
+GreedyLayoutStrategy::GreedyLayoutStrategy() {}
 
 GreedyLayoutStrategy::~GreedyLayoutStrategy() {}
 
@@ -22,6 +20,7 @@ void GreedyLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& rend
   const TextAlignment alignment = config.alignment;
   spaceWidth_ = config.minSpaceWidth;
 
+  Serial.printf("[Greedy] layoutText (provider) called: spaceWidth_=%d\n", spaceWidth_);
 #ifdef DEBUG_LAYOUT
   Serial.printf("[Greedy] layoutText (provider) called: maxWidth=%d\n", maxWidth);
 #endif
@@ -30,25 +29,13 @@ void GreedyLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& rend
     bool isParagraphBreak, isLineBreak;
     std::vector<LayoutStrategy::Word> line = getNextLine(provider, renderer, maxWidth, isParagraphBreak, isLineBreak);
 
-    if (line.empty()) {
-      // No more content or we hit a break
-      if (isParagraphBreak) {
-        // Add paragraph spacing
-        y += config.lineHeight / 2;
-        if (y >= maxY)
-          break;
-        // Continue to next iteration to get the next line
-        continue;
-      } else if (isLineBreak) {
-        // No extra spacing for line breaks, just continue
-        if (y >= maxY)
-          break;
-        continue;
-      } else {
-        // No more content
-        break;
-      }
-    }
+    // // print out line
+    // Serial.print("[Layout] Next line: ");
+    // for (const auto& word : line) {
+    //   Serial.print(word.text);
+    //   Serial.print("-");
+    // }
+    // Serial.println("");
 
     // Render the line
     y = renderLine(line, renderer, x, y, maxWidth, config.lineHeight, alignment);
@@ -73,12 +60,12 @@ std::vector<LayoutStrategy::Word> GreedyLayoutStrategy::getNextLine(WordProvider
     LayoutStrategy::Word word{text, static_cast<int16_t>(bw)};
 
     // Check for breaks - breaks are returned as special words
-    if (word.text == "\n") {
+    if (word.text == String("\n")) {
       isLineBreak = true;
       break;
-    } else if (word.text == "\n\n") {
-      isParagraphBreak = true;
-      break;
+    }
+    if (word.text[0] == ' ') {
+      continue;
     }
 
     // Calculate space needed for this word
@@ -118,11 +105,8 @@ std::vector<LayoutStrategy::Word> GreedyLayoutStrategy::getPrevLine(WordProvider
     LayoutStrategy::Word word{text, static_cast<int16_t>(bw)};
 
     // Check for breaks - breaks are returned as special words
-    if (word.text == "\n") {
+    if (word.text == String("\n")) {
       isLineBreak = true;
-      break;
-    } else if (word.text == "\n\n") {
-      isParagraphBreak = true;
       break;
     }
 
@@ -248,6 +232,10 @@ int16_t GreedyLayoutStrategy::renderLine(const std::vector<LayoutStrategy::Word>
 
   int16_t currentX = xPos;
   for (size_t i = 0; i < line.size(); i++) {
+    // print out
+    Serial.print(line[i].text);
+    Serial.print("'");
+
     renderer.setCursor(currentX, y);
     renderer.print(line[i].text);
     currentX += line[i].width;
@@ -255,6 +243,7 @@ int16_t GreedyLayoutStrategy::renderLine(const std::vector<LayoutStrategy::Word>
       currentX += spaceWidth_;
     }
   }
+  Serial.println("'");
 
 #ifdef DEBUG_LAYOUT
   Serial.printf("[Layout] Rendered line: width=%d, words=%d\n", lineWidth, line.size());
