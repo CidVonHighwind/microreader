@@ -126,6 +126,21 @@ int main() {
 
   std::cout << "Forward traversal produced " << pageRanges.size() << " pages.\n";
 
+  // Write out all page start/end positions to console and a file for inspection
+  std::ofstream rangesOut("test/output/page_ranges.txt");
+  if (!rangesOut) {
+    std::cerr << "Warning: unable to open test/output/page_ranges.txt for writing\n";
+  }
+  for (size_t i = 0; i < pageRanges.size(); ++i) {
+    int s = pageRanges[i].first;
+    int e = pageRanges[i].second;
+    std::cout << "Page " << i << ": start=" << s << " end=" << e << "\n";
+    if (rangesOut)
+      rangesOut << i << " " << s << " " << e << "\n";
+  }
+  if (rangesOut)
+    rangesOut.close();
+
   // Move backward from the last page and verify previous page starts and ends
   bool mismatch = false;
   pageIndex--;

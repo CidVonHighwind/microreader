@@ -158,21 +158,6 @@ int GreedyLayoutStrategy::getPreviousPageStart(WordProvider& provider, TextRende
     bool isParagraphEnd;
     std::vector<LayoutStrategy::Word> line = getPrevLine(provider, renderer, maxWidth, isParagraphEnd);
 
-    // // print out the line for debugging
-    // Serial.print("[Layout] Previous line at position ");
-    // Serial.print(provider.getCurrentIndex());
-    // Serial.print(": ");
-    // for (const auto& word : line) {
-    //   Serial.print("\"");
-    //   Serial.print(word.text);
-    //   Serial.print("\"");
-
-    //   // reached the end
-    //   if (&word != &line.back())
-    //     Serial.print(" - ");
-    // }
-    // Serial.println();
-
     linesBack++;
 
     // Stop if we hit a paragraph break
@@ -183,9 +168,6 @@ int GreedyLayoutStrategy::getPreviousPageStart(WordProvider& provider, TextRende
     }
   }
 
-  // Serial.print("linesBack: ");
-  // Serial.println(linesBack);
-
   int linesMoved = 0;
 
   // Move forward the difference between screen lines and lines we moved back
@@ -194,27 +176,9 @@ int GreedyLayoutStrategy::getPreviousPageStart(WordProvider& provider, TextRende
     while (provider.hasNextWord() && linesMoved < linesToMoveForward) {
       bool dummyParagraphEnd;
       std::vector<LayoutStrategy::Word> line = getNextLine(provider, renderer, maxWidth, dummyParagraphEnd);
-
-      // Serial.print("[Layout] Backward line at position ");
-      // Serial.print(provider.getCurrentIndex());
-      // Serial.print(": ");
-      // for (const auto& word : line) {
-      //   Serial.print("\"");
-      //   Serial.print(word.text);
-      //   Serial.print("\"");
-
-      //   // reached the end
-      //   if (&word != &line.back())
-      //     Serial.print(" - ");
-      // }
-      // Serial.println();
-
       linesMoved++;
     }
   }
-
-  // Serial.print("linesMoved: ");
-  // Serial.println(linesMoved);
 
   // The current position is where the previous page starts
   int previousPageStart = provider.getCurrentIndex();
@@ -222,8 +186,8 @@ int GreedyLayoutStrategy::getPreviousPageStart(WordProvider& provider, TextRende
   // Restore provider state
   provider.setPosition(savedPosition);
 
-  // Serial.print("Page start: ");
-  // Serial.println(previousPageStart);
+  Serial.print("Page end: ");
+  Serial.println(previousPageStart);
 
   return previousPageStart;
 }

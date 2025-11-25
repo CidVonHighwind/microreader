@@ -74,9 +74,13 @@ void TextViewerScreen::showPage() {
 
   try {
     // print out current percentage
-    float currentPercentage = provider->getPercentage();
-    Serial.printf("Layout at %.1f%%\n", currentPercentage * 100.0f);
+    Serial.print("Page start: ");
+    Serial.println(pageStartIndex);
+
     pageEndIndex = layoutStrategy->layoutText(*provider, textRenderer, layoutConfig);
+
+    Serial.print("Page end: ");
+    Serial.println(pageEndIndex);
   } catch (const std::exception& e) {
     Serial.printf("Exception during layout: %s\n", e.what());
     abort();
@@ -119,8 +123,13 @@ void TextViewerScreen::prevPage() {
     return;
 
   // Use the layout strategy to find the exact start of the previous page
+  pageEndIndex = pageStartIndex;
   // Find where the previous page starts
-  pageStartIndex = layoutStrategy->getPreviousPageStart(*provider, textRenderer, layoutConfig, pageStartIndex);
+  // Ensure the renderer is using the same font as used for forward layout so
+  // measurements (space width, glyph advances) match between previous-page
+  // calculation and normal layout.
+  textRenderer.setFont(&Font24);
+  pageStartIndex = layoutStrategy->getPreviousPageStart(*provider, textRenderer, layoutConfig, pageEndIndex);
 
   // Set currentIndex to the start of the previous page
   provider->setPosition(pageStartIndex);
@@ -131,15 +140,18 @@ void TextViewerScreen::prevPage() {
 
 void TextViewerScreen::loadTextFromString(const String& content) {
   // Create provider for the entire content
+  // Preserve the passed-in content on the object so the provider has
+  // stable storage for its internal copy/operations.
   delete provider;
-  String fullText = content;
-  if (fullText.length() > 0) {
-    provider = new StringWordProvider(fullText);
+  loadedText = content;
+  if (loadedText.length() > 0) {
+    provider = new StringWordProvider(loadedText);
   } else {
     provider = nullptr;
   }
 
   pageStartIndex = 0;
+  pageEndIndex = 0;
 }
 
 void TextViewerScreen::openFile(const String& sdPath) {

@@ -42,6 +42,8 @@ class TextViewerScreen : public Screen {
   UIManager& uiManager;
 
   StringWordProvider* provider = nullptr;
+  // Keep the loaded text alive for the lifetime of the provider
+  String loadedText;
   LayoutStrategy::LayoutConfig layoutConfig;
 };
 
