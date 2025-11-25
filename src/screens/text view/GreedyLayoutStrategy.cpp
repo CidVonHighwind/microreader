@@ -29,14 +29,6 @@ void GreedyLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& rend
     bool isParagraphBreak, isLineBreak;
     std::vector<LayoutStrategy::Word> line = getNextLine(provider, renderer, maxWidth, isParagraphBreak, isLineBreak);
 
-    // // print out line
-    // Serial.print("[Layout] Next line: ");
-    // for (const auto& word : line) {
-    //   Serial.print(word.text);
-    //   Serial.print("-");
-    // }
-    // Serial.println("");
-
     // Render the line
     y = renderLine(line, renderer, x, y, maxWidth, config.lineHeight, alignment);
   }

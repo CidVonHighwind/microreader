@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-// Minimal font struct used by our TextRenderer to avoid depending on Adafruit GFX.
+// Minimal font struct used by our TextRenderer
 typedef struct {
   uint16_t bitmapOffset;  ///< Pointer into font->bitmap
   uint32_t codepoint;     ///< Unicode codepoint for this glyph
