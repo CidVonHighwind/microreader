@@ -12,8 +12,9 @@ class ImageViewerScreen : public Screen {
   void handleButtons(class Buttons& buttons) override;
 
  private:
+  static const int NUM_SCREENS = 7;
   EInkDisplay& display;
-  int index = 0;  // 0=WHITE,1=BLACK,2=IMAGE,3=IMAGE_2
+  int index = 0;
 };
 
 #endif

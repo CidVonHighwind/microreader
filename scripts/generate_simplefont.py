@@ -24,7 +24,9 @@ import sys
 from PIL import Image, ImageDraw, ImageFont
 
 
-def render_preview_from_data(codes, glyphs, bitmap_all, out_path, cols=16, pad=4):
+def render_preview_from_data(
+    codes, glyphs, bitmap_all, out_path, cols=16, pad=2, target_width=480
+):
     """Render a monochrome PNG from the raw glyph bitmaps and save to out_path.
 
     `glyphs` is a list of dicts with keys: bitmapOffset,width,height,xAdvance,xOffset,yOffset
@@ -41,11 +43,17 @@ def render_preview_from_data(codes, glyphs, bitmap_all, out_path, cols=16, pad=4
 
     cols = int(cols)
     n = len(codes)
-    rows = (n + cols - 1) // cols
 
+    # Compute cell size and derive columns to fit within target_width (centered)
     cell_w = max_w + pad * 2
     cell_h = max_h + pad * 2
-    img_w = cols * cell_w
+    if cell_w <= 0:
+        cell_w = 1
+    # Determine number of columns to use so the grid fits within target_width
+    cols = max(1, target_width // cell_w)
+    rows = (n + cols - 1) // cols
+
+    img_w = target_width
     img_h = rows * cell_h
 
     img = Image.new("RGB", (img_w, img_h), "white")
@@ -62,7 +70,10 @@ def render_preview_from_data(codes, glyphs, bitmap_all, out_path, cols=16, pad=4
         bpr = bytes_per_row(w)
         r = idx // cols
         c = idx % cols
-        base_x = c * cell_w + pad
+        # center the grid horizontally within target_width
+        grid_width = cols * cell_w
+        left_margin = (target_width - grid_width) // 2
+        base_x = left_margin + c * cell_w + pad
         base_y = r * cell_h + pad
         # center glyph inside the cell
         offset_x = base_x + (max_w - w) // 2
@@ -91,7 +102,9 @@ def render_preview_from_data(codes, glyphs, bitmap_all, out_path, cols=16, pad=4
     return 0
 
 
-def render_preview_from_ttf(codes, pil_font, size, out_path, cols=16, pad=6):
+def render_preview_from_ttf(
+    codes, pil_font, size, out_path, cols=16, pad=4, target_width=480
+):
     """Render an anti-aliased grayscale preview directly from the TTF `pil_font`.
 
     This produces a nicer preview than the 1-bit `bitmap_all` representation
@@ -124,13 +137,17 @@ def render_preview_from_ttf(codes, pil_font, size, out_path, cols=16, pad=6):
         print("No glyphs to render")
         return 1
 
-    cols = int(cols)
     n = len(codes)
-    rows = (n + cols - 1) // cols
 
+    # Compute cell size and derive columns to fit within target_width (centered)
     cell_w = max_w + pad * 2
     cell_h = max_h + pad * 2
-    img_w = cols * cell_w
+    if cell_w <= 0:
+        cell_w = 1
+    cols = max(1, target_width // cell_w)
+    rows = (n + cols - 1) // cols
+
+    img_w = target_width
     img_h = rows * cell_h
 
     out = Image.new("RGB", (img_w, img_h), "white")
@@ -138,16 +155,20 @@ def render_preview_from_ttf(codes, pil_font, size, out_path, cols=16, pad=6):
     for idx, gimg in enumerate(glyph_imgs):
         r = idx // cols
         c = idx % cols
-        base_x = c * cell_w + pad
+        grid_width = cols * cell_w
+        left_margin = (target_width - grid_width) // 2
+        base_x = left_margin + c * cell_w + pad
         base_y = r * cell_h + pad
         w, h = gimg.size
         offset_x = base_x + (max_w - w) // 2
         offset_y = base_y + (max_h - h) // 2
 
-        # pink background
-        pink = (255, 192, 203)
+        # white background
+        white = (255, 255, 255)
         draw = ImageDraw.Draw(out)
-        draw.rectangle([base_x, base_y, base_x + max_w - 1, base_y + max_h - 1], fill=pink)
+        draw.rectangle(
+            [base_x, base_y, base_x + max_w - 1, base_y + max_h - 1], fill=white
+        )
 
         # Paste anti-aliased glyph: create a black RGB tile and use the L image as mask
         black = Image.new("RGB", (w, h), (0, 0, 0))

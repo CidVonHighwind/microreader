@@ -39,6 +39,7 @@ class EInkDisplay {
   void clearScreen(uint8_t color = 0xFF);
   void drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool fromProgmem = false);
   void displayBuffer(RefreshMode mode = FAST_REFRESH);
+  void displayBufferGrayscale(const uint8_t* lsbData, const uint8_t* msbData, const uint8_t* bwData);
 
   // Backwards-compatible enum aliases so callers can use EInkDisplay::FAST_REFRESH, etc.
   static constexpr RefreshMode FULL_REFRESH = ::FULL_REFRESH;

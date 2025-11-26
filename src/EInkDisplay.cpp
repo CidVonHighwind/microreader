@@ -14,23 +14,22 @@
 
 // Custom LUT for fast refresh
 const unsigned char lut_custom[] PROGMEM = {
-    // VS L0-L3 (voltage patterns per transition)
-    // Black → Black: [VSH1→VSS→VSS→VSH1→VSS→VSS→VSH1→VSS]
-    0x41, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // Black → White: [VSL→VSL→VSS→VSL→VSL→VSS→VSL→VSL]
-    0xA2, 0x8A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // White → Black: [VSH2→VSH2→VSS→VSH2→VSH2→VSS→VSH1→VSH1]
-    0xF3, 0xC5, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // White → White: [VSL→VSS→VSS→VSL→VSS→VSS→VSL→VSS]
-    0x82, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // 00 black/white
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // 01 light gray
+    0xAA, 0xAA, 0xAA, 0xA0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // 10 gray
+    0xAA, 0xA0, 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // 11 dark gray
+    0xA2, 0x22, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     // L4 (VCOM)
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 
     // TP/RP groups (global timing)
-    0x01, 0x01, 0x01, 0x01, 0x01,  // G0: A=1 B=1 C=1 D=1 RP=0 (4 frames)
-    0x01, 0x01, 0x01, 0x01, 0x01,  // G1: A=1 B=1 C=1 D=1 RP=0 (4 frames)
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G2: A=0 B=0 C=0 D=0 RP=0
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G3: A=0 B=0 C=0 D=0 RP=0
+    0x01, 0x01, 0x01, 0x01, 0x00,  // G0: A=1 B=1 C=1 D=1 RP=0 (4 frames)
+    0x01, 0x01, 0x01, 0x01, 0x00,  // G1: A=1 B=1 C=1 D=1 RP=0 (4 frames)
+    0x01, 0x01, 0x01, 0x01, 0x00,  // G2: A=0 B=0 C=0 D=0 RP=0 (4 frames)
+    0x01, 0x01, 0x01, 0x01, 0x00,  // G3: A=0 B=0 C=0 D=0 RP=0 (4 frames)
     0x00, 0x00, 0x00, 0x00, 0x00,  // G4: A=0 B=0 C=0 D=0 RP=0
     0x00, 0x00, 0x00, 0x00, 0x00,  // G5: A=0 B=0 C=0 D=0 RP=0
     0x00, 0x00, 0x00, 0x00, 0x00,  // G6: A=0 B=0 C=0 D=0 RP=0
@@ -132,12 +131,10 @@ void EInkDisplay::sendData(uint8_t data) {
 
 void EInkDisplay::sendData(const uint8_t* data, uint16_t length) {
   SPI.beginTransaction(spiSettings);
-  digitalWrite(_dc, HIGH);  // Data mode
-  digitalWrite(_cs, LOW);   // Select chip
-  for (uint16_t i = 0; i < length; i++) {
-    SPI.transfer(data[i]);
-  }
-  digitalWrite(_cs, HIGH);  // Deselect chip
+  digitalWrite(_dc, HIGH);       // Data mode
+  digitalWrite(_cs, LOW);        // Select chip
+  SPI.writeBytes(data, length);  // Transfer all bytes
+  digitalWrite(_cs, HIGH);       // Deselect chip
   SPI.endTransaction();
 }
 
@@ -306,6 +303,7 @@ void EInkDisplay::displayBuffer(RefreshMode mode) {
   if (mode != FAST_REFRESH) {
     // For full refresh, write to both buffers before refresh
     writeRamBuffer(CMD_WRITE_RAM_BW, frameBuffer, BUFFER_SIZE);
+    setRamArea(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
     writeRamBuffer(CMD_WRITE_RAM_RED, frameBuffer, BUFFER_SIZE);
   } else {
     // For fast refresh, write to BW buffer only
@@ -317,9 +315,27 @@ void EInkDisplay::displayBuffer(RefreshMode mode) {
 
   // After fast refresh, sync both buffers for next update
   if (mode == FAST_REFRESH) {
-    writeRamBuffer(CMD_WRITE_RAM_BW, frameBuffer, BUFFER_SIZE);   // Write to BW
     writeRamBuffer(CMD_WRITE_RAM_RED, frameBuffer, BUFFER_SIZE);  // Write to RED
   }
+}
+
+void EInkDisplay::displayBufferGrayscale(const uint8_t* lsbData, const uint8_t* msbData, const uint8_t* bwData) {
+  // Set up full screen RAM area
+  setRamArea(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+
+  writeRamBuffer(CMD_WRITE_RAM_BW, lsbData, BUFFER_SIZE);
+  writeRamBuffer(CMD_WRITE_RAM_RED, msbData, BUFFER_SIZE);
+
+  // activate the custom LUT for grayscale rendering
+  setCustomLUT(true);
+
+  // Refresh the display
+  refreshDisplay(FAST_REFRESH);
+
+  setCustomLUT(false);
+
+  // After the refresh we just pretend that all gray pixels are black
+  writeRamBuffer(CMD_WRITE_RAM_RED, bwData, BUFFER_SIZE);
 }
 
 void EInkDisplay::refreshDisplay(RefreshMode mode) {
@@ -337,7 +353,6 @@ void EInkDisplay::refreshDisplay(RefreshMode mode) {
   // Configure Display Update Control 1
   sendCommand(CMD_DISPLAY_UPDATE_CTRL1);
   sendData(ctrl1Mode);  // Configure buffer comparison mode
-  sendData(0x00);       // Single chip application
 
   // enable counter and analog for half/fast refresh
   if (mode == FAST_REFRESH) {
@@ -370,7 +385,7 @@ void EInkDisplay::refreshDisplay(RefreshMode mode) {
     sendData(0x5A);
     displayMode = 0xD7;
   } else {                                        // FAST_REFRESH
-    displayMode = customLutActive ? 0x04 : 0x1C;  // Use custom LUT if active, otherwise default fast
+    displayMode = customLutActive ? 0x0C : 0x1C;  // Use custom LUT if active, otherwise default fast
   }
 
   // Power on and refresh display
@@ -418,7 +433,7 @@ void EInkDisplay::setCustomLUT(bool enabled) {
   } else {
     customLutActive = false;
     // Reinitialize display to restore default LUT
-    initDisplayController();
+    // initDisplayController();
     Serial.printf("[%lu]   Custom LUT disabled\n", millis());
   }
 }

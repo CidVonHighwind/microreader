@@ -27,8 +27,8 @@ void UIManager::begin() {
       p.second->begin();
   }
 
-  // Show starting screen (FileBrowser)
-  currentScreen = ScreenId::FileBrowser;
+  // Show starting screen
+  currentScreen = ScreenId::ImageViewer;
   showScreen(currentScreen);
 
   display.displayBuffer(EInkDisplay::HALF_REFRESH);
