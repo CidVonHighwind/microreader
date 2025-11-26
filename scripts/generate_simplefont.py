@@ -91,6 +91,74 @@ def render_preview_from_data(codes, glyphs, bitmap_all, out_path, cols=16, pad=4
     return 0
 
 
+def render_preview_from_ttf(codes, pil_font, size, out_path, cols=16, pad=6):
+    """Render an anti-aliased grayscale preview directly from the TTF `pil_font`.
+
+    This produces a nicer preview than the 1-bit `bitmap_all` representation
+    by drawing the glyphs with Pillow and preserving gray levels.
+    """
+    # Render each glyph to a small grayscale image to measure sizes
+    glyph_imgs = []
+    max_w = 0
+    max_h = 0
+    for ch in codes:
+        s = chr(ch)
+        # render glyph onto a temporary canvas and crop to its bbox
+        tmp = Image.new("L", (size * 3, size * 3), 0)
+        d = ImageDraw.Draw(tmp)
+        d.text((0, 0), s, font=pil_font, fill=255)
+        bbox = tmp.getbbox()
+        if bbox is None:
+            w = max(1, size // 2)
+            h = max(1, size // 2)
+            img = Image.new("L", (w, h), 0)
+        else:
+            img = tmp.crop(bbox)
+            w, h = img.size
+
+        glyph_imgs.append(img)
+        max_w = max(max_w, w)
+        max_h = max(max_h, h)
+
+    if max_w == 0 or max_h == 0:
+        print("No glyphs to render")
+        return 1
+
+    cols = int(cols)
+    n = len(codes)
+    rows = (n + cols - 1) // cols
+
+    cell_w = max_w + pad * 2
+    cell_h = max_h + pad * 2
+    img_w = cols * cell_w
+    img_h = rows * cell_h
+
+    out = Image.new("RGB", (img_w, img_h), "white")
+
+    for idx, gimg in enumerate(glyph_imgs):
+        r = idx // cols
+        c = idx % cols
+        base_x = c * cell_w + pad
+        base_y = r * cell_h + pad
+        w, h = gimg.size
+        offset_x = base_x + (max_w - w) // 2
+        offset_y = base_y + (max_h - h) // 2
+
+        # pink background
+        pink = (255, 192, 203)
+        draw = ImageDraw.Draw(out)
+        draw.rectangle([base_x, base_y, base_x + max_w - 1, base_y + max_h - 1], fill=pink)
+
+        # Paste anti-aliased glyph: create a black RGB tile and use the L image as mask
+        black = Image.new("RGB", (w, h), (0, 0, 0))
+        out.paste(black, (offset_x, offset_y), mask=gimg)
+
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    out.save(out_path)
+    print(f"Wrote preview image (TTF grayscale): {out_path}")
+    return 0
+
+
 def bytes_per_row(width):
     return (width + 7) // 8
 
@@ -357,10 +425,14 @@ const SimpleGFXfont {font_name} PROGMEM = {{(const uint8_t*){font_name}Bitmaps, 
 
 def main(argv=None):
     p = argparse.ArgumentParser(description="Generate SimpleGFXfont C header files")
-    p.add_argument("--out", required=True, help="Output header path")
+    # Allow shorthand positional invocation: name size ttf
     p.add_argument(
-        "--name", required=True, help="Font variable base name (e.g. FreeSans12pt7b)"
+        "positional",
+        nargs="*",
+        help="Optional positional args: name size ttf (in that order).",
     )
+    p.add_argument("--out", help="Output header path (default: src/Fonts/<name>.h)")
+    p.add_argument("--name", help="Font variable base name (e.g. FreeSans12pt7b)")
     p.add_argument(
         "--chars",
         default="32",
@@ -379,7 +451,6 @@ def main(argv=None):
     p.add_argument(
         "--size",
         type=int,
-        required=True,
         help="Font size (px) used to derive glyph width/height",
     )
     p.add_argument("--xoffset", type=int, default=0)
@@ -407,8 +478,46 @@ def main(argv=None):
 
     args = p.parse_args(argv)
 
+    # Support shorthand invocation: allow supplying name,size,ttf as positional args
+    pos = getattr(args, "positional", []) or []
+    if (not args.name) and len(pos) >= 1:
+        args.name = pos[0]
+    if (args.size is None) and len(pos) >= 2:
+        try:
+            args.size = int(pos[1])
+        except Exception:
+            print(f"ERROR: invalid size value: '{pos[1]}'")
+            sys.exit(1)
+    if (not args.ttf) and len(pos) >= 3:
+        args.ttf = pos[2]
+
+    # Require name and size at this point
+    if not args.name:
+        print(
+            "ERROR: font name not specified. Use --name or supply as first positional arg."
+        )
+        sys.exit(1)
+    if args.size is None:
+        print(
+            "ERROR: font size not specified. Use --size or supply as second positional arg."
+        )
+        sys.exit(1)
+
+    # Default output paths when not provided: header in src/Fonts and preview in test/output
+    if not args.out:
+        args.out = os.path.join("src", "Fonts", f"{args.name}.h")
+    if not args.preview_output:
+        args.preview_output = os.path.join("test", "output", f"{args.name}.png")
+
     # parse chars spec. Prefer --chars-file when present to avoid shell quoting issues
     codes = []
+    # If the user didn't pass a chars-file, prefer the repo default
+    # `scripts/chars_input.txt` when it exists (the user's requested default).
+    if not args.chars_file:
+        default_chars_file = os.path.join(os.path.dirname(__file__), "chars_input.txt")
+        if os.path.isfile(default_chars_file) and args.chars == "32":
+            args.chars_file = default_chars_file
+
     if args.chars_file:
         if not os.path.isfile(args.chars_file):
             print(f"ERROR: chars file not found: '{args.chars_file}'")
@@ -492,13 +601,23 @@ def main(argv=None):
 
         yadvance = args.size + 2
         write_header_from_data(args.name, args.out, codes, glyphs, bitmap_all, yadvance)
-        # optional preview image showing the same characters (use generated bytes)
+        # optional previews: render both a TTF grayscale preview and a 1-bit
+        # preview generated from the packed bitmap data. Both files are written
+        # next to the requested path using suffixes `_ttf` and `_bitmap`.
         if args.preview_output:
-            rc = render_preview_from_data(
-                codes, glyphs, bitmap_all, args.preview_output
-            )
+            base, ext = os.path.splitext(args.preview_output)
+            ttf_preview = f"{base}_ttf{ext}"
+            bitmap_preview = f"{base}_bitmap{ext}"
+
+            rc = render_preview_from_ttf(codes, font, args.size, ttf_preview)
             if rc != 0:
                 sys.exit(rc)
+
+            # Also render the 1-bit preview from the generated bitmap bytes so
+            # callers can compare exact on-device rendering appearance.
+            rc2 = render_preview_from_data(codes, glyphs, bitmap_all, bitmap_preview)
+            if rc2 != 0:
+                sys.exit(rc2)
         sys.exit(0)
 
     # Ensure minimum readable sizes

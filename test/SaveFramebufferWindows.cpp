@@ -7,10 +7,7 @@
 #include <vector>
 
 #include "../src/EInkDisplay.h"
-#include "../src/Fonts/Font16.h"
-#include "../src/Fonts/Font20.h"
-#include "../src/Fonts/Font24.h"
-#include "../src/Fonts/Font27.h"
+#include "../src/Fonts/Font26.h"
 #include "../src/screens/text view/GreedyLayoutStrategy.h"
 #include "../src/screens/text view/StringWordProvider.h"
 #include "../src/text_renderer/TextRenderer.h"
@@ -36,7 +33,7 @@ int main() {
   // Render some text onto the frame buffer using the TextRenderer
   TextRenderer renderer(display);
   // Use our local font
-  renderer.setFont(&Font24);
+  renderer.setFont(&Font26);
   renderer.setTextColor(TextRenderer::COLOR_BLACK);
   // Print the contents of `data/font test.txt` character-by-character
   // and wrap to the next line when characters do not fit. When the page

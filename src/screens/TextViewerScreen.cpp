@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 #include <Fonts/Font16.h>
-#include <Fonts/Font24.h>
+#include <Fonts/Font26.h>
 #include <Fonts/Font27.h>
 
 #include "../SDCardManager.h"
@@ -70,7 +70,7 @@ void TextViewerScreen::showPage() {
 
   display.clearScreen(0xFF);
   textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
-  textRenderer.setFont(&Font24);
+  textRenderer.setFont(&Font26);
 
   try {
     // print out current percentage
@@ -97,7 +97,7 @@ void TextViewerScreen::showPage() {
       pagePercentage = provider->getPercentage();
 
     textRenderer.setFont(&Font16);
-    String percentageIndicator = String((int)(pagePercentage * 100)) + "%";
+    String percentageIndicator = String((int)(pagePercentage * 100));
     int16_t x1, y1;
     uint16_t w, h;
     textRenderer.getTextBounds(percentageIndicator.c_str(), 0, 0, &x1, &y1, &w, &h);
@@ -128,7 +128,7 @@ void TextViewerScreen::prevPage() {
   // Ensure the renderer is using the same font as used for forward layout so
   // measurements (space width, glyph advances) match between previous-page
   // calculation and normal layout.
-  textRenderer.setFont(&Font24);
+  textRenderer.setFont(&Font26);
   pageStartIndex = layoutStrategy->getPreviousPageStart(*provider, textRenderer, layoutConfig, pageEndIndex);
 
   // Set currentIndex to the start of the previous page
