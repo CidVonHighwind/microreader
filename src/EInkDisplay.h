@@ -50,8 +50,7 @@ class EInkDisplay {
   void setCustomLUT(bool enabled);
 
   // Power management
-  void powerOn();
-  void powerOff();
+  void deepSleep();
 
   // Access to frame buffer
   uint8_t* getFrameBuffer() {
@@ -60,9 +59,6 @@ class EInkDisplay {
 
   // Save the current framebuffer to a PBM file (desktop/test builds only)
   void saveFrameBufferAsPBM(const char* filename);
-
-  // Debug
-  void debugPrintFramebuffer();
 
  private:
   // Pin configuration

@@ -4,6 +4,8 @@
 #include <fstream>
 #include <vector>
 
+#define CMD_DEEP_SLEEP 0x10
+
 // SSD1677 RAM buffer commands
 #define CMD_WRITE_RAM_BW 0x24   // Write to BW RAM (current frame)
 #define CMD_WRITE_RAM_RED 0x26  // Write to RED RAM (used for fast refresh)
@@ -17,7 +19,7 @@ const unsigned char lut_custom[] PROGMEM = {
     // 00 black/white
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     // 01 light gray
-    0xAA, 0xAA, 0xAA, 0xA0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x54, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     // 10 gray
     0xAA, 0xA0, 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     // 11 dark gray
@@ -55,14 +57,6 @@ EInkDisplay::EInkDisplay(int8_t sclk, int8_t mosi, int8_t cs, int8_t dc, int8_t 
   frameBuffer = new uint8_t[BUFFER_SIZE];
   memset(frameBuffer, 0xFF, BUFFER_SIZE);  // Initialize to white
   Serial.printf("[%lu]   Frame buffer allocated (%lu bytes)\n", millis(), BUFFER_SIZE);
-}
-
-EInkDisplay::~EInkDisplay() {
-  Serial.printf("[%lu] EInkDisplay: Destructor called\n", millis());
-  if (frameBuffer) {
-    delete[] frameBuffer;
-    frameBuffer = nullptr;
-  }
 }
 
 void EInkDisplay::begin() {
@@ -384,8 +378,9 @@ void EInkDisplay::refreshDisplay(RefreshMode mode) {
     sendCommand(0x1A);
     sendData(0x5A);
     displayMode = 0xD7;
-  } else {                                        // FAST_REFRESH
-    displayMode = customLutActive ? 0x0C : 0x1C;  // Use custom LUT if active, otherwise default fast
+  } else {  // FAST_REFRESH
+    // displayMode = customLutActive ? 0x0C : 0x1C;  // Use custom LUT if active, otherwise default fast
+    displayMode = customLutActive ? 0x0F : 0x1F;  // turn off stuff
   }
 
   // Power on and refresh display
@@ -438,50 +433,12 @@ void EInkDisplay::setCustomLUT(bool enabled) {
   }
 }
 
-void EInkDisplay::powerOn() {
-  // const uint8_t CMD_DISPLAY_UPDATE_CTRL2 = 0x22;
-  // const uint8_t CMD_MASTER_ACTIVATION = 0x20;
-  // const uint8_t MODE_POWER_ON = 0xC0;
-
-  // Serial.printf("[%lu]   Powering on display...\n", millis());
-  // sendCommand(CMD_DISPLAY_UPDATE_CTRL2);
-  // sendData(MODE_POWER_ON);  // Power off sequence
-  // sendCommand(CMD_MASTER_ACTIVATION);
-  // waitWhileBusy(" after power on");
-}
-
-void EInkDisplay::powerOff() {
-  const uint8_t CMD_DISPLAY_UPDATE_CTRL2 = 0x22;
-  const uint8_t CMD_MASTER_ACTIVATION = 0x20;
-  const uint8_t CMD_DEEP_SLEEP = 0x10;
-  const uint8_t MODE_POWER_OFF = 0x83;
-
-  Serial.printf("[%lu]   Powering off display...\n", millis());
-  sendCommand(CMD_DISPLAY_UPDATE_CTRL2);
-  sendData(MODE_POWER_OFF);  // Power off sequence
-  sendCommand(CMD_MASTER_ACTIVATION);
-  waitWhileBusy(" after power off");
-
+void EInkDisplay::deepSleep() {
   // Enter deep sleep mode
   Serial.printf("[%lu]   Entering deep sleep mode...\n", millis());
   sendCommand(CMD_DEEP_SLEEP);
   sendData(0x01);  // Enter deep sleep
   waitWhileBusy(" after deep sleep mode");
-  Serial.printf("[%lu]   Display in deep sleep mode\n", millis());
-}
-
-void EInkDisplay::debugPrintFramebuffer() {
-  Serial.println("\n=== FRAMEBUFFER DUMP ===");
-  Serial.printf("Size: %lu bytes (%d x %d pixels)\n", BUFFER_SIZE, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-
-  // Print all bytes in hex format, 16 bytes per line
-  for (uint32_t i = 0; i < BUFFER_SIZE; i++) {
-    if (i % 16 == 0) {
-      Serial.printf("\n%08X: ", i);
-    }
-    Serial.printf("%02X ", frameBuffer[i]);
-  }
-  Serial.println("\n=== END FRAMEBUFFER DUMP ===");
 }
 
 void EInkDisplay::saveFrameBufferAsPBM(const char* filename) {

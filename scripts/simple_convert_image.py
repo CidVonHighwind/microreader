@@ -38,26 +38,6 @@ def convert_image_to_bytes_simple(
     pixels = list(img.getdata())
     final_width, final_height = img.size
 
-    # Compute BW
-    pixel_values_bw = [
-        1 if pixel >= 205 else 0 for pixel in pixels
-    ]  # 1 = white, 0 = black
-
-    preview_pixels_bw = [255 if val == 1 else 0 for val in pixel_values_bw]
-    preview_img_bw = Image.new("L", (final_width, final_height))
-    preview_img_bw.putdata(preview_pixels_bw)
-
-    byte_array = []
-    for y in range(final_height):
-        for x in range(0, final_width, 8):
-            byte_val = 0
-            for i in range(8):
-                if x + i < final_width:
-                    pixel_idx = y * final_width + x + i
-                    bit_val = pixel_values_bw[pixel_idx]
-                    byte_val |= bit_val << (7 - i)
-            byte_array.append(byte_val)
-
     # Compute grayscale
     pixel_values_gray = []
     for pixel in pixels:
@@ -71,6 +51,15 @@ def convert_image_to_bytes_simple(
             pixel_values_gray.append(3)  # 11 = Dark Gray
         else:
             pixel_values_gray.append(0)  # 00 = White
+
+    # Compute BW
+    pixel_values_bw = [
+        1 if pixel >= 154 else 0 for pixel in pixels
+    ]  # 1 = white, 0 = black
+
+    preview_pixels_bw = [255 if val == 1 else 0 for val in pixel_values_bw]
+    preview_img_bw = Image.new("L", (final_width, final_height))
+    preview_img_bw.putdata(preview_pixels_bw)
 
     preview_pixels_gray = []
     for val in pixel_values_gray:
@@ -87,6 +76,17 @@ def convert_image_to_bytes_simple(
 
     preview_img_gray = Image.new("L", (final_width, final_height))
     preview_img_gray.putdata(preview_pixels_gray)
+
+    byte_array = []
+    for y in range(final_height):
+        for x in range(0, final_width, 8):
+            byte_val = 0
+            for i in range(8):
+                if x + i < final_width:
+                    pixel_idx = y * final_width + x + i
+                    bit_val = pixel_values_bw[pixel_idx]
+                    byte_val |= bit_val << (7 - i)
+            byte_array.append(byte_val)
 
     lsb_values = [val & 1 for val in pixel_values_gray]
     msb_values = [(val >> 1) & 1 for val in pixel_values_gray]
