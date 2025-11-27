@@ -41,7 +41,7 @@
 #define CMD_DEEP_SLEEP 0x10  // Deep sleep
 
 // Custom LUT for fast refresh
-const unsigned char lut_custom[] PROGMEM = {
+const unsigned char lut_grayscale[] PROGMEM = {
     // 00 black/white
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     // 01 light gray
@@ -57,7 +57,40 @@ const unsigned char lut_custom[] PROGMEM = {
     0x01, 0x01, 0x01, 0x01, 0x00,  // G0: A=1 B=1 C=1 D=1 RP=0 (4 frames)
     0x01, 0x01, 0x01, 0x01, 0x00,  // G1: A=1 B=1 C=1 D=1 RP=0 (4 frames)
     0x01, 0x01, 0x01, 0x01, 0x00,  // G2: A=0 B=0 C=0 D=0 RP=0 (4 frames)
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G3: A=0 B=0 C=0 D=0 RP=0 (4 frames)
+    0x00, 0x00, 0x00, 0x00, 0x00,  // G3: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00,  // G4: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00,  // G5: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00,  // G6: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00,  // G7: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00,  // G8: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00,  // G9: A=0 B=0 C=0 D=0 RP=0
+
+    // Frame rate
+    0x8F, 0x8F, 0x8F, 0x8F, 0x8F,
+
+    // Voltages (VGH, VSH1, VSH2, VSL, VCOM)
+    0x17, 0x41, 0xA8, 0x32, 0x30,
+
+    // Reserved
+    0x00, 0x00};
+
+const unsigned char lut_grayscale_revert[] PROGMEM = {
+    // 00 black/white
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // 10 gray
+    0x54, 0x54, 0x54, 0x54, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // 01 light gray
+    0xA8, 0xA8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // 11 dark gray
+    0xFC, 0xFC, 0xFC, 0xFC, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // L4 (VCOM)
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+
+    // TP/RP groups (global timing)
+    0x01, 0x01, 0x01, 0x01, 0x01,  // G0: A=1 B=1 C=1 D=1 RP=0 (4 frames)
+    0x01, 0x01, 0x01, 0x01, 0x01,  // G1: A=1 B=1 C=1 D=1 RP=0 (4 frames)
+    0x01, 0x01, 0x01, 0x01, 0x00,  // G2: A=0 B=0 C=0 D=0 RP=0 (4 frames)
+    0x01, 0x01, 0x01, 0x01, 0x00,  // G3: A=0 B=0 C=0 D=0 RP=0
     0x00, 0x00, 0x00, 0x00, 0x00,  // G4: A=0 B=0 C=0 D=0 RP=0
     0x00, 0x00, 0x00, 0x00, 0x00,  // G5: A=0 B=0 C=0 D=0 RP=0
     0x00, 0x00, 0x00, 0x00, 0x00,  // G6: A=0 B=0 C=0 D=0 RP=0
@@ -318,16 +351,26 @@ void EInkDisplay::setGrayscaleBuffers(const uint8_t* bwBuffer, const uint8_t* ls
   drawGrayscale = true;
 }
 
+void EInkDisplay::grayscaleRevert() {
+  inGrayscaleMode = false;
+
+  // Load the revert LUT
+  setCustomLUT(true, lut_grayscale_revert);
+  refreshDisplay(FAST_REFRESH);
+  setCustomLUT(false);
+}
+
 void EInkDisplay::displayBuffer(RefreshMode mode) {
   if (!isScreenOn) {
     // Force half refresh if screen is off
     mode = HALF_REFRESH;
   }
 
-  // if (inGrayscaleMode) {
-  //   inGrayscaleMode = false;
-  //   writeRamBuffer(CMD_WRITE_RAM_RED, frameBuffer, BUFFER_SIZE);
-  // }
+  // If currently in grayscale mode, revert first to black/white
+  if (inGrayscaleMode) {
+    inGrayscaleMode = false;
+    grayscaleRevert();
+  }
 
   // Set up full screen RAM area
   setRamArea(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
@@ -359,7 +402,7 @@ void EInkDisplay::displayBuffer(RefreshMode mode) {
     writeRamBuffer(CMD_WRITE_RAM_RED, frameBuffer_msb, BUFFER_SIZE);
 
     // activate the custom LUT for grayscale rendering and refresh
-    setCustomLUT(true);
+    setCustomLUT(true, lut_grayscale);
     refreshDisplay(FAST_REFRESH);
     setCustomLUT(false);
   }
@@ -416,27 +459,27 @@ void EInkDisplay::refreshDisplay(RefreshMode mode) {
   waitWhileBusy(refreshType);
 }
 
-void EInkDisplay::setCustomLUT(bool enabled) {
+void EInkDisplay::setCustomLUT(bool enabled, const unsigned char* lutData) {
   if (enabled) {
     Serial.printf("[%lu]   Loading custom LUT...\n", millis());
 
     // Load custom LUT (first 105 bytes: VS + TP/RP + frame rate)
     sendCommand(CMD_WRITE_LUT);
     for (uint16_t i = 0; i < 105; i++) {
-      sendData(pgm_read_byte(&lut_custom[i]));
+      sendData(pgm_read_byte(&lutData[i]));
     }
 
     // Set voltage values from bytes 105-109
     sendCommand(CMD_GATE_VOLTAGE);  // VGH
-    sendData(pgm_read_byte(&lut_custom[105]));
+    sendData(pgm_read_byte(&lutData[105]));
 
-    sendCommand(CMD_SOURCE_VOLTAGE);            // VSH1, VSH2, VSL
-    sendData(pgm_read_byte(&lut_custom[106]));  // VSH1
-    sendData(pgm_read_byte(&lut_custom[107]));  // VSH2
-    sendData(pgm_read_byte(&lut_custom[108]));  // VSL
+    sendCommand(CMD_SOURCE_VOLTAGE);         // VSH1, VSH2, VSL
+    sendData(pgm_read_byte(&lutData[106]));  // VSH1
+    sendData(pgm_read_byte(&lutData[107]));  // VSH2
+    sendData(pgm_read_byte(&lutData[108]));  // VSL
 
     sendCommand(CMD_WRITE_VCOM);  // VCOM
-    sendData(pgm_read_byte(&lut_custom[109]));
+    sendData(pgm_read_byte(&lutData[109]));
 
     customLutActive = true;
     Serial.printf("[%lu]   Custom LUT loaded\n", millis());

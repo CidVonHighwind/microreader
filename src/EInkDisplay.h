@@ -37,11 +37,13 @@ class EInkDisplay {
   void drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool fromProgmem = false);
 
   void setGrayscaleBuffers(const uint8_t* bwBuffer, const uint8_t* lsbBuffer, const uint8_t* msbBuffer);
+  void grayscaleRevert();
 
   void displayBuffer(RefreshMode mode = FAST_REFRESH);
+  void refreshDisplay(RefreshMode mode = FAST_REFRESH);
 
   // LUT control
-  void setCustomLUT(bool enabled);
+  void setCustomLUT(bool enabled, const unsigned char* lutData = nullptr);
 
   // Power management
   void deepSleep();
@@ -89,7 +91,6 @@ class EInkDisplay {
   // Low-level display operations
   void setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
   void writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint32_t size);
-  void refreshDisplay(RefreshMode mode = FAST_REFRESH);
 };
 
 #endif

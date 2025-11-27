@@ -20,6 +20,10 @@ void ImageViewerScreen::handleButtons(Buttons& buttons) {
     show();
   } else if (buttons.wasPressed(Buttons::VOLUME_UP)) {
     uiManager.showScreen(UIManager::ScreenId::FileBrowser);
+  } else if (buttons.wasPressed(Buttons::VOLUME_DOWN)) {
+    display.refreshDisplay(EInkDisplay::FULL_REFRESH);
+  } else if (buttons.wasPressed(Buttons::BACK)) {
+    display.grayscaleRevert();
   }
 }
 
