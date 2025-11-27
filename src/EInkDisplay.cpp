@@ -4,15 +4,41 @@
 #include <fstream>
 #include <vector>
 
-#define CMD_DEEP_SLEEP 0x10
+// SSD1677 command definitions
+// Initialization and reset
+#define CMD_SOFT_RESET 0x12             // Soft reset
+#define CMD_BOOSTER_SOFT_START 0x0C     // Booster soft-start control
+#define CMD_DRIVER_OUTPUT_CONTROL 0x01  // Driver output control
+#define CMD_BORDER_WAVEFORM 0x3C        // Border waveform control
+#define CMD_TEMP_SENSOR_CONTROL 0x18    // Temperature sensor control
 
-// SSD1677 RAM buffer commands
-#define CMD_WRITE_RAM_BW 0x24   // Write to BW RAM (current frame)
-#define CMD_WRITE_RAM_RED 0x26  // Write to RED RAM (used for fast refresh)
+// RAM and buffer management
+#define CMD_DATA_ENTRY_MODE 0x11     // Data entry mode
+#define CMD_SET_RAM_X_RANGE 0x44     // Set RAM X address range
+#define CMD_SET_RAM_Y_RANGE 0x45     // Set RAM Y address range
+#define CMD_SET_RAM_X_COUNTER 0x4E   // Set RAM X address counter
+#define CMD_SET_RAM_Y_COUNTER 0x4F   // Set RAM Y address counter
+#define CMD_WRITE_RAM_BW 0x24        // Write to BW RAM (current frame)
+#define CMD_WRITE_RAM_RED 0x26       // Write to RED RAM (used for fast refresh)
+#define CMD_AUTO_WRITE_BW_RAM 0x46   // Auto write BW RAM
+#define CMD_AUTO_WRITE_RED_RAM 0x47  // Auto write RED RAM
 
-// Clear and fill both RAM buffers (0x46 for BW RAM, 0x47 for RED RAM)
-#define CMD_AUTO_WRITE_BW_RAM 0x46
-#define CMD_AUTO_WRITE_RED_RAM 0x47
+// Display update and refresh
+#define CMD_DISPLAY_UPDATE_CTRL1 0x21  // Display update control 1
+#define CMD_DISPLAY_UPDATE_CTRL2 0x22  // Display update control 2
+#define CMD_MASTER_ACTIVATION 0x20     // Master activation
+#define CTRL1_NORMAL 0x00              // Normal mode - compare RED vs BW for partial
+#define CTRL1_BYPASS_RED 0x40          // Bypass RED RAM (treat as 0) - for full refresh
+
+// LUT and voltage settings
+#define CMD_WRITE_LUT 0x32       // Write LUT
+#define CMD_GATE_VOLTAGE 0x03    // Gate voltage
+#define CMD_SOURCE_VOLTAGE 0x04  // Source voltage
+#define CMD_WRITE_VCOM 0x2C      // Write VCOM
+#define CMD_WRITE_TEMP 0x1A      // Write temperature
+
+// Power management
+#define CMD_DEEP_SLEEP 0x10  // Deep sleep
 
 // Custom LUT for fast refresh
 const unsigned char lut_custom[] PROGMEM = {
@@ -21,9 +47,9 @@ const unsigned char lut_custom[] PROGMEM = {
     // 01 light gray
     0x54, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     // 10 gray
-    0xAA, 0xA0, 0xAA, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xAA, 0xA0, 0xA8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     // 11 dark gray
-    0xA2, 0x22, 0x22, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0xA2, 0x22, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     // L4 (VCOM)
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 
@@ -31,7 +57,7 @@ const unsigned char lut_custom[] PROGMEM = {
     0x01, 0x01, 0x01, 0x01, 0x00,  // G0: A=1 B=1 C=1 D=1 RP=0 (4 frames)
     0x01, 0x01, 0x01, 0x01, 0x00,  // G1: A=1 B=1 C=1 D=1 RP=0 (4 frames)
     0x01, 0x01, 0x01, 0x01, 0x00,  // G2: A=0 B=0 C=0 D=0 RP=0 (4 frames)
-    0x01, 0x01, 0x01, 0x01, 0x00,  // G3: A=0 B=0 C=0 D=0 RP=0 (4 frames)
+    0x00, 0x00, 0x00, 0x00, 0x00,  // G3: A=0 B=0 C=0 D=0 RP=0 (4 frames)
     0x00, 0x00, 0x00, 0x00, 0x00,  // G4: A=0 B=0 C=0 D=0 RP=0
     0x00, 0x00, 0x00, 0x00, 0x00,  // G5: A=0 B=0 C=0 D=0 RP=0
     0x00, 0x00, 0x00, 0x00, 0x00,  // G6: A=0 B=0 C=0 D=0 RP=0
@@ -53,10 +79,12 @@ EInkDisplay::EInkDisplay(int8_t sclk, int8_t mosi, int8_t cs, int8_t dc, int8_t 
   Serial.printf("[%lu] EInkDisplay: Constructor called\n", millis());
   Serial.printf("[%lu]   SCLK=%d, MOSI=%d, CS=%d, DC=%d, RST=%d, BUSY=%d\n", millis(), sclk, mosi, cs, dc, rst, busy);
 
-  // Allocate frame buffer
-  frameBuffer = new uint8_t[BUFFER_SIZE];
   memset(frameBuffer, 0xFF, BUFFER_SIZE);  // Initialize to white
-  Serial.printf("[%lu]   Frame buffer allocated (%lu bytes)\n", millis(), BUFFER_SIZE);
+  Serial.printf("[%lu]   Frame buffer initialized (%lu bytes)\n", millis(), BUFFER_SIZE);
+}
+
+EInkDisplay::~EInkDisplay() {
+  Serial.printf("[%lu] EInkDisplay: Destructor called\n", millis());
 }
 
 void EInkDisplay::begin() {
@@ -84,8 +112,6 @@ void EInkDisplay::begin() {
 
   // Initialize display controller
   initDisplayController();
-
-  powerOn();
 
   Serial.printf("[%lu]   E-ink display driver initialized\n", millis());
 }
@@ -149,12 +175,6 @@ void EInkDisplay::waitWhileBusy(const char* comment) {
 void EInkDisplay::initDisplayController() {
   Serial.printf("[%lu]   Initializing SSD1677 controller...\n", millis());
 
-  // SSD1677 command definitions
-  const uint8_t CMD_SOFT_RESET = 0x12;
-  const uint8_t CMD_BOOSTER_SOFT_START = 0x0C;
-  const uint8_t CMD_DRIVER_OUTPUT_CONTROL = 0x01;
-  const uint8_t CMD_BORDER_WAVEFORM = 0x3C;
-  const uint8_t CMD_TEMP_SENSOR_CONTROL = 0x18;
   const uint8_t TEMP_SENSOR_INTERNAL = 0x80;
 
   // Soft reset
@@ -202,13 +222,6 @@ void EInkDisplay::initDisplayController() {
 void EInkDisplay::setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
   const uint16_t WIDTH = 800;
   const uint16_t HEIGHT = 480;
-
-  // SSD1677 commands
-  const uint8_t CMD_DATA_ENTRY_MODE = 0x11;
-  const uint8_t CMD_SET_RAM_X_RANGE = 0x44;
-  const uint8_t CMD_SET_RAM_Y_RANGE = 0x45;
-  const uint8_t CMD_SET_RAM_X_COUNTER = 0x4E;
-  const uint8_t CMD_SET_RAM_Y_COUNTER = 0x4F;
   const uint8_t DATA_ENTRY_X_INC_Y_DEC = 0x01;
 
   // Reverse Y coordinate (gates are reversed on this display)
@@ -291,70 +304,71 @@ void EInkDisplay::writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint32_
   Serial.printf("[%lu]   %s RAM write complete (%lu ms)\n", millis(), bufferName, duration);
 }
 
+void EInkDisplay::setGrayscaleBuffers(const uint8_t* bwBuffer, const uint8_t* lsbBuffer, const uint8_t* msbBuffer) {
+  if (bwBuffer != nullptr) {
+    memcpy(frameBuffer, bwBuffer, BUFFER_SIZE);
+  }
+  if (lsbBuffer != nullptr) {
+    memcpy(frameBuffer_lsb, lsbBuffer, BUFFER_SIZE);
+  }
+  if (msbBuffer != nullptr) {
+    memcpy(frameBuffer_msb, msbBuffer, BUFFER_SIZE);
+  }
+
+  drawGrayscale = true;
+}
+
 void EInkDisplay::displayBuffer(RefreshMode mode) {
+  if (!isScreenOn) {
+    // Force half refresh if screen is off
+    mode = HALF_REFRESH;
+  }
+
+  // if (inGrayscaleMode) {
+  //   inGrayscaleMode = false;
+  //   writeRamBuffer(CMD_WRITE_RAM_RED, frameBuffer, BUFFER_SIZE);
+  // }
+
   // Set up full screen RAM area
   setRamArea(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+
   if (mode != FAST_REFRESH) {
     // For full refresh, write to both buffers before refresh
     writeRamBuffer(CMD_WRITE_RAM_BW, frameBuffer, BUFFER_SIZE);
-    setRamArea(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
     writeRamBuffer(CMD_WRITE_RAM_RED, frameBuffer, BUFFER_SIZE);
   } else {
     // For fast refresh, write to BW buffer only
-    writeRamBuffer(CMD_WRITE_RAM_BW, frameBuffer, BUFFER_SIZE);  // Current frame
+    writeRamBuffer(CMD_WRITE_RAM_BW, frameBuffer, BUFFER_SIZE);
+    writeRamBuffer(CMD_WRITE_RAM_RED, frameBufferActive, BUFFER_SIZE);
   }
+
+  // switch active buffer for next time
+  uint8_t* temp = frameBuffer;
+  frameBuffer = frameBufferActive;
+  frameBufferActive = temp;
 
   // Refresh the display
   refreshDisplay(mode);
 
-  // After fast refresh, sync both buffers for next update
-  if (mode == FAST_REFRESH) {
-    writeRamBuffer(CMD_WRITE_RAM_RED, frameBuffer, BUFFER_SIZE);  // Write to RED
+  if (drawGrayscale) {
+    drawGrayscale = false;
+    inGrayscaleMode = true;
+
+    // grayscale pass
+    writeRamBuffer(CMD_WRITE_RAM_BW, frameBuffer_lsb, BUFFER_SIZE);
+    writeRamBuffer(CMD_WRITE_RAM_RED, frameBuffer_msb, BUFFER_SIZE);
+
+    // activate the custom LUT for grayscale rendering and refresh
+    setCustomLUT(true);
+    refreshDisplay(FAST_REFRESH);
+    setCustomLUT(false);
   }
-}
-
-void EInkDisplay::displayBufferGrayscale(const uint8_t* lsbData, const uint8_t* msbData, const uint8_t* bwData) {
-  // Set up full screen RAM area
-  setRamArea(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-
-  writeRamBuffer(CMD_WRITE_RAM_BW, lsbData, BUFFER_SIZE);
-  writeRamBuffer(CMD_WRITE_RAM_RED, msbData, BUFFER_SIZE);
-
-  // activate the custom LUT for grayscale rendering
-  setCustomLUT(true);
-
-  // Refresh the display
-  refreshDisplay(FAST_REFRESH);
-
-  setCustomLUT(false);
-
-  // After the refresh we just pretend that all gray pixels are black
-  writeRamBuffer(CMD_WRITE_RAM_RED, bwData, BUFFER_SIZE);
 }
 
 void EInkDisplay::refreshDisplay(RefreshMode mode) {
-  const uint8_t CMD_DISPLAY_UPDATE_CTRL1 = 0x21;
-  const uint8_t CMD_DISPLAY_UPDATE_CTRL2 = 0x22;
-  const uint8_t CMD_MASTER_ACTIVATION = 0x20;
-
-  // Display Update Control 1 settings
-  const uint8_t CTRL1_NORMAL = 0x00;      // Normal mode - compare RED vs BW for partial
-  const uint8_t CTRL1_BYPASS_RED = 0x40;  // Bypass RED RAM (treat as 0) - for full refresh
-
-  uint8_t ctrl1Mode = (mode == FAST_REFRESH) ? CTRL1_NORMAL : CTRL1_BYPASS_RED;
-  const char* refreshType = (mode == FULL_REFRESH) ? "full" : (mode == HALF_REFRESH) ? "half" : "fast";
-
   // Configure Display Update Control 1
   sendCommand(CMD_DISPLAY_UPDATE_CTRL1);
-  sendData(ctrl1Mode);  // Configure buffer comparison mode
-
-  // enable counter and analog for half/fast refresh
-  if (mode == FAST_REFRESH) {
-    sendCommand(CMD_DISPLAY_UPDATE_CTRL2);
-    sendData(0xC0);
-    sendCommand(CMD_MASTER_ACTIVATION);
-    waitWhileBusy(" enabling count and analog");
-  }
+  sendData((mode == FAST_REFRESH) ? CTRL1_NORMAL : CTRL1_BYPASS_RED);  // Configure buffer comparison mode
 
   // best guess at display mode bits:
   // bit | hex | name                    | effect
@@ -363,7 +377,6 @@ void EInkDisplay::refreshDisplay(RefreshMode mode) {
   // 6   | 40  | ANALOG_ON               | Enable analog power rails (VGH/VGL drivers)
   // 5   | 20  | TEMP_LOAD               | Load temperature (internal or I2C)
   // 4   | 10  | LUT_LOAD                | Load waveform LUT
-
   // 3   | 08  | MODE_SELECT             | Mode 1/2
   // 2   | 04  | DISPLAY_START           | Run display
   // 1   | 02  | ANALOG_OFF_PHASE        | Shutdown step 1 (undocumented)
@@ -371,19 +384,27 @@ void EInkDisplay::refreshDisplay(RefreshMode mode) {
 
   // Select appropriate display mode based on refresh type
   uint8_t displayMode;
+
+  // enable counter and analog is not already on
+  if (!isScreenOn) {
+    isScreenOn = true;
+    displayMode |= 0xC0;  // Set CLOCK_ON and ANALOG_ON bits
+  }
+
   if (mode == FULL_REFRESH) {
-    displayMode = 0xF7;  // Full refresh
+    displayMode |= 0x34;  // Full refresh
   } else if (mode == HALF_REFRESH) {
     // write high temp to the register for a faster refresh
-    sendCommand(0x1A);
+    // this is not a real mode
+    sendCommand(CMD_WRITE_TEMP);
     sendData(0x5A);
-    displayMode = 0xD7;
-  } else {  // FAST_REFRESH
-    // displayMode = customLutActive ? 0x0C : 0x1C;  // Use custom LUT if active, otherwise default fast
-    displayMode = customLutActive ? 0x0F : 0x1F;  // turn off stuff
+    displayMode |= 0xD4;
+  } else {                                         // FAST_REFRESH
+    displayMode |= customLutActive ? 0x0C : 0x1C;  // turn off stuff
   }
 
   // Power on and refresh display
+  const char* refreshType = (mode == FULL_REFRESH) ? "full" : (mode == HALF_REFRESH) ? "half" : "fast";
   Serial.printf("[%lu]   Powering on display 0x%02X (%s refresh)...\n", millis(), displayMode, refreshType);
   sendCommand(CMD_DISPLAY_UPDATE_CTRL2);
   sendData(displayMode);
@@ -398,12 +419,6 @@ void EInkDisplay::refreshDisplay(RefreshMode mode) {
 void EInkDisplay::setCustomLUT(bool enabled) {
   if (enabled) {
     Serial.printf("[%lu]   Loading custom LUT...\n", millis());
-
-    // SSD1677 LUT command definitions
-    const uint8_t CMD_WRITE_LUT = 0x32;
-    const uint8_t CMD_GATE_VOLTAGE = 0x03;
-    const uint8_t CMD_SOURCE_VOLTAGE = 0x04;
-    const uint8_t CMD_WRITE_VCOM = 0x2C;
 
     // Load custom LUT (first 105 bytes: VS + TP/RP + frame rate)
     sendCommand(CMD_WRITE_LUT);

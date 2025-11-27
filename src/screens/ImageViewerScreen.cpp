@@ -8,7 +8,8 @@
 
 static const int NUM_SCREENS = 4;
 
-ImageViewerScreen::ImageViewerScreen(EInkDisplay& display) : display(display) {}
+ImageViewerScreen::ImageViewerScreen(EInkDisplay& display, UIManager& uiManager)
+    : display(display), uiManager(uiManager) {}
 
 void ImageViewerScreen::handleButtons(Buttons& buttons) {
   if (buttons.wasPressed(Buttons::LEFT)) {
@@ -17,6 +18,8 @@ void ImageViewerScreen::handleButtons(Buttons& buttons) {
   } else if (buttons.wasPressed(Buttons::RIGHT)) {
     index = (index + 1) % NUM_SCREENS;
     show();
+  } else if (buttons.wasPressed(Buttons::VOLUME_UP)) {
+    uiManager.showScreen(UIManager::ScreenId::FileBrowser);
   }
 }
 
@@ -24,15 +27,13 @@ void ImageViewerScreen::show() {
   switch (index % NUM_SCREENS) {
     case 0:
       Serial.printf("[%lu] ImageViewer: IMAGE 0\n", millis());
-      display.drawImage(test_image, 0, 0, TEST_IMAGE_WIDTH, TEST_IMAGE_HEIGHT, true);
+      display.setGrayscaleBuffers(test_image, test_image_lsb, test_image_msb);
       display.displayBuffer(EInkDisplay::FAST_REFRESH);
-      display.displayBufferGrayscale(test_image_lsb, test_image_msb, test_image);
       break;
     case 1:
       Serial.printf("[%lu] ImageViewer: IMAGE 1\n", millis());
-      display.drawImage(bebop_image, 0, 0, TEST_IMAGE_WIDTH, TEST_IMAGE_HEIGHT, true);
+      display.setGrayscaleBuffers(bebop_image, bebop_image_lsb, bebop_image_msb);
       display.displayBuffer(EInkDisplay::FAST_REFRESH);
-      display.displayBufferGrayscale(bebop_image_lsb, bebop_image_msb, bebop_image);
       break;
     case 2:
       Serial.printf("[%lu] ImageViewer: WHITE\n", millis());

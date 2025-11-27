@@ -13,7 +13,7 @@ UIManager::UIManager(EInkDisplay& display, SDCardManager& sdManager)
   // Create concrete screens and store pointers in the map.
   screens[ScreenId::FileBrowser] =
       std::unique_ptr<Screen>(new FileBrowserScreen(display, textRenderer, sdManager, *this));
-  screens[ScreenId::ImageViewer] = std::unique_ptr<Screen>(new ImageViewerScreen(display));
+  screens[ScreenId::ImageViewer] = std::unique_ptr<Screen>(new ImageViewerScreen(display, *this));
   screens[ScreenId::TextViewer] =
       std::unique_ptr<Screen>(new TextViewerScreen(display, textRenderer, sdManager, *this));
   Serial.printf("[%lu] UIManager: Constructor called\n", millis());
@@ -28,10 +28,9 @@ void UIManager::begin() {
   }
 
   // Show starting screen
-  currentScreen = ScreenId::ImageViewer;
+  currentScreen = ScreenId::FileBrowser;
   showScreen(currentScreen);
 
-  display.displayBuffer(EInkDisplay::HALF_REFRESH);
   Serial.printf("[%lu] UIManager initialized\n", millis());
 }
 
@@ -60,6 +59,10 @@ void UIManager::showSleepScreen() {
 
   textRenderer.setCursor(centerX, 780);
   textRenderer.print(sleepText);
+
+  // show the image with the grayscale antialiasing
+  display.setGrayscaleBuffers(nullptr, bebop_image_lsb, bebop_image_msb);
+  display.displayBuffer(EInkDisplay::FULL_REFRESH);
 }
 
 void UIManager::openTextFile(const String& sdPath) {

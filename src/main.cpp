@@ -72,10 +72,9 @@ void enterDeepSleep() {
 
   // Show sleep screen
   displayController.showSleepScreen();
-  einkDisplay.displayBuffer(EInkDisplay::FULL_REFRESH);
 
-  // Power off display and enter deep sleep mode
-  einkDisplay.powerOff();
+  // Enter deep sleep mode
+  einkDisplay.deepSleep();
 
   // Enable wakeup on power button (active LOW)
   esp_deep_sleep_enable_gpio_wakeup(1ULL << POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
