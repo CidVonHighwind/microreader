@@ -6,6 +6,7 @@
 
 #include "../SDCardManager.h"
 #include "Buttons.h"
+#include "text view/FileWordProvider.h"
 #include "text view/GreedyLayoutStrategy.h"
 #include "text view/KnuthPlassLayoutStrategy.h"
 #include "text view/StringWordProvider.h"
@@ -44,6 +45,8 @@ void TextViewerScreen::activate(int context) {
 // Ensure member function is in class scope
 void TextViewerScreen::handleButtons(Buttons& buttons) {
   if (buttons.wasPressed(Buttons::BACK)) {
+    // Save current position for the opened book (if any) before leaving
+    savePositionToFile();
     uiManager.showScreen(UIManager::ScreenId::FileBrowser);
   } else if (buttons.wasPressed(Buttons::LEFT)) {
     nextPage();
@@ -151,6 +154,8 @@ void TextViewerScreen::loadTextFromString(const String& content) {
 
   pageStartIndex = 0;
   pageEndIndex = 0;
+  // Clear any associated file path when loading from memory
+  currentFilePath = String("");
 }
 
 void TextViewerScreen::openFile(const String& sdPath) {
@@ -159,15 +164,52 @@ void TextViewerScreen::openFile(const String& sdPath) {
     return;
   }
 
-  Serial.println("Before readFile");
-  String content = sdManager.readFile(sdPath.c_str());
-  Serial.printf("After readFile, length: %d\n", content.length());
-  if (content.length() == 0) {
-    Serial.printf("TextViewerScreen: failed to read %s\n", sdPath.c_str());
+  // Use a buffered file-backed provider to avoid allocating the entire file in RAM.
+  delete provider;
+  provider = nullptr;
+  currentFilePath = sdPath;
+  FileWordProvider* fp = new FileWordProvider(sdPath.c_str());
+  if (!fp->isValid()) {
+    Serial.printf("TextViewerScreen: failed to open %s\n", sdPath.c_str());
+    delete fp;
+    currentFilePath = String("");
     return;
   }
 
-  Serial.println("Before loadTextFromString");
-  loadTextFromString(content);
-  Serial.println("After loadTextFromString");
+  provider = fp;
+  pageStartIndex = 0;
+  pageEndIndex = 0;
+  // Load a saved position from SD if present
+  loadPositionFromFile();
+  provider->setPosition(pageStartIndex);
+  showPage();
+}
+
+void TextViewerScreen::savePositionToFile() {
+  if (currentFilePath.length() == 0 || !provider)
+    return;
+  // Build pos file name by appending ".pos" to path
+  String posPath = currentFilePath + String(".pos");
+  int idx = provider->getCurrentIndex();
+  String content = String(idx);
+  if (!sdManager.writeFile(posPath.c_str(), content)) {
+    Serial.printf("Failed to save position for %s\n", currentFilePath.c_str());
+  }
+}
+
+void TextViewerScreen::loadPositionFromFile() {
+  if (currentFilePath.length() == 0 || !provider)
+    return;
+  String posPath = currentFilePath + String(".pos");
+  char buf[32];
+  size_t r = sdManager.readFileToBuffer(posPath.c_str(), buf, sizeof(buf));
+  if (r > 0) {
+    int saved = atoi(buf);
+    if (saved < 0)
+      saved = 0;
+    provider->setPosition(saved);
+    pageStartIndex = saved;
+  } else {
+    pageStartIndex = 0;
+  }
 }

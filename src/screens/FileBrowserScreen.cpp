@@ -76,15 +76,25 @@ void FileBrowserScreen::renderSdBrowser() {
   for (int i = 0; i < drawable; ++i) {
     int idx = sdScrollOffset + i;
     String name = sdFiles[idx];
-    if (name.length() > 30)
-      name = name.substring(0, 27) + "...";
+    // For display, strip the .txt extension if present but keep the stored
+    // filename intact so confirm() can open it later.
+    String displayNameRaw = name;
+    if (displayNameRaw.length() >= 4) {
+      String ext = displayNameRaw.substring(displayNameRaw.length() - 4);
+      if (ext == String(".txt") || ext == String(".TXT")) {
+        displayNameRaw = displayNameRaw.substring(0, displayNameRaw.length() - 4);
+      }
+    }
+
+    if (displayNameRaw.length() > 30)
+      displayNameRaw = displayNameRaw.substring(0, 27) + "...";
 
     String displayName;
     if (idx == sdSelectedIndex) {
       // Show both left and right markers around the selection and center the whole string
-      displayName = String(">") + name + String("<");
+      displayName = String(">") + displayNameRaw + String("<");
     } else {
-      displayName = name;
+      displayName = displayNameRaw;
     }
 
     int16_t x1, y1;
@@ -146,7 +156,13 @@ void FileBrowserScreen::loadFolder(int maxFiles) {
 
   auto files = sdManager.listFiles("/Microreader", maxFiles);
   for (auto& name : files) {
-    sdFiles.push_back(name);
+    // Only include .txt files (case-insensitive .txt/.TXT)
+    if (name.length() >= 4) {
+      String ext = name.substring(name.length() - 4);
+      if (ext == String(".txt") || ext == String(".TXT")) {
+        sdFiles.push_back(name);
+      }
+    }
   }
 
   // Sort files alphabetically (case-sensitive using strcmp)

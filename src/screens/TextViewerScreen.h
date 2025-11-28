@@ -41,10 +41,16 @@ class TextViewerScreen : public Screen {
   SDCardManager& sdManager;
   UIManager& uiManager;
 
-  StringWordProvider* provider = nullptr;
+  WordProvider* provider = nullptr;
   // Keep the loaded text alive for the lifetime of the provider
   String loadedText;
   LayoutStrategy::LayoutConfig layoutConfig;
+  // Path of the currently opened SD file (empty when viewing from memory)
+  String currentFilePath;
+
+  // Persist/load current reading position for `currentFilePath`
+  void savePositionToFile();
+  void loadPositionFromFile();
 };
 
 #endif
