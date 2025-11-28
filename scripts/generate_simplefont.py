@@ -16,172 +16,104 @@ structures in `src/text_renderer/SimpleFont.h`.
 """
 
 import argparse
-import math
 import os
-import textwrap
 import sys
 
-from PIL import Image, ImageDraw, ImageFont
-
-
-def render_preview_from_data(
-    codes, glyphs, bitmap_all, out_path, cols=16, pad=2, target_width=480
-):
-    """Render a monochrome PNG from the raw glyph bitmaps and save to out_path.
-
-    `glyphs` is a list of dicts with keys: bitmapOffset,width,height,xAdvance,xOffset,yOffset
-    `bitmap_all` is a flat list of bytes containing packed rows for each glyph.
-    """
-    # Pillow is required for previews; assume it is available.
-
-    # Determine cell size from max glyph dimensions
-    max_w = max(g["width"] for g in glyphs) if glyphs else 0
-    max_h = max(g["height"] for g in glyphs) if glyphs else 0
-    if max_w == 0 or max_h == 0:
-        print("No glyphs to render")
-        return 1
-
-    cols = int(cols)
-    n = len(codes)
-
-    # Compute cell size and derive columns to fit within target_width (centered)
-    cell_w = max_w + pad * 2
-    cell_h = max_h + pad * 2
-    if cell_w <= 0:
-        cell_w = 1
-    # Determine number of columns to use so the grid fits within target_width
-    cols = max(1, target_width // cell_w)
-    rows = (n + cols - 1) // cols
-
-    img_w = target_width
-    img_h = rows * cell_h
-
-    img = Image.new("RGB", (img_w, img_h), "white")
-    draw = ImageDraw.Draw(img)
-    pixels = img.load()
-
-    for idx, ch in enumerate(codes):
-        if idx >= len(glyphs):
-            break
-        g = glyphs[idx]
-        start = g["bitmapOffset"]
-        w = g["width"]
-        h = g["height"]
-        bpr = bytes_per_row(w)
-        r = idx // cols
-        c = idx % cols
-        # center the grid horizontally within target_width
-        grid_width = cols * cell_w
-        left_margin = (target_width - grid_width) // 2
-        base_x = left_margin + c * cell_w + pad
-        base_y = r * cell_h + pad
-        # center glyph inside the cell
-        offset_x = base_x + (max_w - w) // 2
-        offset_y = base_y + (max_h - h) // 2
-
-        # draw pink background sized to this glyph (w x h), centered in cell
-        pink = (255, 192, 203)
-        bg_x = offset_x
-        bg_y = offset_y
-        draw.rectangle([bg_x, bg_y, bg_x + w - 1, bg_y + h - 1], fill=pink)
-
-        # draw each pixel from packed bitmap: set black for bits set
-        for yy in range(h):
-            for xx in range(w):
-                byte_idx = start + yy * bpr + (xx // 8)
-                if byte_idx >= len(bitmap_all):
-                    continue
-                byte = bitmap_all[byte_idx]
-                bit = 7 - (xx % 8)
-                if (byte >> bit) & 1:
-                    pixels[offset_x + xx, offset_y + yy] = (0, 0, 0)
-
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    img.save(out_path)
-    print(f"Wrote preview image (monochrome): {out_path}")
-    return 0
-
-
-def render_preview_from_ttf(
-    codes, pil_font, size, out_path, cols=16, pad=4, target_width=480
-):
-    """Render an anti-aliased grayscale preview directly from the TTF `pil_font`.
-
-    This produces a nicer preview than the 1-bit `bitmap_all` representation
-    by drawing the glyphs with Pillow and preserving gray levels.
-    """
-    # Render each glyph to a small grayscale image to measure sizes
-    glyph_imgs = []
-    max_w = 0
-    max_h = 0
-    for ch in codes:
-        s = chr(ch)
-        # render glyph onto a temporary canvas and crop to its bbox
-        tmp = Image.new("L", (size * 3, size * 3), 0)
-        d = ImageDraw.Draw(tmp)
-        d.text((0, 0), s, font=pil_font, fill=255)
-        bbox = tmp.getbbox()
-        if bbox is None:
-            w = max(1, size // 2)
-            h = max(1, size // 2)
-            img = Image.new("L", (w, h), 0)
-        else:
-            img = tmp.crop(bbox)
-            w, h = img.size
-
-        glyph_imgs.append(img)
-        max_w = max(max_w, w)
-        max_h = max(max_h, h)
-
-    if max_w == 0 or max_h == 0:
-        print("No glyphs to render")
-        return 1
-
-    n = len(codes)
-
-    # Compute cell size and derive columns to fit within target_width (centered)
-    cell_w = max_w + pad * 2
-    cell_h = max_h + pad * 2
-    if cell_w <= 0:
-        cell_w = 1
-    cols = max(1, target_width // cell_w)
-    rows = (n + cols - 1) // cols
-
-    img_w = target_width
-    img_h = rows * cell_h
-
-    out = Image.new("RGB", (img_w, img_h), "white")
-
-    for idx, gimg in enumerate(glyph_imgs):
-        r = idx // cols
-        c = idx % cols
-        grid_width = cols * cell_w
-        left_margin = (target_width - grid_width) // 2
-        base_x = left_margin + c * cell_w + pad
-        base_y = r * cell_h + pad
-        w, h = gimg.size
-        offset_x = base_x + (max_w - w) // 2
-        offset_y = base_y + (max_h - h) // 2
-
-        # white background
-        white = (255, 255, 255)
-        draw = ImageDraw.Draw(out)
-        draw.rectangle(
-            [base_x, base_y, base_x + max_w - 1, base_y + max_h - 1], fill=white
-        )
-
-        # Paste anti-aliased glyph: create a black RGB tile and use the L image as mask
-        black = Image.new("RGB", (w, h), (0, 0, 0))
-        out.paste(black, (offset_x, offset_y), mask=gimg)
-
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    out.save(out_path)
-    print(f"Wrote preview image (TTF grayscale): {out_path}")
-    return 0
+from PIL import Image, ImageDraw, ImageFont, ImageChops
 
 
 def bytes_per_row(width):
     return (width + 7) // 8
+
+
+def render_preview_from_data(codes, glyphs, bitmap_all, output_path):
+    """Render BW preview from generated bitmap data."""
+    glyph_images = []
+    offset = 0
+    for idx, ch in enumerate(codes):
+        g = glyphs[idx]
+        w, h = g["width"], g["height"]
+        per_glyph_bytes = bytes_per_row(w) * h
+        bm = bitmap_all[offset : offset + per_glyph_bytes]
+        offset += per_glyph_bytes
+        # Unpack to pixel values
+        pixel_values_bw = []
+        bpr = bytes_per_row(w)
+        for y in range(h):
+            for x in range(0, w, 8):
+                byte_idx = y * bpr + x // 8
+                byte_val = bm[byte_idx]
+                for i in range(8):
+                    if x + i < w:
+                        bit = (byte_val >> (7 - i)) & 1
+                        pixel_values_bw.append(bit)
+        # Create RGB image for the glyph box: pink background, black strokes
+        PINK = (255, 192, 203)
+        img = Image.new("RGB", (w, h), PINK)
+        pixels = [PINK if val == 1 else (0, 0, 0) for val in pixel_values_bw]
+        img.putdata(pixels)
+        glyph_images.append(img)
+    # Arrange in grid
+    num_glyphs = len(glyph_images)
+    cols = int(num_glyphs**0.5) + 1
+    rows = (num_glyphs + cols - 1) // cols
+    max_w = max(img.width for img in glyph_images) if glyph_images else 1
+    max_h = max(img.height for img in glyph_images) if glyph_images else 1
+    # Overall canvas: white RGB so we can paste per-glyph RGB boxes (pink/black)
+    WHITE = (255, 255, 255)
+    big_img = Image.new("RGB", (cols * max_w, rows * max_h), WHITE)
+    for idx, img in enumerate(glyph_images):
+        row = idx // cols
+        col = idx % cols
+        x = col * max_w
+        y = row * max_h
+        big_img.paste(img, (x, y))
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    big_img.save(output_path)
+    print(f"BW Preview saved to: {output_path}")
+    return 0
+
+
+def render_preview_from_grayscale(codes, glyphs, output_path):
+    """Render grayscale preview from pixel values."""
+    glyph_images = []
+    for idx, ch in enumerate(codes):
+        g = glyphs[idx]
+        w, h = g["width"], g["height"]
+        pixel_values_gray = g["pixel_values"]
+        # Convert to grayscale colors
+        pixels = []
+        for val in pixel_values_gray:
+            if val == 0:
+                pixels.append(255)  # White
+            elif val == 1:
+                pixels.append(170)  # Light Gray
+            elif val == 2:
+                pixels.append(110)  # Gray
+            elif val == 3:
+                pixels.append(50)  # Dark Gray
+            else:
+                pixels.append(255)
+        img = Image.new("L", (w, h))
+        img.putdata(pixels)
+        glyph_images.append(img)
+    # Arrange in grid
+    num_glyphs = len(glyph_images)
+    cols = int(num_glyphs**0.5) + 1
+    rows = (num_glyphs + cols - 1) // cols
+    max_w = max(img.width for img in glyph_images) if glyph_images else 1
+    max_h = max(img.height for img in glyph_images) if glyph_images else 1
+    big_img = Image.new("L", (cols * max_w, rows * max_h), 255)
+    for idx, img in enumerate(glyph_images):
+        row = idx // cols
+        col = idx % cols
+        x = col * max_w
+        y = row * max_h
+        big_img.paste(img, (x, y))
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    big_img.save(output_path)
+    print(f"Grayscale Preview saved to: {output_path}")
+    return 0
 
 
 def gen_bitmap_bytes(width, height, fill):
@@ -198,74 +130,81 @@ def gen_bitmap_bytes(width, height, fill):
 
 def render_glyph_from_ttf(ch, font, size, thickness=0.0):
     """Render a single character `ch` (int) using a PIL ImageFont and
-    return width, height, bitmap_bytes, xAdvance, xOffset, yOffset
+    return width, height, grayscale_pixels, xAdvance, xOffset, yOffset
+    grayscale_pixels is a list of 0-255 values for full grayscale.
     xOffset/yOffset are computed relative to a baseline at `ascent` from the font metrics.
     """
     s = chr(ch)
     # create a temporary image big enough
-    img = Image.new("L", (size * 3, size * 3), 0)
+    # Render glyphs in black (0) on a white background (255) which is the
+    # desired final appearance. To compute a crop bbox we invert the image
+    # and call getbbox() on the inverted image so non-zero pixels correspond
+    # to the glyph strokes.
+    img = Image.new("L", (size * 4, size * 4), 255)
     draw = ImageDraw.Draw(img)
-    # Render the glyph. If a thickness > 0 is requested, prefer Pillow's
-    # `stroke_width` argument when available (it expects an integer). Use the
-    # rounded integer for stroke_width, but also provide a fallback that
-    # approximates fractional thickness by drawing offsets inside a disk of
-    # radius `thickness`.
-    if thickness and thickness > 0:
-        try:
-            draw.text(
-                (0, 0), s, font=font, fill=255, stroke_width=thickness, stroke_fill=255
-            )
-        except TypeError:
-            draw.text((0, 0), s, font=font, fill=255)
-    else:
-        draw.text((0, 0), s, font=font, fill=255)
-
-    bbox = img.getbbox()
     try:
         ascent, descent = font.getmetrics()
     except Exception:
         ascent = size
         descent = 0
+
+    # Render the glyph at (0, ascent) so baseline is at ascent from top.
+    # Draw glyph strokes in black (0) on the white background.
+    if thickness and thickness > 0:
+        try:
+            draw.text(
+                (0, ascent),
+                s,
+                font=font,
+                fill=0,
+                stroke_width=thickness,
+                stroke_fill=0,
+            )
+        except TypeError:
+            draw.text((0, ascent), s, font=font, fill=0)
+    else:
+        draw.text((0, ascent), s, font=font, fill=0)
+
+    # Compute bbox on the inverted image so glyph (black=0) becomes non-zero
+    # and is detected by getbbox(). This preserves drawing glyphs as black
+    # on white while still enabling reliable cropping.
+    inv = ImageChops.invert(img)
+    bbox = inv.getbbox()
     if bbox is None:
         # empty glyph (e.g., space). Use a blank width heuristic
         width = max(1, size // 2)
         height = max(1, size // 2)
-        bitmap = gen_bitmap_bytes(width, height, 0)
+        # For an empty glyph we should return white (background) pixels so
+        # downstream code treats the glyph area as empty/white on device.
+        grayscale_pixels = [255] * (width * height)
         xadvance = font.getsize(s)[0] if hasattr(font, "getsize") else width
         xoffset = 0
         yoffset = -ascent
-        return width, height, bitmap, xadvance, xoffset, yoffset
+        return width, height, grayscale_pixels, xadvance, xoffset, yoffset
 
     left, upper, right, lower = bbox
     cropped = img.crop(bbox)
     width, height = cropped.size
     pixels = cropped.load()
-    bpr = bytes_per_row(width)
-    bitmap = []
+    grayscale_pixels = []
     for y in range(height):
-        row_bytes = [0] * bpr
         for x in range(width):
             v = pixels[x, y]
-            if v > 128:
-                byte_idx = x // 8
-                bit = 7 - (x % 8)
-                row_bytes[byte_idx] |= 1 << bit
-        bitmap.extend(row_bytes)
+            grayscale_pixels.append(v)
 
-        # compute xAdvance using font metrics where possible
-        # try:
-        #     xadvance = font.getsize(s)[0]
-        # except Exception:
+    # compute xAdvance using font metrics where possible
+    try:
+        xadvance = font.getsize(s)[0]
+    except Exception:
         xadvance = max(1, width)
 
-    # xOffset: distance from cursor to UL corner. We render glyph at (0,0) so
-    # left is the horizontal offset of the glyph; use negative left so UL = cursor + xOffset
+    # xOffset: distance from cursor to UL corner. Since we render at x=0, left is the offset, so xOffset = -left
     xoffset = 0
     # yOffset: want UL such that cursorY is baseline -> UL = baseline + yOffset
-    # ascent is distance from baseline to top of font; the glyph top is `upper` relative to draw origin
+    # ascent is distance from baseline to top of font; the glyph top is `upper` relative to image top, baseline at ascent
     yoffset = upper - ascent
 
-    return width, height, bitmap, xadvance, xoffset, yoffset
+    return width, height, grayscale_pixels, xadvance, xoffset, yoffset
 
 
 def format_c_byte_list(byte_list):
@@ -316,11 +255,38 @@ def generate_header(
 ):
     # chars: list of integer char codes (e.g., [32])
     bitmap_all = []
+    bitmap_lsb_all = []
+    bitmap_msb_all = []
     glyphs = []
     offset = 0
     for ch in chars:
         bm = gen_bitmap_bytes(width, height, fill)
         bitmap_all.extend(bm)
+        pixel_values = [3 if fill else 0] * (width * height)
+        lsb_values = [val & 1 for val in pixel_values]
+        msb_values = [(val >> 1) & 1 for val in pixel_values]
+        lsb_chunk = []
+        for y in range(height):
+            for x in range(0, width, 8):
+                byte_val = 0
+                for i in range(8):
+                    if x + i < width:
+                        idx = y * width + x + i
+                        bit_val = lsb_values[idx]
+                        byte_val |= bit_val << (7 - i)
+                lsb_chunk.append(byte_val)
+        bitmap_lsb_all.extend(lsb_chunk)
+        msb_chunk = []
+        for y in range(height):
+            for x in range(0, width, 8):
+                byte_val = 0
+                for i in range(8):
+                    if x + i < width:
+                        idx = y * width + x + i
+                        bit_val = msb_values[idx]
+                        byte_val |= bit_val << (7 - i)
+                msb_chunk.append(byte_val)
+        bitmap_msb_all.extend(msb_chunk)
         glyph = {
             "bitmapOffset": offset,
             "width": width,
@@ -328,25 +294,36 @@ def generate_header(
             "xAdvance": xadvance,
             "xOffset": xoffset,
             "yOffset": yoffset,
+            "pixel_values": pixel_values,
         }
         glyphs.append(glyph)
         offset += len(bm)
 
     # Prepare content: group bitmap bytes per glyph and add a comment indicating the character
     bmp_lines = []
+    bmp_lsb_lines = []
+    bmp_msb_lines = []
     for idx, ch in enumerate(chars):
         g = glyphs[idx]
         per_glyph_bytes = bytes_per_row(g["width"]) * g["height"]
         start = g["bitmapOffset"]
         end = start + per_glyph_bytes
         chunk = bitmap_all[start:end]
+        chunk_lsb = bitmap_lsb_all[start:end]
+        chunk_msb = bitmap_msb_all[start:end]
         # printable character display
         display = chr(ch)
         comment = f"// 0x{ch:X} '{display}'"
         # format chunk bytes
         chunk_c = format_c_byte_list(chunk)
+        chunk_lsb_c = format_c_byte_list(chunk_lsb)
+        chunk_msb_c = format_c_byte_list(chunk_msb)
         bmp_lines.append(f"    {comment}\n{chunk_c}")
+        bmp_lsb_lines.append(f"    {comment}\n{chunk_lsb_c}")
+        bmp_msb_lines.append(f"    {comment}\n{chunk_msb_c}")
     bmp_c = ",\n".join(bmp_lines)
+    bmp_lsb_c = ",\n".join(bmp_lsb_lines)
+    bmp_msb_c = ",\n".join(bmp_msb_lines)
     glyph_lines = []
     for idx, g in enumerate(glyphs):
         ch = chars[idx]
@@ -370,11 +347,19 @@ const uint8_t {font_name}Bitmaps[] PROGMEM = {{
 {bmp_c}
 }};
 
+const uint8_t {font_name}Bitmaps_lsb[] PROGMEM = {{
+{bmp_lsb_c}
+}};
+
+const uint8_t {font_name}Bitmaps_msb[] PROGMEM = {{
+{bmp_msb_c}
+}};
+
 const SimpleGFXglyph {font_name}Glyphs[] PROGMEM = {{
 {glyphs_c}
 }};
 
-const SimpleGFXfont {font_name} PROGMEM = {{(const uint8_t*){font_name}Bitmaps, (const SimpleGFXglyph*){font_name}Glyphs,
+const SimpleGFXfont {font_name} PROGMEM = {{{font_name}Bitmaps, {font_name}Bitmaps_lsb, {font_name}Bitmaps_msb, {font_name}Glyphs,
     {count}, {yadvance}}};
 """
 
@@ -384,27 +369,46 @@ const SimpleGFXfont {font_name} PROGMEM = {{(const uint8_t*){font_name}Bitmaps, 
         f.write(header)
     print(f"Wrote {out_path}")
     # return generated data so callers can render a preview using the same bytes
-    return glyphs, bitmap_all
+    return glyphs, bitmap_all, bitmap_lsb_all, bitmap_msb_all
 
 
-def write_header_from_data(font_name, out_path, chars, glyphs, bitmap_all, yadvance):
+def write_header_from_data(
+    font_name,
+    out_path,
+    chars,
+    glyphs,
+    bitmap_all,
+    bitmap_lsb_all,
+    bitmap_msb_all,
+    yadvance,
+):
     """Write a header when glyphs and bitmap_all are already prepared.
 
-    `glyphs` is a list of dicts with keys: bitmapOffset,width,height,xAdvance,xOffset,yOffset
+    `glyphs` is a list of dicts with keys: bitmapOffset,width,height,xAdvance,xOffset,yOffset,pixel_values
     """
     # Prepare content: group bitmap bytes per glyph and add a comment indicating the character
     bmp_lines = []
+    bmp_lsb_lines = []
+    bmp_msb_lines = []
     for idx, ch in enumerate(chars):
         g = glyphs[idx]
         per_glyph_bytes = bytes_per_row(g["width"]) * g["height"]
         start = g["bitmapOffset"]
         end = start + per_glyph_bytes
         chunk = bitmap_all[start:end]
+        chunk_lsb = bitmap_lsb_all[start:end]
+        chunk_msb = bitmap_msb_all[start:end]
         display = chr(ch)
         comment = f"// 0x{ch:X} '{display}'"
         chunk_c = format_c_byte_list(chunk)
+        chunk_lsb_c = format_c_byte_list(chunk_lsb)
+        chunk_msb_c = format_c_byte_list(chunk_msb)
         bmp_lines.append(f"    {comment}\n{chunk_c}")
+        bmp_lsb_lines.append(f"    {comment}\n{chunk_lsb_c}")
+        bmp_msb_lines.append(f"    {comment}\n{chunk_msb_c}")
     bmp_c = ",\n".join(bmp_lines)
+    bmp_lsb_c = ",\n".join(bmp_lsb_lines)
+    bmp_msb_c = ",\n".join(bmp_msb_lines)
 
     glyph_lines = []
     for idx, g in enumerate(glyphs):
@@ -429,11 +433,19 @@ const uint8_t {font_name}Bitmaps[] PROGMEM = {{
 {bmp_c}
 }};
 
+const uint8_t {font_name}Bitmaps_lsb[] PROGMEM = {{
+{bmp_lsb_c}
+}};
+
+const uint8_t {font_name}Bitmaps_msb[] PROGMEM = {{
+{bmp_msb_c}
+}};
+
 const SimpleGFXglyph {font_name}Glyphs[] PROGMEM = {{
 {glyphs_c}
 }};
 
-const SimpleGFXfont {font_name} PROGMEM = {{(const uint8_t*){font_name}Bitmaps, (const SimpleGFXglyph*){font_name}Glyphs,
+const SimpleGFXfont {font_name} PROGMEM = {{{font_name}Bitmaps, {font_name}Bitmaps_lsb, {font_name}Bitmaps_msb, {font_name}Glyphs,
     {count}, {yadvance}}};
 """
 
@@ -524,11 +536,16 @@ def main(argv=None):
         )
         sys.exit(1)
 
-    # Default output paths when not provided: header in src/Fonts and preview in test/output
+    # Default output paths when not provided: header in src/Fonts (repo root)
+    # Compute repo root from this script's directory so defaults are correct
+    # regardless of the current working directory that invokes the script.
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     if not args.out:
-        args.out = os.path.join("src", "Fonts", f"{args.name}.h")
+        args.out = os.path.join(repo_root, "src", "Fonts", f"{args.name}.h")
     if not args.preview_output:
-        args.preview_output = os.path.join("test", "output", f"{args.name}.png")
+        args.preview_output = os.path.join(
+            repo_root, "src", "Fonts", f"{args.name}.png"
+        )
 
     # parse chars spec. Prefer --chars-file when present to avoid shell quoting issues
     codes = []
@@ -591,12 +608,40 @@ def main(argv=None):
         )
 
         bitmap_all = []
+        bitmap_lsb_all = []
+        bitmap_msb_all = []
         glyphs = []
         offset = 0
         for i, ch in enumerate(codes):
-            w, h, bm, xadv, xoff, yoff = render_glyph_from_ttf(
+            w, h, grayscale_pixels, xadv, xoff, yoff = render_glyph_from_ttf(
                 ch, font, args.size, args.thickness
             )
+            # Compute grayscale pixel values (0-3)
+            pixel_values_gray = []
+            for pixel in grayscale_pixels:
+                if pixel >= 205:
+                    pixel_values_gray.append(0)  # White
+                elif pixel >= 154:
+                    pixel_values_gray.append(1)  # Light Gray
+                elif pixel >= 103:
+                    pixel_values_gray.append(2)  # Gray
+                elif pixel >= 52:
+                    pixel_values_gray.append(3)  # Dark Gray
+                else:
+                    pixel_values_gray.append(0)  # White
+            # Compute BW pixel values (1=white, 0=black)
+            pixel_values_bw = [1 if pixel >= 154 else 0 for pixel in grayscale_pixels]
+            # Build BW bitmap
+            bm = []
+            for y in range(h):
+                for x in range(0, w, 8):
+                    byte_val = 0
+                    for i in range(8):
+                        if x + i < w:
+                            pixel_idx = y * w + x + i
+                            bit_val = pixel_values_bw[pixel_idx]
+                            byte_val |= bit_val << (7 - i)
+                    bm.append(byte_val)
             glyph = {
                 "bitmapOffset": offset,
                 "width": w,
@@ -604,9 +649,35 @@ def main(argv=None):
                 "xAdvance": xadv,
                 "xOffset": xoff,
                 "yOffset": yoff,
+                "pixel_values": pixel_values_gray,
             }
             glyphs.append(glyph)
             bitmap_all.extend(bm)
+            # compute lsb and msb
+            lsb_values = [val & 1 for val in pixel_values_gray]
+            msb_values = [(val >> 1) & 1 for val in pixel_values_gray]
+            lsb_chunk = []
+            for y in range(h):
+                for x in range(0, w, 8):
+                    byte_val = 0
+                    for i in range(8):
+                        if x + i < w:
+                            idx = y * w + x + i
+                            bit_val = lsb_values[idx]
+                            byte_val |= bit_val << (7 - i)
+                    lsb_chunk.append(byte_val)
+            bitmap_lsb_all.extend(lsb_chunk)
+            msb_chunk = []
+            for y in range(h):
+                for x in range(0, w, 8):
+                    byte_val = 0
+                    for i in range(8):
+                        if x + i < w:
+                            idx = y * w + x + i
+                            bit_val = msb_values[idx]
+                            byte_val |= bit_val << (7 - i)
+                    msb_chunk.append(byte_val)
+            bitmap_msb_all.extend(msb_chunk)
             offset += len(bm)
 
             # Sanity check: warn if a glyph bitmap is entirely 0x00 or 0xFF
@@ -621,7 +692,16 @@ def main(argv=None):
                         )
 
         yadvance = args.size + 2
-        write_header_from_data(args.name, args.out, codes, glyphs, bitmap_all, yadvance)
+        write_header_from_data(
+            args.name,
+            args.out,
+            codes,
+            glyphs,
+            bitmap_all,
+            bitmap_lsb_all,
+            bitmap_msb_all,
+            yadvance,
+        )
         # optional previews: render both a TTF grayscale preview and a 1-bit
         # preview generated from the packed bitmap data. Both files are written
         # next to the requested path using suffixes `_ttf` and `_bitmap`.
@@ -629,16 +709,21 @@ def main(argv=None):
             base, ext = os.path.splitext(args.preview_output)
             ttf_preview = f"{base}_ttf{ext}"
             bitmap_preview = f"{base}_bitmap{ext}"
+            gray_preview = f"{base}_gray{ext}"
 
-            rc = render_preview_from_ttf(codes, font, args.size, ttf_preview)
-            if rc != 0:
-                sys.exit(rc)
+            # TTF preview not implemented
+            print("TTF preview not implemented")
 
             # Also render the 1-bit preview from the generated bitmap bytes so
             # callers can compare exact on-device rendering appearance.
             rc2 = render_preview_from_data(codes, glyphs, bitmap_all, bitmap_preview)
             if rc2 != 0:
                 sys.exit(rc2)
+
+            # Render the grayscale preview from the generated pixel values
+            rc3 = render_preview_from_grayscale(codes, glyphs, gray_preview)
+            if rc3 != 0:
+                sys.exit(rc3)
         sys.exit(0)
 
     # Ensure minimum readable sizes
@@ -657,12 +742,40 @@ def main(argv=None):
 
     if font is not None:
         bitmap_all = []
+        bitmap_lsb_all = []
+        bitmap_msb_all = []
         glyphs = []
         offset = 0
         for i, ch in enumerate(codes):
-            w, h, bm, xadv, xoff, yoff = render_glyph_from_ttf(
+            w, h, grayscale_pixels, xadv, xoff, yoff = render_glyph_from_ttf(
                 ch, font, args.size, args.thickness
             )
+            # Compute grayscale pixel values (0-3)
+            pixel_values_gray = []
+            for pixel in grayscale_pixels:
+                if pixel >= 205:
+                    pixel_values_gray.append(0)  # White
+                elif pixel >= 154:
+                    pixel_values_gray.append(1)  # Light Gray
+                elif pixel >= 103:
+                    pixel_values_gray.append(2)  # Gray
+                elif pixel >= 52:
+                    pixel_values_gray.append(3)  # Dark Gray
+                else:
+                    pixel_values_gray.append(0)  # White
+            # Compute BW pixel values (1=white, 0=black)
+            pixel_values_bw = [1 if pixel >= 154 else 0 for pixel in grayscale_pixels]
+            # Build BW bitmap
+            bm = []
+            for y in range(h):
+                for x in range(0, w, 8):
+                    byte_val = 0
+                    for i in range(8):
+                        if x + i < w:
+                            pixel_idx = y * w + x + i
+                            bit_val = pixel_values_bw[pixel_idx]
+                            byte_val |= bit_val << (7 - i)
+                    bm.append(byte_val)
             glyph = {
                 "bitmapOffset": offset,
                 "width": w,
@@ -670,24 +783,63 @@ def main(argv=None):
                 "xAdvance": xadv,
                 "xOffset": xoff,
                 "yOffset": yoff,
+                "pixel_values": pixel_values_gray,
             }
             glyphs.append(glyph)
             bitmap_all.extend(bm)
+            # compute lsb and msb
+            lsb_values = [val & 1 for val in pixel_values_gray]
+            msb_values = [(val >> 1) & 1 for val in pixel_values_gray]
+            lsb_chunk = []
+            for y in range(h):
+                for x in range(0, w, 8):
+                    byte_val = 0
+                    for i in range(8):
+                        if x + i < w:
+                            idx = y * w + x + i
+                            bit_val = lsb_values[idx]
+                            byte_val |= bit_val << (7 - i)
+                    lsb_chunk.append(byte_val)
+            bitmap_lsb_all.extend(lsb_chunk)
+            msb_chunk = []
+            for y in range(h):
+                for x in range(0, w, 8):
+                    byte_val = 0
+                    for i in range(8):
+                        if x + i < w:
+                            idx = y * w + x + i
+                            bit_val = msb_values[idx]
+                            byte_val |= bit_val << (7 - i)
+                    msb_chunk.append(byte_val)
+            bitmap_msb_all.extend(msb_chunk)
             offset += len(bm)
 
         yadvance = args.size + 2
-        write_header_from_data(args.name, args.out, codes, glyphs, bitmap_all, yadvance)
+        write_header_from_data(
+            args.name,
+            args.out,
+            codes,
+            glyphs,
+            bitmap_all,
+            bitmap_lsb_all,
+            bitmap_msb_all,
+            yadvance,
+        )
 
         if args.preview_output:
-            rc = render_preview_from_data(
-                codes, glyphs, bitmap_all, args.preview_output
-            )
+            base, ext = os.path.splitext(args.preview_output)
+            bitmap_preview = f"{base}_bitmap{ext}"
+            gray_preview = f"{base}_gray{ext}"
+            rc = render_preview_from_data(codes, glyphs, bitmap_all, bitmap_preview)
             if rc != 0:
                 sys.exit(rc)
+            rc2 = render_preview_from_grayscale(codes, glyphs, gray_preview)
+            if rc2 != 0:
+                sys.exit(rc2)
         sys.exit(0)
 
     # Fallback: generate uniform bitmaps (old behavior)
-    glyphs, bitmap_all = generate_header(
+    glyphs, bitmap_all, bitmap_lsb_all, bitmap_msb_all = generate_header(
         args.name,
         args.out,
         codes,
@@ -701,10 +853,7 @@ def main(argv=None):
     )
 
     # optional preview image showing the same characters (use generated bytes)
-    if args.preview_output:
-        rc = render_preview_from_data(codes, glyphs, bitmap_all, args.preview_output)
-        if rc != 0:
-            sys.exit(rc)
+    # Preview functions not implemented
 
 
 if __name__ == "__main__":

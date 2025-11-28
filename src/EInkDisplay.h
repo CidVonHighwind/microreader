@@ -37,6 +37,7 @@ class EInkDisplay {
   void drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool fromProgmem = false);
 
   void setGrayscaleBuffers(const uint8_t* bwBuffer, const uint8_t* lsbBuffer, const uint8_t* msbBuffer);
+  void enableGrayscaleDrawing(bool enable);
   void grayscaleRevert();
 
   void displayBuffer(RefreshMode mode = FAST_REFRESH);
@@ -51,6 +52,12 @@ class EInkDisplay {
   // Access to frame buffer
   uint8_t* getFrameBuffer() {
     return frameBuffer;
+  }
+  uint8_t* getFrameBufferLSB() {
+    return frameBuffer_lsb;
+  }
+  uint8_t* getFrameBufferMSB() {
+    return frameBuffer_msb;
   }
 
   // Save the current framebuffer to a PBM file (desktop/test builds only)

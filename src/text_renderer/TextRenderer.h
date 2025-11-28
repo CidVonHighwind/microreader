@@ -21,10 +21,12 @@ class TextRenderer {
 
   // Low-level pixel draw used by font blitting
   void drawPixel(int16_t x, int16_t y, uint16_t color);
+  void drawPixelGray(int16_t x, int16_t y, bool bw, bool lsb, bool msb);
 
   // Minimal API used by the rest of the project
   void setFont(const SimpleGFXfont* f = nullptr);
   void setTextColor(uint16_t c);
+  void setGrayscaleMode(bool enable);
   void setCursor(int16_t x, int16_t y);
   size_t print(const char* s);
   size_t print(const String& s);
@@ -42,6 +44,7 @@ class TextRenderer {
   int16_t cursorX = 0;
   int16_t cursorY = 0;
   uint16_t textColor = COLOR_BLACK;
+  bool grayscaleMode = true;
 
   // Draw a single Unicode codepoint. Accepts a full Unicode codepoint
   // (decoded from UTF-8) so the renderer can support multi-byte UTF-8 input.

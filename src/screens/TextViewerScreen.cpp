@@ -2,8 +2,7 @@
 
 #include <Arduino.h>
 #include <Fonts/Font16.h>
-#include <Fonts/Font26.h>
-#include <Fonts/Font27.h>
+#include <Fonts/NotoSans26.h>
 
 #include "../SDCardManager.h"
 #include "Buttons.h"
@@ -21,8 +20,8 @@ TextViewerScreen::TextViewerScreen(EInkDisplay& display, TextRenderer& renderer,
   // Initialize layout config
   layoutConfig.marginLeft = 10;
   layoutConfig.marginRight = 10;
-  layoutConfig.marginTop = 40;
-  layoutConfig.marginBottom = 20;
+  layoutConfig.marginTop = 15;
+  layoutConfig.marginBottom = 40;
   layoutConfig.lineHeight = 30;
   layoutConfig.minSpaceWidth = 8;
   layoutConfig.pageWidth = 480;
@@ -70,7 +69,7 @@ void TextViewerScreen::showPage() {
 
   display.clearScreen(0xFF);
   textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
-  textRenderer.setFont(&Font26);
+  textRenderer.setFont(&NotoSans26);
 
   try {
     // print out current percentage
@@ -128,7 +127,7 @@ void TextViewerScreen::prevPage() {
   // Ensure the renderer is using the same font as used for forward layout so
   // measurements (space width, glyph advances) match between previous-page
   // calculation and normal layout.
-  textRenderer.setFont(&Font26);
+  textRenderer.setFont(&NotoSans26);
   pageStartIndex = layoutStrategy->getPreviousPageStart(*provider, textRenderer, layoutConfig, pageEndIndex);
 
   // Set currentIndex to the start of the previous page

@@ -292,6 +292,8 @@ void EInkDisplay::setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
 void EInkDisplay::clearScreen(uint8_t color) {
   Serial.printf("[%lu]   Clearing frame buffer to 0x%02X...\n", millis(), color);
   memset(frameBuffer, color, BUFFER_SIZE);
+  memset(frameBuffer_lsb, 0x00, BUFFER_SIZE);
+  memset(frameBuffer_msb, 0x00, BUFFER_SIZE);
 }
 
 void EInkDisplay::drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
@@ -349,6 +351,10 @@ void EInkDisplay::setGrayscaleBuffers(const uint8_t* bwBuffer, const uint8_t* ls
   }
 
   drawGrayscale = true;
+}
+
+void EInkDisplay::enableGrayscaleDrawing(bool enable) {
+  drawGrayscale = enable;
 }
 
 void EInkDisplay::grayscaleRevert() {

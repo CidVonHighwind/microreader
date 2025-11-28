@@ -14,8 +14,10 @@ typedef struct {
 } SimpleGFXglyph;
 
 typedef struct {
-  const uint8_t* bitmap;        ///< Glyph bitmaps, concatenated
-  const SimpleGFXglyph* glyph;  ///< Glyph array
-  uint16_t glyphCount;          ///< Number of entries in `glyph`.
-  uint8_t yAdvance;             ///< Newline distance (y axis)
+  const uint8_t* bitmap;           ///< Glyph bitmaps, concatenated
+  const uint8_t* bitmap_gray_lsb;  ///< Glyph bitmaps, concatenated
+  const uint8_t* bitmap_gray_msb;  ///< Glyph bitmaps, concatenated
+  const SimpleGFXglyph* glyph;     ///< Glyph array
+  uint16_t glyphCount;             ///< Number of entries in `glyph`.
+  uint8_t yAdvance;                ///< Newline distance (y axis)
 } SimpleGFXfont;

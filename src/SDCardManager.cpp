@@ -74,7 +74,7 @@ String SDCardManager::readFile(const char* path) {
   }
 
   String content = "";
-  size_t maxSize = 10000;  // Limit to 10KB
+  size_t maxSize = 50000;  // Limit to 50KB
   size_t readSize = 0;
   while (f.available() && readSize < maxSize) {
     char c = (char)f.read();
