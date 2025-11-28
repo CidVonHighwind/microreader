@@ -138,7 +138,6 @@ void TextViewerScreen::activate() {
     String toOpen = pendingOpenPath;
     pendingOpenPath = String("");
     openFile(toOpen);
-    return;
   }
 
   showPage();
@@ -169,9 +168,23 @@ void TextViewerScreen::show() {
 
 void TextViewerScreen::showPage() {
   Serial.println("showPage start");
-
-  if (!provider)
+  if (!provider) {
+    // No provider available (no file open). Show a helpful message instead
+    // of returning silently so the user knows why nothing is displayed.
+    display.clearScreen(0xFF);
+    textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
+    textRenderer.setFont(&NotoSans26);
+    const char* msg = "No document open";
+    int16_t x1, y1;
+    uint16_t w, h;
+    textRenderer.getTextBounds(msg, 0, 0, &x1, &y1, &w, &h);
+    int16_t centerX = (480 - w) / 2;
+    int16_t centerY = (800 - h) / 2;
+    textRenderer.setCursor(centerX, centerY);
+    textRenderer.print(msg);
+    display.displayBuffer(EInkDisplay::FAST_REFRESH);
     return;
+  }
 
   display.clearScreen(0xFF);
   textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
