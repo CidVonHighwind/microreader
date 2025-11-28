@@ -36,6 +36,8 @@ class UIManager {
   void begin();
   void handleButtons(Buttons& buttons);
   void showSleepScreen();
+  // Prepare UI for power-off: notify active screen to persist state
+  void prepareForSleep();
 
   // Show a screen by id
   void showScreen(ScreenId id);

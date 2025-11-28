@@ -17,9 +17,14 @@ class Screen {
   virtual void show() = 0;
 
   // Called when the screen becomes active; default forwards to show
-  virtual void activate(int context = 0) {
+  virtual void activate() {
     show();
   }
+
+  // Called when the device is powering down so the screen can persist state
+  // Default implementation does nothing; override in screens that need to
+  // save state (e.g. `TextViewerScreen` saving current position).
+  virtual void shutdown() {}
 };
 
 #endif

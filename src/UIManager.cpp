@@ -27,8 +27,27 @@ void UIManager::begin() {
       p.second->begin();
   }
 
-  // Show starting screen
+  // Try to restore last-visible screen from SD if available. Fall back to
+  // FileBrowser when no saved state exists or on error.
   currentScreen = ScreenId::FileBrowser;
+  if (sdManager.ready()) {
+    char buf[16];
+    size_t r = sdManager.readFileToBuffer("/ui_state.txt", buf, sizeof(buf));
+    if (r > 0) {
+      int saved = atoi(buf);
+      if (saved >= 0 && saved <= static_cast<int>(ScreenId::TextViewer)) {
+        currentScreen = static_cast<ScreenId>(saved);
+        Serial.printf("[%lu] UIManager: Restored screen %d from SD\n", millis(), saved);
+      } else {
+        Serial.printf("[%lu] UIManager: Invalid saved screen %d; using default\n", millis(), saved);
+      }
+    } else {
+      Serial.printf("[%lu] UIManager: No saved screen state found; using default\n", millis());
+    }
+  } else {
+    Serial.printf("[%lu] UIManager: SD not ready; using default start screen\n", millis());
+  }
+
   showScreen(currentScreen);
 
   Serial.printf("[%lu] UIManager initialized\n", millis());
@@ -65,6 +84,22 @@ void UIManager::showSleepScreen() {
   display.displayBuffer(EInkDisplay::FULL_REFRESH);
 }
 
+void UIManager::prepareForSleep() {
+  // Notify the active screen that the device is powering down so it can
+  // persist any state (e.g. current reading position).
+  if (screens[currentScreen])
+    screens[currentScreen]->shutdown();
+  // Persist which screen was active so we can restore it on next boot.
+  if (sdManager.ready()) {
+    String content = String(static_cast<int>(currentScreen));
+    if (!sdManager.writeFile("/ui_state.txt", content)) {
+      Serial.println("UIManager: Failed to write ui_state.txt to SD");
+    }
+  } else {
+    Serial.println("UIManager: SD not ready; skipping save of current screen");
+  }
+}
+
 void UIManager::openTextFile(const String& sdPath) {
   Serial.printf("UIManager: openTextFile %s\n", sdPath.c_str());
   // Directly access TextViewerScreen and open the file (guaranteed to exist)
@@ -75,5 +110,8 @@ void UIManager::openTextFile(const String& sdPath) {
 void UIManager::showScreen(ScreenId id) {
   // Directly show the requested screen (assumed present)
   currentScreen = id;
-  screens[id]->show();
+  // Call activate so screens can perform any work needed when they become
+  // active (this also ensures TextViewerScreen::activate is invoked to open
+  // any pending file that was loaded during begin()).
+  screens[id]->activate();
 }

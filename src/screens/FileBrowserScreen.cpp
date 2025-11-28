@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "BatteryMonitor.h"
 #include "Buttons.h"
 #include "UIManager.h"
 
@@ -29,6 +30,11 @@ void FileBrowserScreen::handleButtons(Buttons& buttons) {
   } else if (buttons.wasPressed(Buttons::VOLUME_UP)) {
     uiManager.showScreen(UIManager::ScreenId::ImageViewer);
   }
+}
+
+void FileBrowserScreen::activate() {
+  loadFolder();
+  show();
 }
 
 void FileBrowserScreen::show() {
@@ -104,6 +110,21 @@ void FileBrowserScreen::renderSdBrowser() {
     int16_t rowY = startY + i * lineHeight;
     textRenderer.setCursor(centerX, rowY);
     textRenderer.print(displayName);
+  }
+
+  // Draw battery percentage at bottom-right of the screen
+  {
+    textRenderer.setFont(&Font16);
+    int pct = g_battery.readPercentage();
+    String pctStr = String(pct) + "%";
+    int16_t bx1, by1;
+    uint16_t bw, bh;
+    textRenderer.getTextBounds(pctStr.c_str(), 0, 0, &bx1, &by1, &bw, &bh);
+    int16_t bx = (480 - (int)bw) / 2;
+    // Use baseline near bottom (page height is 800); align similar to other screens
+    int16_t by = 790;
+    textRenderer.setCursor(bx, by);
+    textRenderer.print(pctStr);
   }
 }
 

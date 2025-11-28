@@ -502,7 +502,6 @@ void EInkDisplay::deepSleep() {
   Serial.printf("[%lu]   Entering deep sleep mode...\n", millis());
   sendCommand(CMD_DEEP_SLEEP);
   sendData(0x01);  // Enter deep sleep
-  waitWhileBusy(" after deep sleep mode");
 }
 
 void EInkDisplay::saveFrameBufferAsPBM(const char* filename) {

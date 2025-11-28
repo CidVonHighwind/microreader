@@ -3,6 +3,7 @@
 #include <SD.h>
 #include <esp_sleep.h>
 
+#include "BatteryMonitor.h"
 #include "Buttons.h"
 #include "EInkDisplay.h"
 #include "SDCardManager.h"
@@ -29,7 +30,10 @@ const unsigned long POWER_BUTTON_WAKEUP_MS = 500;  // Time required to confirm b
 Buttons buttons;
 EInkDisplay einkDisplay(EPD_SCLK, EPD_MOSI, EINK_SPI_CS, EPD_DC, EPD_RST, EPD_BUSY);
 SDCardManager sdManager(EPD_SCLK, SD_SPI_MISO, EPD_MOSI, SD_SPI_CS, EINK_SPI_CS);
-UIManager displayController(einkDisplay, sdManager);
+// Battery ADC pin and global instance
+#define BAT_GPIO0 0
+BatteryMonitor g_battery(BAT_GPIO0);
+UIManager uiManager(einkDisplay, sdManager);
 
 // Check if USB is connected
 bool isUsbConnected() {
@@ -70,8 +74,11 @@ void enterDeepSleep() {
 
   Serial.println("Power button long press detected. Entering deep sleep.");
 
+  // Let UI save any persistent state before we render the sleep screen
+  uiManager.prepareForSleep();
+
   // Show sleep screen
-  displayController.showSleepScreen();
+  uiManager.showSleepScreen();
 
   // Enter deep sleep mode
   einkDisplay.deepSleep();
@@ -121,7 +128,7 @@ void setup() {
   einkDisplay.begin();
 
   // Initialize display controller (handles application logic)
-  displayController.begin();
+  uiManager.begin();
 
   Serial.println("Initialization complete!\n");
 }
@@ -144,5 +151,5 @@ void loop() {
     enterDeepSleep();
   }
 
-  displayController.handleButtons(buttons);
+  uiManager.handleButtons(buttons);
 }

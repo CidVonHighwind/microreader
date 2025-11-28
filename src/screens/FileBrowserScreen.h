@@ -17,14 +17,15 @@ class FileBrowserScreen : public Screen {
   FileBrowserScreen(EInkDisplay& display, TextRenderer& renderer, SDCardManager& sdManager, UIManager& uiManager);
   void begin() override;
   void show() override;
+  void activate() override;
+
+  void handleButtons(class Buttons& buttons) override;
 
   // Input helpers
   void confirm();
   void selectNext();
   void selectPrev();
   void offsetSelection(int offset);
-
-  void handleButtons(class Buttons& buttons) override;
 
  private:
   void loadFolder(int maxFiles = 200);

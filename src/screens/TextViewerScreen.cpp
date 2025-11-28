@@ -4,6 +4,8 @@
 #include <Fonts/Font16.h>
 #include <Fonts/NotoSans26.h>
 
+#include <cstring>
+
 #include "../SDCardManager.h"
 #include "Buttons.h"
 #include "text view/FileWordProvider.h"
@@ -35,10 +37,110 @@ TextViewerScreen::~TextViewerScreen() {
   delete provider;
 }
 
-void TextViewerScreen::begin() {}
+void TextViewerScreen::begin() {
+  // Load persisted viewer settings (last opened file, layout) if present
+  loadSettingsFromFile();
+}
 
-void TextViewerScreen::activate(int context) {
+void TextViewerScreen::loadSettingsFromFile() {
+  if (!sdManager.ready())
+    return;
+
+  char buf[512];
+  size_t r = sdManager.readFileToBuffer("/textviewer_state.txt", buf, sizeof(buf));
+  if (r == 0)
+    return;
+
+  // Ensure null-termination
+  buf[sizeof(buf) - 1] = '\0';
+
+  // First line: last opened file path
+  char* nl = strchr(buf, '\n');
+  String savedPath = String("");
+  char* secondLine = nullptr;
+  if (nl) {
+    *nl = '\0';
+    if (strlen(buf) > 0)
+      savedPath = String(buf);
+    secondLine = nl + 1;
+  } else {
+    // Only single line present -> treat as path
+    if (strlen(buf) > 0)
+      savedPath = String(buf);
+  }
+
+  // If there's a second line, parse layout config first so it applies
+  // before we open the saved file and layout pages.
+  if (secondLine && strlen(secondLine) > 0) {
+    // Copy to temp buffer for strtok
+    char tmp[256];
+    strncpy(tmp, secondLine, sizeof(tmp) - 1);
+    tmp[sizeof(tmp) - 1] = '\0';
+    char* tok = strtok(tmp, ",");
+    int values[9];
+    int idx = 0;
+    while (tok && idx < 9) {
+      values[idx++] = atoi(tok);
+      tok = strtok(nullptr, ",");
+    }
+    if (idx >= 1)  // alignment at minimum
+      layoutConfig.alignment = static_cast<LayoutStrategy::TextAlignment>(values[0]);
+    if (idx >= 2)
+      layoutConfig.marginLeft = values[1];
+    if (idx >= 3)
+      layoutConfig.marginRight = values[2];
+    if (idx >= 4)
+      layoutConfig.marginTop = values[3];
+    if (idx >= 5)
+      layoutConfig.marginBottom = values[4];
+    if (idx >= 6)
+      layoutConfig.lineHeight = values[5];
+    if (idx >= 7)
+      layoutConfig.minSpaceWidth = values[6];
+    if (idx >= 8)
+      layoutConfig.pageWidth = values[7];
+    if (idx >= 9)
+      layoutConfig.pageHeight = values[8];
+  }
+
+  // If a saved path exists, record it for lazy opening when the screen is
+  // actually shown. This preserves `begin()` as an init-only call and avoids
+  // drawing during initialization.
+  if (savedPath.length() > 0) {
+    pendingOpenPath = savedPath;
+  }
+}
+
+void TextViewerScreen::saveSettingsToFile() {
+  if (!sdManager.ready())
+    return;
+
+  // First line: current file path (may be empty)
+  String content = currentFilePath + "\n";
+
+  // Second line: comma-separated layout config values
+  content += String(static_cast<int>(layoutConfig.alignment)) + "," + String(layoutConfig.marginLeft) + "," +
+             String(layoutConfig.marginRight) + "," + String(layoutConfig.marginTop) + "," +
+             String(layoutConfig.marginBottom) + "," + String(layoutConfig.lineHeight) + "," +
+             String(layoutConfig.minSpaceWidth) + "," + String(layoutConfig.pageWidth) + "," +
+             String(layoutConfig.pageHeight);
+
+  if (!sdManager.writeFile("/textviewer_state.txt", content)) {
+    Serial.println("TextViewerScreen: Failed to write textviewer_state.txt");
+  }
+}
+
+void TextViewerScreen::activate() {
   pageStartIndex = 0;
+  // If a file was pending to open from settings, open it now (first time the
+  // screen becomes active) so showing happens from an explicit show() path.
+  if (pendingOpenPath.length() > 0 && currentFilePath.length() == 0) {
+    String toOpen = pendingOpenPath;
+    pendingOpenPath = String("");
+    openFile(toOpen);
+    return;
+  }
+
   showPage();
 }
 
@@ -47,6 +149,7 @@ void TextViewerScreen::handleButtons(Buttons& buttons) {
   if (buttons.wasPressed(Buttons::BACK)) {
     // Save current position for the opened book (if any) before leaving
     savePositionToFile();
+    saveSettingsToFile();
     uiManager.showScreen(UIManager::ScreenId::FileBrowser);
   } else if (buttons.wasPressed(Buttons::LEFT)) {
     nextPage();
@@ -212,4 +315,10 @@ void TextViewerScreen::loadPositionFromFile() {
   } else {
     pageStartIndex = 0;
   }
+}
+
+void TextViewerScreen::shutdown() {
+  // Persist the current position for the opened file (if any)
+  savePositionToFile();
+  saveSettingsToFile();
 }
