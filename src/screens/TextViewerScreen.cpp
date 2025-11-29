@@ -24,7 +24,7 @@ TextViewerScreen::TextViewerScreen(EInkDisplay& display, TextRenderer& renderer,
   layoutConfig.marginLeft = 10;
   layoutConfig.marginRight = 10;
   layoutConfig.marginTop = 40;
-  layoutConfig.marginBottom = 40;
+  layoutConfig.marginBottom = 20;
   layoutConfig.lineHeight = 30;
   layoutConfig.minSpaceWidth = 8;
   layoutConfig.pageWidth = 480;
@@ -85,22 +85,22 @@ void TextViewerScreen::loadSettingsFromFile() {
     }
     if (idx >= 1)  // alignment at minimum
       layoutConfig.alignment = static_cast<LayoutStrategy::TextAlignment>(values[0]);
-    if (idx >= 2)
-      layoutConfig.marginLeft = values[1];
-    if (idx >= 3)
-      layoutConfig.marginRight = values[2];
-    if (idx >= 4)
-      layoutConfig.marginTop = values[3];
-    if (idx >= 5)
-      layoutConfig.marginBottom = values[4];
-    if (idx >= 6)
-      layoutConfig.lineHeight = values[5];
-    if (idx >= 7)
-      layoutConfig.minSpaceWidth = values[6];
-    if (idx >= 8)
-      layoutConfig.pageWidth = values[7];
-    if (idx >= 9)
-      layoutConfig.pageHeight = values[8];
+    // if (idx >= 2)
+    //   layoutConfig.marginLeft = values[1];
+    // if (idx >= 3)
+    //   layoutConfig.marginRight = values[2];
+    // if (idx >= 4)
+    //   layoutConfig.marginTop = values[3];
+    // if (idx >= 5)
+    //   layoutConfig.marginBottom = values[4];
+    // if (idx >= 6)
+    //   layoutConfig.lineHeight = values[5];
+    // if (idx >= 7)
+    //   layoutConfig.minSpaceWidth = values[6];
+    // if (idx >= 8)
+    //   layoutConfig.pageWidth = values[7];
+    // if (idx >= 9)
+    //   layoutConfig.pageHeight = values[8];
   }
 
   // If a saved path exists, record it for lazy opening when the screen is
