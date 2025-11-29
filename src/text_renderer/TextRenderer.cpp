@@ -5,6 +5,8 @@
 #include "EInkDisplay.h"
 #include "SimpleFont.h"
 
+static constexpr int GLYPH_PADDING = 0;
+
 TextRenderer::TextRenderer(EInkDisplay& display) : display(display) {
   Serial.printf("[%lu] TextRenderer: Constructor called\n", millis());
 }
@@ -233,7 +235,7 @@ void TextRenderer::getTextBounds(const char* str, int16_t x, int16_t y, int16_t*
       }
       if (idx >= 0) {
         const SimpleGFXglyph* glyph = &f->glyph[idx];
-        tot += glyph->xAdvance + 2;
+        tot += glyph->xAdvance + GLYPH_PADDING;
       } else {
         tot += 6;  // fallback
       }
@@ -313,5 +315,5 @@ void TextRenderer::drawChar(uint32_t codepoint) {
   }
 
   // Advance cursor by xAdvance
-  cursorX += glyph->xAdvance + 2;
+  cursorX += glyph->xAdvance + GLYPH_PADDING;
 }

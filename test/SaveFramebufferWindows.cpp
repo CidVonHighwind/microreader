@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "../src/EInkDisplay.h"
-#include "../src/Fonts/Font26.h"
+#include "../src/Fonts/NotoSans26.h"
 #include "../src/screens/text view/GreedyLayoutStrategy.h"
 #include "../src/screens/text view/StringWordProvider.h"
 #include "../src/text_renderer/TextRenderer.h"
@@ -33,7 +33,7 @@ int main() {
   // Render some text onto the frame buffer using the TextRenderer
   TextRenderer renderer(display);
   // Use our local font
-  renderer.setFont(&Font26);
+  renderer.setFont(&NotoSans26);
   renderer.setTextColor(TextRenderer::COLOR_BLACK);
   // Print the contents of `data/font test.txt` character-by-character
   // and wrap to the next line when characters do not fit. When the page
@@ -55,14 +55,14 @@ int main() {
   int page = 0;
 
   auto savePage = [&](int pageIndex, String postfix) {
-    // refresh (no-op for host stubs) then save
-    display.displayBuffer(EInkDisplay::FAST_REFRESH);
+    // Save the currently rendered framebuffer first. `displayBuffer`
+    // swaps the internal buffers, so calling it before saving would
+    // write the (now swapped) inactive/empty buffer to disk.
     std::ostringstream ss;
     ss << "test/output/output_" << std::setw(3) << std::setfill('0') << pageIndex << std::setfill(' ')
        << postfix.c_str() << ".pbm";
     std::string out = ss.str();
     display.saveFrameBufferAsPBM(out.c_str());
-    std::cout << "Saved page " << pageIndex << " -> " << out << "\n";
   };
 
   // Read entire file into memory and use StringWordProvider + TextLayout
@@ -77,16 +77,16 @@ int main() {
 
   StringWordProvider provider(fullText);
   GreedyLayoutStrategy layout;
-  LayoutStrategy::LayoutConfig config;
-  config.marginLeft = 10;
-  config.marginRight = 10;
-  config.marginTop = 40;
-  config.marginBottom = 20;
-  config.lineHeight = 30;
-  config.minSpaceWidth = 8;
-  config.pageWidth = 480;
-  config.pageHeight = 800;
-  config.alignment = LayoutStrategy::ALIGN_LEFT;
+  LayoutStrategy::LayoutConfig layoutConfig;
+  layoutConfig.marginLeft = 10;
+  layoutConfig.marginRight = 10;
+  layoutConfig.marginTop = 15;
+  layoutConfig.marginBottom = 40;
+  layoutConfig.lineHeight = 30;
+  layoutConfig.minSpaceWidth = 8;
+  layoutConfig.pageWidth = 480;
+  layoutConfig.pageHeight = 800;
+  layoutConfig.alignment = LayoutStrategy::ALIGN_LEFT;
 
   // Traverse the entire document forward, saving each page's start and end indices
   std::vector<std::pair<int, int>> pageRanges;  // pair<start, end>
@@ -98,7 +98,7 @@ int main() {
 
     provider.setPosition(pageStart);
 
-    int endPos = layout.layoutText(provider, renderer, config);
+    int endPos = layout.layoutText(provider, renderer, layoutConfig);
     // record the start and end positions for this page
     pageRanges.push_back(std::make_pair(pageStart, endPos));
 
@@ -131,7 +131,6 @@ int main() {
   for (size_t i = 0; i < pageRanges.size(); ++i) {
     int s = pageRanges[i].first;
     int e = pageRanges[i].second;
-    std::cout << "Page " << i << ": start=" << s << " end=" << e << "\n";
     if (rangesOut)
       rangesOut << i << " " << s << " " << e << "\n";
   }
@@ -147,14 +146,14 @@ int main() {
     int expectedPrevStart = pageRanges[i - 1].first;
     int expectedPrevEnd = pageRanges[i - 1].second;
 
-    int computedPrevStart = layout.getPreviousPageStart(provider, renderer, config, currentStart);
+    int computedPrevStart = layout.getPreviousPageStart(provider, renderer, layoutConfig, currentStart);
 
     // Render the computed previous page to determine its end position and save it
     display.clearScreen(0xFF);
     provider.setPosition(computedPrevStart);
-    int computedPrevEnd = layout.layoutText(provider, renderer, config);
+    int computedPrevEnd = layout.layoutText(provider, renderer, layoutConfig);
     pageIndex--;
-    savePage(pageIndex, "_1");
+    // savePage(pageIndex, "_1");
 
     bool startMatch = (computedPrevStart == expectedPrevStart);
     bool endMatch = (computedPrevEnd == expectedPrevEnd);
@@ -164,9 +163,6 @@ int main() {
                 << "  computedPrevStart=" << computedPrevStart << " expectedPrevStart=" << expectedPrevStart << "\n"
                 << "  computedPrevEnd=" << computedPrevEnd << " expectedPrevEnd=" << expectedPrevEnd << "\n";
       mismatch = true;
-    } else {
-      std::cout << "Page " << i << ": previous start/end match (" << computedPrevStart << ", " << computedPrevEnd
-                << ")\n";
     }
   }
 

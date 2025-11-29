@@ -26,7 +26,7 @@ int GreedyLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& rende
   // Measure space width using renderer
   renderer.getTextBounds(" ", 0, 0, nullptr, nullptr, &spaceWidth_, nullptr);
 
-  Serial.printf("[Greedy] layoutText (provider) called: spaceWidth_=%d, maxWidth=%d\n", spaceWidth_, maxWidth);
+  // Serial.printf("[Greedy] layoutText (provider) called: spaceWidth_=%d, maxWidth=%d\n", spaceWidth_, maxWidth);
 
   int startIndex = provider.getCurrentIndex();
   while (y < maxY) {
@@ -127,8 +127,6 @@ int GreedyLayoutStrategy::getPreviousPageStart(WordProvider& provider, TextRende
                                                const LayoutConfig& config, int currentStartPosition) {
   // Save current provider state
   int savedPosition = provider.getCurrentIndex();
-  Serial.print("Pre start: ");
-  Serial.println(savedPosition);
 
   // Set provider to the end of current page
   provider.setPosition(currentStartPosition);
@@ -143,10 +141,6 @@ int GreedyLayoutStrategy::getPreviousPageStart(WordProvider& provider, TextRende
   // Calculate how many lines fit on the screen
   const int16_t availableHeight = config.pageHeight - config.marginTop - config.marginBottom;
   const int maxLines = ceil(availableHeight / (double)config.lineHeight);
-
-  // Debug output
-  Serial.printf("[Greedy] getPreviousPageStart called: spaceWidth_=%d, maxWidth=%d, maxLines=%d\n", spaceWidth_,
-                maxWidth, maxLines);
 
   // Go backwards, laying out lines in reverse order
   // Stop after reaching a paragraph break
@@ -185,9 +179,6 @@ int GreedyLayoutStrategy::getPreviousPageStart(WordProvider& provider, TextRende
 
   // Restore provider state
   provider.setPosition(savedPosition);
-
-  Serial.print("Page end: ");
-  Serial.println(previousPageStart);
 
   return previousPageStart;
 }

@@ -30,6 +30,7 @@ struct MockSPI {
   void beginTransaction(const SPISettings&) {}
   void endTransaction() {}
   void transfer(uint8_t) {}
+  void writeBytes(const uint8_t* data, size_t length) {}
 };
 
 extern MockSPI SPI;

@@ -290,7 +290,7 @@ void EInkDisplay::setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
 }
 
 void EInkDisplay::clearScreen(uint8_t color) {
-  Serial.printf("[%lu]   Clearing frame buffer to 0x%02X...\n", millis(), color);
+  // Serial.printf("[%lu]   Clearing frame buffer to 0x%02X...\n", millis(), color);
   memset(frameBuffer, color, BUFFER_SIZE);
   memset(frameBuffer_lsb, 0x00, BUFFER_SIZE);
   memset(frameBuffer_msb, 0x00, BUFFER_SIZE);
@@ -298,7 +298,7 @@ void EInkDisplay::clearScreen(uint8_t color) {
 
 void EInkDisplay::drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                             bool fromProgmem) {
-  Serial.printf("[%lu]   Drawing image to frame buffer at (%d,%d) size %dx%d...\n", millis(), x, y, w, h);
+  // Serial.printf("[%lu]   Drawing image to frame buffer at (%d,%d) size %dx%d...\n", millis(), x, y, w, h);
 
   // Calculate bytes per line for the image
   uint16_t imageWidthBytes = w / 8;
