@@ -101,6 +101,13 @@ def main(argv=None):
         "--preview-output",
         help="Optional PNG path to render an image showing all characters passed to the generator",
     )
+    p.add_argument(
+        "--no-grayscale",
+        dest="grayscale",
+        action="store_false",
+        default=True,
+        help="Disable grayscale output: do not generate the Bitmaps_lsb/Bitmaps_msb arrays (default: enabled)",
+    )
 
     args = p.parse_args(argv)
 
@@ -263,31 +270,32 @@ def main(argv=None):
             }
             glyphs.append(glyph)
             bitmap_all.extend(bm)
-            # compute lsb and msb
-            lsb_values = [val & 1 for val in pixel_values_gray]
-            msb_values = [(val >> 1) & 1 for val in pixel_values_gray]
-            lsb_chunk = []
-            for y in range(h):
-                for x in range(0, w, 8):
-                    byte_val = 0
-                    for i in range(8):
-                        if x + i < w:
-                            idx = y * w + x + i
-                            bit_val = lsb_values[idx]
-                            byte_val |= bit_val << (7 - i)
-                    lsb_chunk.append(byte_val)
-            bitmap_lsb_all.extend(lsb_chunk)
-            msb_chunk = []
-            for y in range(h):
-                for x in range(0, w, 8):
-                    byte_val = 0
-                    for i in range(8):
-                        if x + i < w:
-                            idx = y * w + x + i
-                            bit_val = msb_values[idx]
-                            byte_val |= bit_val << (7 - i)
-                    msb_chunk.append(byte_val)
-            bitmap_msb_all.extend(msb_chunk)
+            # compute lsb and msb (only if grayscale output enabled)
+            if args.grayscale:
+                lsb_values = [val & 1 for val in pixel_values_gray]
+                msb_values = [(val >> 1) & 1 for val in pixel_values_gray]
+                lsb_chunk = []
+                for y in range(h):
+                    for x in range(0, w, 8):
+                        byte_val = 0
+                        for i in range(8):
+                            if x + i < w:
+                                idx = y * w + x + i
+                                bit_val = lsb_values[idx]
+                                byte_val |= bit_val << (7 - i)
+                        lsb_chunk.append(byte_val)
+                bitmap_lsb_all.extend(lsb_chunk)
+                msb_chunk = []
+                for y in range(h):
+                    for x in range(0, w, 8):
+                        byte_val = 0
+                        for i in range(8):
+                            if x + i < w:
+                                idx = y * w + x + i
+                                bit_val = msb_values[idx]
+                                byte_val |= bit_val << (7 - i)
+                        msb_chunk.append(byte_val)
+                bitmap_msb_all.extend(msb_chunk)
             offset += len(bm)
 
             # Sanity check: warn if a glyph bitmap is entirely 0x00 or 0xFF
@@ -311,6 +319,7 @@ def main(argv=None):
             bitmap_lsb_all,
             bitmap_msb_all,
             yadvance,
+            grayscale=args.grayscale,
         )
         # optional previews: render both a TTF grayscale preview and a 1-bit
         # preview generated from the packed bitmap data. Both files are written
@@ -330,10 +339,11 @@ def main(argv=None):
             if rc2 != 0:
                 sys.exit(rc2)
 
-            # Render the grayscale preview from the generated pixel values
-            rc3 = render_preview_from_grayscale(codes, glyphs, gray_preview)
-            if rc3 != 0:
-                sys.exit(rc3)
+            # Render the grayscale preview from the generated pixel values (only if grayscale is enabled)
+            if args.grayscale:
+                rc3 = render_preview_from_grayscale(codes, glyphs, gray_preview)
+                if rc3 != 0:
+                    sys.exit(rc3)
         sys.exit(0)
 
     # Ensure minimum readable sizes
@@ -397,31 +407,32 @@ def main(argv=None):
             }
             glyphs.append(glyph)
             bitmap_all.extend(bm)
-            # compute lsb and msb
-            lsb_values = [val & 1 for val in pixel_values_gray]
-            msb_values = [(val >> 1) & 1 for val in pixel_values_gray]
-            lsb_chunk = []
-            for y in range(h):
-                for x in range(0, w, 8):
-                    byte_val = 0
-                    for i in range(8):
-                        if x + i < w:
-                            idx = y * w + x + i
-                            bit_val = lsb_values[idx]
-                            byte_val |= bit_val << (7 - i)
-                    lsb_chunk.append(byte_val)
-            bitmap_lsb_all.extend(lsb_chunk)
-            msb_chunk = []
-            for y in range(h):
-                for x in range(0, w, 8):
-                    byte_val = 0
-                    for i in range(8):
-                        if x + i < w:
-                            idx = y * w + x + i
-                            bit_val = msb_values[idx]
-                            byte_val |= bit_val << (7 - i)
-                    msb_chunk.append(byte_val)
-            bitmap_msb_all.extend(msb_chunk)
+            # compute lsb and msb (only if grayscale output enabled)
+            if args.grayscale:
+                lsb_values = [val & 1 for val in pixel_values_gray]
+                msb_values = [(val >> 1) & 1 for val in pixel_values_gray]
+                lsb_chunk = []
+                for y in range(h):
+                    for x in range(0, w, 8):
+                        byte_val = 0
+                        for i in range(8):
+                            if x + i < w:
+                                idx = y * w + x + i
+                                bit_val = lsb_values[idx]
+                                byte_val |= bit_val << (7 - i)
+                        lsb_chunk.append(byte_val)
+                bitmap_lsb_all.extend(lsb_chunk)
+                msb_chunk = []
+                for y in range(h):
+                    for x in range(0, w, 8):
+                        byte_val = 0
+                        for i in range(8):
+                            if x + i < w:
+                                idx = y * w + x + i
+                                bit_val = msb_values[idx]
+                                byte_val |= bit_val << (7 - i)
+                        msb_chunk.append(byte_val)
+                bitmap_msb_all.extend(msb_chunk)
             offset += len(bm)
 
         yadvance = args.size + 2
@@ -434,6 +445,7 @@ def main(argv=None):
             bitmap_lsb_all,
             bitmap_msb_all,
             yadvance,
+            grayscale=args.grayscale,
         )
 
         if args.preview_output:
@@ -443,9 +455,10 @@ def main(argv=None):
             rc = render_preview_from_data(codes, glyphs, bitmap_all, bitmap_preview)
             if rc != 0:
                 sys.exit(rc)
-            rc2 = render_preview_from_grayscale(codes, glyphs, gray_preview)
-            if rc2 != 0:
-                sys.exit(rc2)
+            if args.grayscale:
+                rc2 = render_preview_from_grayscale(codes, glyphs, gray_preview)
+                if rc2 != 0:
+                    sys.exit(rc2)
         sys.exit(0)
 
     # Fallback: generate uniform bitmaps (old behavior)
@@ -460,6 +473,7 @@ def main(argv=None):
         args.xoffset,
         args.yoffset,
         args.fill,
+        grayscale=args.grayscale,
     )
 
     # optional preview image showing the same characters (use generated bytes)

@@ -21,6 +21,7 @@ def generate_header(
     xoffset: int,
     yoffset: int,
     fill: int,
+    grayscale: bool = True,
 ):
     bitmap_all = []
     bitmap_lsb_all = []
@@ -30,31 +31,35 @@ def generate_header(
     for ch in chars:
         bm = gen_bitmap_bytes(width, height, fill)
         bitmap_all.extend(bm)
+        # If grayscale disabled, we still need pixel_values for size but
+        # the per-pixel values will all be 0 (white) or max if fill is set.
         pixel_values = [3 if fill else 0] * (width * height)
-        lsb_values = [val & 1 for val in pixel_values]
-        msb_values = [(val >> 1) & 1 for val in pixel_values]
-        lsb_chunk = []
-        for y in range(height):
-            for x in range(0, width, 8):
-                byte_val = 0
-                for i in range(8):
-                    if x + i < width:
-                        idx = y * width + x + i
-                        bit_val = lsb_values[idx]
-                        byte_val |= bit_val << (7 - i)
-                lsb_chunk.append(byte_val)
-        bitmap_lsb_all.extend(lsb_chunk)
-        msb_chunk = []
-        for y in range(height):
-            for x in range(0, width, 8):
-                byte_val = 0
-                for i in range(8):
-                    if x + i < width:
-                        idx = y * width + x + i
-                        bit_val = msb_values[idx]
-                        byte_val |= bit_val << (7 - i)
-                msb_chunk.append(byte_val)
-        bitmap_msb_all.extend(msb_chunk)
+        # If grayscale is enabled, compute LSB/MSB planes for 2-bit grayscale
+        if grayscale:
+            lsb_values = [val & 1 for val in pixel_values]
+            msb_values = [(val >> 1) & 1 for val in pixel_values]
+            lsb_chunk = []
+            for y in range(height):
+                for x in range(0, width, 8):
+                    byte_val = 0
+                    for i in range(8):
+                        if x + i < width:
+                            idx = y * width + x + i
+                            bit_val = lsb_values[idx]
+                            byte_val |= bit_val << (7 - i)
+                    lsb_chunk.append(byte_val)
+            bitmap_lsb_all.extend(lsb_chunk)
+            msb_chunk = []
+            for y in range(height):
+                for x in range(0, width, 8):
+                    byte_val = 0
+                    for i in range(8):
+                        if x + i < width:
+                            idx = y * width + x + i
+                            bit_val = msb_values[idx]
+                            byte_val |= bit_val << (7 - i)
+                    msb_chunk.append(byte_val)
+            bitmap_msb_all.extend(msb_chunk)
         glyph = {
             "bitmapOffset": offset,
             "width": width,
@@ -99,6 +104,10 @@ def generate_header(
 
     count = len(chars)
 
+    #    When grayscale is disabled we omit the _lsb/_msb arrays and set the
+    #    corresponding struct pointers to nullptr in the SimpleGFXfont initializer.
+    #    When grayscale is disabled we omit the _lsb/_msb arrays and set the
+    #    corresponding struct pointers to nullptr in the SimpleGFXfont initializer.
     header = f"""#pragma once
 #include "../text_renderer/SimpleFont.h"
 
@@ -109,22 +118,24 @@ const uint8_t {font_name}Bitmaps[] PROGMEM = {{
 {bmp_c}
 }};
 
-const uint8_t {font_name}Bitmaps_lsb[] PROGMEM = {{
-{bmp_lsb_c}
-}};
-
-const uint8_t {font_name}Bitmaps_msb[] PROGMEM = {{
-{bmp_msb_c}
-}};
-
-const SimpleGFXglyph {font_name}Glyphs[] PROGMEM = {{
-{glyphs_c}
-}};
-
-const SimpleGFXfont {font_name} PROGMEM = {{{font_name}Bitmaps, {font_name}Bitmaps_lsb, {font_name}Bitmaps_msb, {font_name}Glyphs,
-    {count}, {yadvance}}};
 """
+    if grayscale:
+        header += f"\nconst uint8_t {font_name}Bitmaps_lsb[] PROGMEM = {{\n{bmp_lsb_c}\n}};\n\n"
+        header += f"\nconst uint8_t {font_name}Bitmaps_msb[] PROGMEM = {{\n{bmp_msb_c}\n}};\n\n"
 
+    # Glyphs array
+    header += (
+        f"\nconst SimpleGFXglyph {font_name}Glyphs[] PROGMEM = {{\n{glyphs_c}\n}};\n\n"
+    )
+
+    # Final font struct initializer: pick pointers or nullptr based on grayscale
+    if grayscale:
+        header += f"\nconst SimpleGFXfont {font_name} PROGMEM = {{{font_name}Bitmaps, {font_name}Bitmaps_lsb, {font_name}Bitmaps_msb, {font_name}Glyphs,\n    {count}, {yadvance}}};\n"
+    else:
+        header += (
+            f"\nconst SimpleGFXfont {font_name} PROGMEM = {{{font_name}Bitmaps, nullptr, nullptr, {font_name}Glyphs,\n"
+            f"    {count}, {yadvance}}};\n"
+        )
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(header)
@@ -141,6 +152,7 @@ def write_header_from_data(
     bitmap_lsb_all: List[int],
     bitmap_msb_all: List[int],
     yadvance: int,
+    grayscale: bool = True,
 ):
     bmp_lines = []
     bmp_lsb_lines = []
@@ -175,6 +187,7 @@ def write_header_from_data(
 
     count = len(chars)
 
+    # Build header string
     header = f"""#pragma once
 #include "../text_renderer/SimpleFont.h"
 
@@ -185,21 +198,23 @@ const uint8_t {font_name}Bitmaps[] PROGMEM = {{
 {bmp_c}
 }};
 
-const uint8_t {font_name}Bitmaps_lsb[] PROGMEM = {{
-{bmp_lsb_c}
-}};
-
-const uint8_t {font_name}Bitmaps_msb[] PROGMEM = {{
-{bmp_msb_c}
-}};
-
-const SimpleGFXglyph {font_name}Glyphs[] PROGMEM = {{
-{glyphs_c}
-}};
-
-const SimpleGFXfont {font_name} PROGMEM = {{{font_name}Bitmaps, {font_name}Bitmaps_lsb, {font_name}Bitmaps_msb, {font_name}Glyphs,
-    {count}, {yadvance}}};
 """
+    if grayscale:
+        header += f"\nconst uint8_t {font_name}Bitmaps_lsb[] PROGMEM = {{\n{bmp_lsb_c}\n}};\n\n"
+        header += f"\nconst uint8_t {font_name}Bitmaps_msb[] PROGMEM = {{\n{bmp_msb_c}\n}};\n\n"
+
+    # Glyphs array
+    header += (
+        f"\nconst SimpleGFXglyph {font_name}Glyphs[] PROGMEM = {{\n{glyphs_c}\n}};\n\n"
+    )
+
+    if grayscale:
+        header += f"\nconst SimpleGFXfont {font_name} PROGMEM = {{{font_name}Bitmaps, {font_name}Bitmaps_lsb, {font_name}Bitmaps_msb, {font_name}Glyphs,\n    {count}, {yadvance}}};\n"
+    else:
+        header += (
+            f"\nconst SimpleGFXfont {font_name} PROGMEM = {{{font_name}Bitmaps, nullptr, nullptr, {font_name}Glyphs,\n"
+            f"    {count}, {yadvance}}};\n"
+        )
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, "w", encoding="utf-8", newline="\n") as f:

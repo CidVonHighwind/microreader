@@ -57,6 +57,8 @@ class GlyphPreviewGUI:
         self.variations_frame = tk.Frame(root)
         self.variations_frame.grid(row=3, column=0, columnspan=5, sticky="w")
         self.variation_vars = {}
+        # Grayscale toggle (enabled by default)
+        self.grayscale_var = tk.BooleanVar(value=True)
 
         # (debug UI removed) - simplified preview display
 
@@ -72,6 +74,11 @@ class GlyphPreviewGUI:
         self.char_label.grid(row=4, column=2)
         tk.Button(root, text="Prev", command=self.prev_char).grid(row=4, column=3)
         tk.Button(root, text="Next", command=self.next_char).grid(row=4, column=4)
+
+        # Grayscale export checkbox
+        tk.Checkbutton(
+            root, text="Enable grayscale export", variable=self.grayscale_var
+        ).grid(row=1, column=3, columnspan=2, sticky="w")
 
         # Image Display
         self.image_label = tk.Label(root)
@@ -97,6 +104,10 @@ class GlyphPreviewGUI:
         tk.Label(root, text="Y Offset:").grid(row=10, column=0, sticky="w")
         self.yoffset_label = tk.Label(root, text="")
         self.yoffset_label.grid(row=10, column=1, sticky="w")
+
+        # Inline error label (non-modal)
+        self.error_label = tk.Label(root, text="", fg="red")
+        self.error_label.grid(row=11, column=0, columnspan=3, sticky="w")
 
         # Initial render
         self.on_ttf_change()
@@ -169,6 +180,20 @@ class GlyphPreviewGUI:
             print(f"update_variations_ui: Error loading font: {e}")
             self.axes = []
 
+    def show_error_inline(self, msg: str):
+        """Show a non-modal inline error message instead of popup dialogs."""
+        try:
+            self.error_label.config(text=msg)
+        except Exception:
+            # If the UI isn't available, fall back to printing
+            print(f"GUI error: {msg}")
+
+    def clear_error(self):
+        try:
+            self.error_label.config(text="")
+        except Exception:
+            pass
+
     def on_ttf_change(self, *args):
         ttf = self.ttf_path.get()
         if os.path.exists(ttf):
@@ -206,26 +231,45 @@ class GlyphPreviewGUI:
             return None
 
     def render_glyph(self):
+        # We validate inputs and render; show inline errors (no modal popups) so
+        # the user can type without being blocked by dialogs.
+        # Clear previous errors
+        self.clear_error()
         try:
             ttf = self.ttf_path.get()
-            size = self.size.get()
+            # Size is an IntVar; reading while the user types may raise a TclError.
+            try:
+                size = self.size.get()
+            except Exception:
+                self.show_error_inline("Invalid size: enter an integer")
+                return
             ch = self.parse_char_code(self.char_code.get())
             if ch is None or ch < 0 or ch > 0x10FFFF:
-                messagebox.showwarning(
-                    "Invalid character code",
-                    f"Character code not valid: '{self.char_code.get()}'. Use '0x41', '41', '65', or a single char.",
+                self.show_error_inline(
+                    f"Character code not valid: '{self.char_code.get()}'. Use '0x41', '41', '65', or a single char."
                 )
                 return
             variations = {}
+            invalid_axes = []
+            has_inline_warning = False
             for k, v in self.variation_vars.items():
-                try:
-                    variations[k] = float(v.get() or "0")
-                except ValueError:
-                    # If invalid (e.g., empty), use default
+                raw = v.get() or ""
+                if raw.strip() == "":
                     axis = next(
                         (a for a in getattr(self, "axes", []) if a.axisTag == k), None
                     )
                     variations[k] = axis.defaultValue if axis else 0.0
+                else:
+                    try:
+                        variations[k] = float(raw)
+                    except ValueError:
+                        # Keep a record of invalid axes so we can inform the user
+                        axis = next(
+                            (a for a in getattr(self, "axes", []) if a.axisTag == k),
+                            None,
+                        )
+                        variations[k] = axis.defaultValue if axis else 0.0
+                        invalid_axes.append(k)
             # Clamp variations to axis ranges
             for tag, value in variations.items():
                 axis = next(
@@ -234,6 +278,11 @@ class GlyphPreviewGUI:
                 if axis:
                     variations[tag] = max(min(value, axis.maxValue), axis.minValue)
             print(f"Rendering with variations: {variations}")
+            if invalid_axes:
+                has_inline_warning = True
+                self.show_error_inline(
+                    f"Invalid numeric value for axes: {', '.join(invalid_axes)}; using defaults"
+                )
 
             width, height, grayscale_pixels, xadvance, xoffset, yoffset = (
                 render_glyph_from_ttf(ch, ttf, size, variations=variations)
@@ -306,8 +355,16 @@ class GlyphPreviewGUI:
             # Debug area removed; nothing to show here
 
         except Exception as e:
-            messagebox.showerror("Error", str(e))
+            # Non-fatal rendering errors should be displayed inline. Print to
+            # console for debugging and show brief inline message to the user.
+            print(f"render_glyph: Exception: {e}")
+            self.show_error_inline(str(e))
             self.clear_display()
+            return
+        # Clear any previous error messages on successful render if there were
+        # no inline warnings created by the validation stage.
+        if not locals().get("has_inline_warning", False):
+            self.clear_error()
 
     def on_value_change(self, *args):
         if os.path.exists(self.ttf_path.get()):
@@ -395,6 +452,9 @@ class GlyphPreviewGUI:
             out_path,
         ]
         argv.extend(var_args)
+        # Respect grayscale checkbox: --no-grayscale disables
+        if not self.grayscale_var.get():
+            argv.extend(["--no-grayscale"])
 
         # Run the CLI main() in a try/catch to avoid exiting the GUI
         try:

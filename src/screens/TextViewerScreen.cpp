@@ -1,7 +1,7 @@
 #include "screens/TextViewerScreen.h"
 
 #include <Arduino.h>
-#include <Fonts/Font16.h>
+#include <Fonts/Font14.h>
 #include <Fonts/NotoSans26.h>
 
 #include <cstring>
@@ -214,7 +214,7 @@ void TextViewerScreen::showPage() {
     if (provider->getPercentage(pageEndIndex) < 1.0f)
       pagePercentage = provider->getPercentage();
 
-    textRenderer.setFont(&Font16);
+    textRenderer.setFont(&Font14);
     String percentageIndicator = String((int)(pagePercentage * 100));
     int16_t x1, y1;
     uint16_t w, h;

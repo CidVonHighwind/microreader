@@ -301,7 +301,7 @@ void TextRenderer::drawChar(uint32_t codepoint) {
       } else {
         // BW mode
         uint8_t data = bitmap[bo + (yy * ((w + 7) / 8)) + (xx / 8)];
-        bool on = (data & (1 << (7 - (xx % 8)))) != 0;
+        bool on = (data & (1 << (7 - (xx % 8)))) == 0;
         if (on) {
           drawPixel(px, py, textColor);
         }

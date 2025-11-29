@@ -128,10 +128,46 @@ def render_glyph_from_ttf(
     # Extract the rendered bitmap and convert it to 0-255 grayscale pixels
     buffer = bitmap.buffer
     grayscale_pixels = []
-    for y in range(height):
-        for x in range(width):
-            pixel = 255 - buffer[y * width + x]
-            grayscale_pixels.append(pixel)
+    # FreeType bitmaps have a row stride (pitch) that can differ from width,
+    # particularly due to byte alignment or packed formats. Use the absolute
+    # value of pitch to index rows safely. Also handle different pixel modes
+    # (grayscale vs monochrome) to avoid reading beyond the buffer.
+    pitch = abs(bitmap.pitch)
+    # Pixel modes: 8-bit gray (GRAY), 1-bit monochrome (MONO)
+    try:
+        pix_mode = bitmap.pixel_mode
+    except Exception:
+        # Fallback: assume grayscale if attribute missing
+        pix_mode = freetype.FT_PIXEL_MODE_GRAY
+
+    if pix_mode == freetype.FT_PIXEL_MODE_MONO:
+        # Packed 1-bit per pixel. Each row uses (width + 7) // 8 bytes
+        bpr = (width + 7) // 8
+        for y in range(height):
+            row_off = y * pitch
+            for x in range(width):
+                byte_idx = row_off + (x // 8)
+                if byte_idx >= len(buffer):
+                    # Defensive fallback: treat out-of-range as white
+                    bit = 0
+                else:
+                    bit = (buffer[byte_idx] >> (7 - (x % 8))) & 1
+                # Convert mono bit to 0/255 grayscale (0=black, 255=white)
+                pixel = 255 if bit == 0 else 0
+                grayscale_pixels.append(pixel)
+    else:
+        # Assume 8-bit grayscale per pixel; ensure we index using pitch.
+        for y in range(height):
+            row_off = y * pitch
+            for x in range(width):
+                idx = row_off + x
+                if idx >= len(buffer):
+                    # Defensive fallback: treat missing data as white
+                    val = 0
+                else:
+                    val = buffer[idx]
+                pixel = 255 - val
+                grayscale_pixels.append(pixel)
 
     return width, height, grayscale_pixels, xadvance, xoffset, yoffset
 
