@@ -3,29 +3,104 @@
 from typing import List, Tuple
 import os
 import freetype
-from PIL import Image, ImageDraw
+from PIL import Image
 from .bitmap_utils import bytes_per_row
 
 
+# debug_info builder removed; keep function short and not returning debugging structures
+
+
 def render_glyph_from_ttf(
-    ch: int, font_path: str, size: int, variations: dict = None
+    ch: int,
+    font_source,
+    size: int,
+    thickness: float = 0.0,
+    variations: dict = None,
 ) -> Tuple[int, int, List[int], int, int, int]:
-    face = freetype.Face(font_path)
-    # Print variable font axes if available
-    if hasattr(face, "mm_var") and face.mm_var:
-        num_axis = face.mm_var.num_axis
-        axes = [face.mm_var.axis[i].tag.decode("ascii") for i in range(num_axis)]
-        print(f"Variable font axes: {axes}")
-    # Set variable font coordinates if provided
-    if variations and hasattr(face, "mm_var") and face.mm_var:
-        num_axis = face.mm_var.num_axis
-        coords = [0.0] * num_axis
-        for i in range(num_axis):
-            tag = face.mm_var.axis[i].tag.decode("ascii")
-            if tag in variations:
-                coords[i] = variations[tag]
-        face.set_var_design_coordinates(coords)
-    face.set_pixel_sizes(0, size)
+    # Determine whether font_source is a path (string) for freetype or a PIL ImageFont.
+    face = None
+    is_ttf = isinstance(font_source, str)
+    if is_ttf:
+        face = freetype.Face(font_source)
+    else:
+        # Non-TTF font (e.g., PIL ImageFont) not currently supported by the freetype
+        # For full PIL support, implement separate rasterization logic here.
+        try:
+            face = freetype.Face(str(font_source))
+        except Exception:
+            face = None
+    # Prefer get_variation_info() to detect variable fonts (some freetype-py builds
+    # do not populate face.mm_var, but get_variation_info() works if VF support exists).
+    vsi = None
+    try:
+        vsi = face.get_variation_info() if face is not None else None
+    except Exception:
+        vsi = None
+    # Set pixel size early so default axis rendering is at requested size (only for freetype face)
+    if face is not None:
+        face.set_pixel_sizes(0, size)
+    # Set variable font coordinates if provided.
+    # variations: dict mapping axis tag (e.g., 'wght') to axis value in the
+    # same units as the font's axis (e.g., 400, 700). freetype-py will convert
+    # these floats to the fixed-point representation internally.
+    if variations:
+        has_vf = vsi is not None and len(vsi.axes) > 0
+        # If the face is not variable, ignore variations.
+        if not has_vf:
+            pass
+        else:
+            # Use the VariationSpaceInfo wrapper to access properly-scaled axis values
+            # Already have variation info in vsi, reuse it
+            axes = vsi.axes
+            num_axis = len(axes)
+            coords = [0.0] * num_axis
+            for i in range(num_axis):
+                axis = axes[i]
+                tag = axis.tag
+                # Use provided variation value if available; fall back to axis default
+                if tag in variations:
+                    coords[i] = float(variations[tag])
+                else:
+                    coords[i] = float(axis.default)
+            # Clamp coords to axis ranges
+            for i in range(num_axis):
+                coords[i] = max(min(coords[i], axes[i].maximum), axes[i].minimum)
+            # Debug: print axis ranges and coords we are setting
+            axis_info = [
+                {
+                    "tag": axes[i].tag,
+                    "min": axes[i].minimum,
+                    "default": axes[i].default,
+                    "max": axes[i].maximum,
+                    "coord_to_set": coords[i],
+                }
+                for i in range(num_axis)
+            ]
+            # Only print a concise applied coords message when coords actually get applied
+        # Use the proper freetype-py method name; use has_vf as the guard
+        if has_vf:
+            # Apply coords after size is set; only apply if they differ from current coords
+            try:
+                cur_coords = tuple(face.get_var_design_coords())
+            except Exception:
+                cur_coords = None
+            try:
+                if hasattr(face, "set_var_design_coords"):
+                    if cur_coords is None or tuple(coords) != cur_coords:
+                        face.set_var_design_coords(coords)
+                elif hasattr(face, "set_var_design_coordinates"):
+                    if cur_coords is None or tuple(coords) != cur_coords:
+                        face.set_var_design_coordinates(coords)
+            except Exception:
+                # Failed to set var coords; ignore silently
+                pass
+            try:
+                applied = tuple(face.get_var_design_coords())
+            except Exception:
+                applied = None
+        # no fallback here - we only apply coords when we have validated axes
+    # face.set_pixel_sizes already called earlier and we applied coords above; we only
+    # need to render the glyph once, which happens below.
     glyph_index = face.get_char_index(ch)
     face.load_glyph(glyph_index, freetype.FT_LOAD_RENDER)
     bitmap = face.glyph.bitmap
@@ -36,25 +111,27 @@ def render_glyph_from_ttf(
     yoffset = -(metrics.horiBearingY // 64)
     xadvance = metrics.horiAdvance // 64
 
+    # If the glyph produced no bitmap (e.g., space), produce a small white box
+    # with the correct xadvance taken from the FreeType metrics so the spacing
+    # is consistent with the font (don't fall back to 'size' here unless needed).
     if width == 0 or height == 0:
-        grayscale_pixels = [255] * (size * size // 4)
         width = size // 2
         height = size // 2
-        xadvance = size
+        grayscale_pixels = [255] * (width * height)
+        try:
+            xadvance = metrics.horiAdvance // 64
+        except Exception:
+            xadvance = size
         yoffset = 0
         return width, height, grayscale_pixels, xadvance, xoffset, yoffset
 
-    # Get grayscale pixels
+    # Extract the rendered bitmap and convert it to 0-255 grayscale pixels
     buffer = bitmap.buffer
     grayscale_pixels = []
     for y in range(height):
         for x in range(width):
             pixel = 255 - buffer[y * width + x]
-            grayscale_pixels.append(pixel)  # No invert, match previous format
-
-    print(
-        f"Char: {ch} ({chr(ch)}), width: {width}, height: {height}, xoffset: {xoffset}, yoffset: {yoffset}, xadvance: {xadvance}"
-    )
+            grayscale_pixels.append(pixel)
 
     return width, height, grayscale_pixels, xadvance, xoffset, yoffset
 

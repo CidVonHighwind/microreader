@@ -9,6 +9,7 @@ from PIL import Image, ImageTk, ImageDraw
 import os
 import sys
 from fontTools.ttLib import TTFont
+import freetype
 
 # Ensure the repository root is on sys.path
 if __package__ is None:
@@ -17,6 +18,7 @@ if __package__ is None:
         sys.path.insert(0, repo_root)
 
 from scripts.generate_simplefont.render import render_glyph_from_ttf
+from scripts.generate_simplefont import cli as gen_cli
 
 
 class GlyphPreviewGUI:
@@ -29,7 +31,8 @@ class GlyphPreviewGUI:
         print(f"Default TTF path: {default_ttf}")
         self.ttf_path = tk.StringVar(value=default_ttf)
         self.size = tk.IntVar(value=24)
-        self.char_code = tk.IntVar(value=65)  # 'A'
+        # Use hex string input for character codes (e.g., 0x41)
+        self.char_code = tk.StringVar(value="0x41")
 
         # Trace for auto-render
         self.ttf_path.trace_add("write", self.on_ttf_change)
@@ -40,6 +43,10 @@ class GlyphPreviewGUI:
         tk.Label(root, text="TTF Path:").grid(row=0, column=0, sticky="w")
         tk.Entry(root, textvariable=self.ttf_path, width=50).grid(row=0, column=1)
         tk.Button(root, text="Browse", command=self.browse_ttf).grid(row=0, column=2)
+        # Export name
+        tk.Label(root, text="Export name:").grid(row=0, column=3, sticky="w")
+        self.export_name = tk.StringVar(value="NotoSans26")
+        tk.Entry(root, textvariable=self.export_name).grid(row=0, column=4)
 
         # Size
         tk.Label(root, text="Size:").grid(row=1, column=0, sticky="w")
@@ -50,6 +57,8 @@ class GlyphPreviewGUI:
         self.variations_frame = tk.Frame(root)
         self.variations_frame.grid(row=3, column=0, columnspan=5, sticky="w")
         self.variation_vars = {}
+
+        # (debug UI removed) - simplified preview display
 
         # Trace for auto-render
         self.ttf_path.trace_add("write", self.on_ttf_change)
@@ -91,6 +100,8 @@ class GlyphPreviewGUI:
 
         # Initial render
         self.on_ttf_change()
+        # Save button
+        tk.Button(root, text="Save", command=self.save_font).grid(row=11, column=4)
 
     def browse_ttf(self):
         path = filedialog.askopenfilename(
@@ -100,32 +111,51 @@ class GlyphPreviewGUI:
             self.ttf_path.set(path)
 
     def update_variations_ui(self, ttf_path):
-        print(f"update_variations_ui: Clearing existing controls")
+        # Clearing existing variation controls
         # Clear existing variation controls
         for widget in self.variations_frame.winfo_children():
             widget.destroy()
         self.variation_vars.clear()
 
         try:
-            print(f"update_variations_ui: Loading font {ttf_path}")
+            # Loading font
             font = TTFont(ttf_path)
+            # Prefer to detect variable axes via freetype, if available
+            freetype_axes = None
+            try:
+                fface = freetype.Face(ttf_path)
+                try:
+                    vsi = fface.get_variation_info()
+                    freetype_axes = vsi.axes
+                except Exception as e:
+                    freetype_axes = None
+                    print(
+                        f"update_variations_ui: freetype.get_variation_info failed: {e}"
+                    )
+            except Exception as e:
+                freetype_axes = None
+                print(f"update_variations_ui: freetype.Face failed: {e}")
             if "fvar" in font:
                 axes = font["fvar"].axes
                 axis_tags = [axis.axisTag for axis in axes]
-                print(
-                    f"update_variations_ui: Variable font detected, axes: {axis_tags}"
-                )
                 self.axes = axes
                 row = 0
                 for axis in axes:
                     tag = axis.axisTag
-                    print(
-                        f"update_variations_ui: Adding field for axis {tag} with default {axis.defaultValue}"
-                    )
+                    # Prefer freetype axis defaults if they exist
+                    ft_axis = None
+                    if freetype_axes is not None:
+                        ft_axis = next(
+                            (ax for ax in freetype_axes if ax.tag == tag), None
+                        )
+                    default_val = axis.defaultValue
+                    if ft_axis is not None:
+                        default_val = ft_axis.default
+                    # add field for axis {tag}
                     tk.Label(self.variations_frame, text=f"{tag}:").grid(
                         row=row, column=0, sticky="w"
                     )
-                    var = tk.StringVar(value=str(axis.defaultValue))
+                    var = tk.StringVar(value=str(default_val))
                     self.variation_vars[tag] = var
                     tk.Entry(self.variations_frame, textvariable=var).grid(
                         row=row, column=1
@@ -133,7 +163,7 @@ class GlyphPreviewGUI:
                     var.trace_add("write", self.on_value_change)
                     row += 1
             else:
-                print("update_variations_ui: Font is not variable")
+                # Font is not variable
                 self.axes = []
         except Exception as e:
             print(f"update_variations_ui: Error loading font: {e}")
@@ -151,11 +181,41 @@ class GlyphPreviewGUI:
         if os.path.exists(self.ttf_path.get()):
             self.render_glyph()
 
+    def parse_char_code(self, s: str):
+        """Parse a character code string (accepts single chars, hex '0xNN', bare hex 'NN', or decimal) and return integer or None."""
+        if s is None:
+            return None
+        s = s.strip()
+        if s == "":
+            return None
+        # Single character -> ord
+        if len(s) == 1:
+            return ord(s)
+        import string
+
+        try:
+            # 0xNN hex form
+            if s.lower().startswith("0x"):
+                return int(s, 16)
+            # bare hex digits (e.g., '41', '00A5') -> treat as hex
+            if all(c in string.hexdigits for c in s):
+                return int(s, 16)
+            # else try decimal
+            return int(s, 10)
+        except Exception:
+            return None
+
     def render_glyph(self):
         try:
             ttf = self.ttf_path.get()
             size = self.size.get()
-            ch = self.char_code.get()
+            ch = self.parse_char_code(self.char_code.get())
+            if ch is None or ch < 0 or ch > 0x10FFFF:
+                messagebox.showwarning(
+                    "Invalid character code",
+                    f"Character code not valid: '{self.char_code.get()}'. Use '0x41', '41', '65', or a single char.",
+                )
+                return
             variations = {}
             for k, v in self.variation_vars.items():
                 try:
@@ -176,7 +236,7 @@ class GlyphPreviewGUI:
             print(f"Rendering with variations: {variations}")
 
             width, height, grayscale_pixels, xadvance, xoffset, yoffset = (
-                render_glyph_from_ttf(ch, ttf, size, variations)
+                render_glyph_from_ttf(ch, ttf, size, variations=variations)
             )
 
             # Create PIL image
@@ -243,6 +303,7 @@ class GlyphPreviewGUI:
             self.xoffset_label.config(text=str(xoffset))
             self.yoffset_label.config(text=str(yoffset))
             self.char_label.config(text=f"Char: {chr(ch)}")
+            # Debug area removed; nothing to show here
 
         except Exception as e:
             messagebox.showerror("Error", str(e))
@@ -266,10 +327,89 @@ class GlyphPreviewGUI:
         self.variation_vars.clear()
 
     def prev_char(self):
-        self.char_code.set(self.char_code.get() - 1)
+        cur = self.parse_char_code(self.char_code.get())
+        if cur is None:
+            cur = 0x20
+        cur = max(0, cur - 1)
+        self.char_code.set(hex(cur))
+        self.render_glyph()
 
     def next_char(self):
-        self.char_code.set(self.char_code.get() + 1)
+        cur = self.parse_char_code(self.char_code.get())
+        if cur is None:
+            cur = 0x20
+        cur = min(0x10FFFF, cur + 1)
+        self.char_code.set(hex(cur))
+        self.render_glyph()
+
+    def save_font(self):
+        """Export the current font with applied variations using the CLI functionality."""
+        # gather inputs
+        ttf = self.ttf_path.get()
+        if not os.path.exists(ttf):
+            messagebox.showerror("Save Error", f"TTF not found: {ttf}")
+            return
+        size = self.size.get()
+        name = self.export_name.get() or os.path.splitext(os.path.basename(ttf))[0]
+        # default chars file
+        chars_file = os.path.join(repo_root, "data", "chars_input.txt")
+        if not os.path.exists(chars_file):
+            # ask user for file
+            chars_file = filedialog.askopenfilename(
+                title="Choose chars file",
+                filetypes=[("Text files", "*.txt"), ("All files", "*")],
+            )
+            if not chars_file:
+                messagebox.showerror("Save Error", "Characters file not provided")
+                return
+        # default output path under repo src/Fonts
+        default_out = os.path.join(repo_root, "src", "Fonts", f"{name}.h")
+        out_path = filedialog.asksaveasfilename(
+            title="Save Font Header",
+            defaultextension=".h",
+            initialfile=os.path.basename(default_out),
+            initialdir=os.path.dirname(default_out),
+            filetypes=[("C Header", "*.h"), ("All files", "*")],
+        )
+        if not out_path:
+            return
+        # Build variations args
+        var_args = []
+        for tag, var in self.variation_vars.items():
+            try:
+                val = float(var.get())
+            except Exception:
+                continue
+            var_args.extend(["--var", f"{tag}={val}"])
+        # Build argv as CLI expects
+        argv = [
+            "--name",
+            name,
+            "--size",
+            str(size),
+            "--ttf",
+            ttf,
+            "--chars-file",
+            chars_file,
+            "--out",
+            out_path,
+        ]
+        argv.extend(var_args)
+
+        # Run the CLI main() in a try/catch to avoid exiting the GUI
+        try:
+            gen_cli.main(argv)
+            messagebox.showinfo("Export complete", f"Saved font header to: {out_path}")
+        except SystemExit as e:
+            # main may call sys.exit; treat exit code 0 as success
+            if getattr(e, "code", None) == 0:
+                messagebox.showinfo(
+                    "Export complete", f"Saved font header to: {out_path}"
+                )
+            else:
+                messagebox.showerror("Export failed", f"CLI exited with code {e.code}")
+        except Exception as e:
+            messagebox.showerror("Export failed", str(e))
 
 
 if __name__ == "__main__":

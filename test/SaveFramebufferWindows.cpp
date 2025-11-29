@@ -80,8 +80,8 @@ int main() {
   LayoutStrategy::LayoutConfig layoutConfig;
   layoutConfig.marginLeft = 10;
   layoutConfig.marginRight = 10;
-  layoutConfig.marginTop = 15;
-  layoutConfig.marginBottom = 40;
+  layoutConfig.marginTop = 40;
+  layoutConfig.marginBottom = 20;
   layoutConfig.lineHeight = 30;
   layoutConfig.minSpaceWidth = 8;
   layoutConfig.pageWidth = 480;

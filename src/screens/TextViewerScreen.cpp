@@ -23,7 +23,7 @@ TextViewerScreen::TextViewerScreen(EInkDisplay& display, TextRenderer& renderer,
   // Initialize layout config
   layoutConfig.marginLeft = 10;
   layoutConfig.marginRight = 10;
-  layoutConfig.marginTop = 15;
+  layoutConfig.marginTop = 40;
   layoutConfig.marginBottom = 40;
   layoutConfig.lineHeight = 30;
   layoutConfig.minSpaceWidth = 8;
