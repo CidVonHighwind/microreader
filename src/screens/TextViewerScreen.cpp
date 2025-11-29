@@ -23,7 +23,7 @@ TextViewerScreen::TextViewerScreen(EInkDisplay& display, TextRenderer& renderer,
   // Initialize layout config
   layoutConfig.marginLeft = 10;
   layoutConfig.marginRight = 10;
-  layoutConfig.marginTop = 40;
+  layoutConfig.marginTop = 44;
   layoutConfig.marginBottom = 20;
   layoutConfig.lineHeight = 30;
   layoutConfig.minSpaceWidth = 8;
@@ -193,8 +193,9 @@ void TextViewerScreen::showPage() {
   try {
     // print out current percentage
     Serial.print("Page start: ");
-    Serial.println(pageStartIndex);
+    Serial.println(provider->getCurrentIndex());
 
+    pageStartIndex = provider->getCurrentIndex();
     pageEndIndex = layoutStrategy->layoutText(*provider, textRenderer, layoutConfig);
 
     Serial.print("Page end: ");
@@ -230,8 +231,7 @@ void TextViewerScreen::showPage() {
 void TextViewerScreen::nextPage() {
   // Check if there are more words before advancing
   if (provider && provider->getPercentage(pageEndIndex) < 1.0f) {
-    pageStartIndex = pageEndIndex;
-    provider->setPosition(pageStartIndex);
+    provider->setPosition(pageEndIndex);
     showPage();
   }
 }
@@ -240,14 +240,10 @@ void TextViewerScreen::prevPage() {
   if (!provider || pageStartIndex <= 0)
     return;
 
-  // Use the layout strategy to find the exact start of the previous page
-  pageEndIndex = pageStartIndex;
-  // Find where the previous page starts
-  // Ensure the renderer is using the same font as used for forward layout so
-  // measurements (space width, glyph advances) match between previous-page
-  // calculation and normal layout.
   textRenderer.setFont(&NotoSans26);
-  pageStartIndex = layoutStrategy->getPreviousPageStart(*provider, textRenderer, layoutConfig, pageEndIndex);
+
+  // Find where the previous page starts
+  pageStartIndex = layoutStrategy->getPreviousPageStart(*provider, textRenderer, layoutConfig, pageStartIndex);
 
   // Set currentIndex to the start of the previous page
   provider->setPosition(pageStartIndex);

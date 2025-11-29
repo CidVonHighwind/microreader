@@ -151,7 +151,7 @@ void setup() {
     String dbg = String("wakeup: ") + wakeupCauseToString(w) + " (" + String((int)w) + ")\n";
     dbg += String("power_raw: ") + String(digitalRead(POWER_BUTTON_PIN)) + "\n";
     // Try to write; writeFile removes existing file then writes new content
-    sdManager.writeFile("/debug.txt", dbg);
+    sdManager.writeFile("/log.txt", dbg);
 
     if (sdManager.ready()) {
       if (!sdManager.writeFile("/Microreader/debug.txt", dbg)) {
