@@ -11,6 +11,7 @@
                 "-Isrc/screens/text view",
                 "test/StringWordProviderTest.cpp",
                 "src/screens/text view/StringWordProvider.cpp",
+                "src/screens/text view/LayoutStrategy.cpp",
                 "-o",
                 "test/build/StringWordProviderTest.exe"
             ],
@@ -33,6 +34,7 @@
                 "test/SaveFramebufferWindows.cpp",
                 "src/EInkDisplay.cpp",
                 "src/text_renderer/TextRenderer.cpp",
+                "src/screens/text view/LayoutStrategy.cpp",
                 "test/platform_stubs.cpp",
                 "-o",
                 "test/build/SaveFramebufferWindows.exe"
@@ -58,10 +60,38 @@
                 "src/screens/text view/StringWordProvider.cpp",
                 "src/screens/text view/GreedyLayoutStrategy.cpp",
                 "src/EInkDisplay.cpp",
+                "src/screens/text view/LayoutStrategy.cpp",
                 "src/text_renderer/TextRenderer.cpp",
                 "test/platform_stubs.cpp",
                 "-o",
                 "test/build/GreedyLayoutStrategyTest.exe"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "build KnuthPlassLayoutStrategyTest",
+            "type": "shell",
+            "command": "g++",
+            "args": [
+                "-g",
+                "-Itest/include",
+                "-Isrc",
+                "-Isrc/screens/text view",
+                "test/KnuthPlassLayoutStrategyTest.cpp",
+                "src/screens/text view/StringWordProvider.cpp",
+                "src/screens/text view/KnuthPlassLayoutStrategy.cpp",
+                "src/EInkDisplay.cpp",
+                "src/screens/text view/LayoutStrategy.cpp",
+                "src/text_renderer/TextRenderer.cpp",
+                "test/platform_stubs.cpp",
+                "-o",
+                "test/build/KnuthPlassLayoutStrategyTest.exe"
             ],
             "group": {
                 "kind": "build",

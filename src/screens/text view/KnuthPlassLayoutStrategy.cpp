@@ -10,70 +10,66 @@
 extern unsigned long millis();
 #endif
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
-KnuthPlassLayoutStrategy::KnuthPlassLayoutStrategy() : spaceWidth_(4) {}
+KnuthPlassLayoutStrategy::KnuthPlassLayoutStrategy() {}
 
 KnuthPlassLayoutStrategy::~KnuthPlassLayoutStrategy() {}
 
 int KnuthPlassLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) {
   const int16_t maxWidth = config.pageWidth - config.marginLeft - config.marginRight;
-
-#ifdef DEBUG_LAYOUT
-  Serial.printf("[KP] layoutText (provider) called: maxWidth=%d\n", maxWidth);
-#endif
-
-  // Collect words for this page from provider (record end positions so we can update provider to the
-  // position after the last rendered word)
-  std::vector<Word> words;
-  std::vector<int> wordEndPositions;
-  while (provider.hasNextWord()) {
-    // record index before reading
-    String text = provider.getNextWord(renderer);
-    int afterIndex = provider.getCurrentIndex();
-
-    // Skip break words for Knuth-Plass (treat as one paragraph)
-    if (text == "\n" || text == "\n\n") {
-      continue;
-    }
-
-    // Measure width using renderer
-    int16_t bx = 0, by = 0;
-    uint16_t bw = 0, bh = 0;
-    renderer.getTextBounds(text.c_str(), 0, 0, &bx, &by, &bw, &bh);
-    words.push_back(LayoutStrategy::Word{text, static_cast<int16_t>(bw)});
-    wordEndPositions.push_back(afterIndex);
-  }
-
-  // If we didn't collect any words, nothing to render
-  if (words.empty()) {
-    return provider.getCurrentIndex();
-  }
-
-  // Layout the words
+  const int16_t x = config.marginLeft;
   int16_t y = config.marginTop;
   const int16_t maxY = config.pageHeight - config.marginBottom;
-  spaceWidth_ = config.minSpaceWidth;
+  const TextAlignment alignment = config.alignment;
 
-  size_t nextWordIndex = 0;
-  y = layoutAndRender(words, renderer, config.marginLeft, y, maxWidth, config.lineHeight, maxY, config.alignment,
-                      nextWordIndex);
+  // Measure space width using renderer
+  renderer.getTextBounds(" ", 0, 0, nullptr, nullptr, &spaceWidth_, nullptr);
 
-  // nextWordIndex is the index (in words[]) of the next word after the last rendered one
-  if (nextWordIndex > 0 && nextWordIndex <= wordEndPositions.size()) {
-    // Move provider position to the character index after the last rendered word
-    provider.setPosition(wordEndPositions[nextWordIndex - 1]);
+  // Serial.printf("[Greedy] layoutText (provider) called: spaceWidth_=%d, maxWidth=%d\n", spaceWidth_, maxWidth);
+
+  std::vector<LayoutStrategy::Word> words;
+
+  int startIndex = provider.getCurrentIndex();
+  while (y < maxY) {
+    int16_t yStart = y;
+    bool isParagraphEnd = false;
+
+    while (y < maxY && !isParagraphEnd) {
+      std::vector<LayoutStrategy::Word> line = getNextLine(provider, renderer, maxWidth, isParagraphEnd);
+      y += config.lineHeight;
+
+      // iterate line by line until paragraph end
+      for (size_t i = 0; i < line.size(); i++) {
+        words.push_back(line[i]);
+      }
+    }
+
+    if (words.empty()) {
+    } else {
+      // We've collected as many words for the paragraph as available.
+      // Now render as many as fit on the page using Knuth-Plass.
+      y = yStart;
+      int16_t newY =
+          layoutAndRender(words, renderer, x, y, maxWidth, config.lineHeight, maxY, alignment, isParagraphEnd);
+      words.clear();
+      y = newY;
+    }
   }
 
-  return provider.getCurrentIndex();
+  int endIndex = provider.getCurrentIndex();
+  // reset the provider to the start index
+  provider.setPosition(startIndex);
+
+  return endIndex;
 }
 
 int16_t KnuthPlassLayoutStrategy::layoutAndRender(const std::vector<Word>& words, TextRenderer& renderer, int16_t x,
                                                   int16_t y, int16_t maxWidth, int16_t lineHeight, int16_t maxY,
-                                                  TextAlignment alignment, size_t& outNextWordIndex) {
+                                                  TextAlignment alignment, bool paragraphEnd) {
   if (words.empty()) {
-    outNextWordIndex = 0;
     return y;
   }
 
@@ -116,7 +112,6 @@ int16_t KnuthPlassLayoutStrategy::layoutAndRender(const std::vector<Word>& words
     Serial.printf("[Layout] Last line right edge: %d (xPos=%d, lineWidth=%d)\n", rightEdge, xPos, lineWidth);
 #endif
 
-    outNextWordIndex = words.size();
     return y + lineHeight;
   }
 
@@ -128,7 +123,7 @@ int16_t KnuthPlassLayoutStrategy::layoutAndRender(const std::vector<Word>& words
       break;
     }
 
-    bool isLastLine = (breakIdx == breaks.size());
+    bool isLastLine = (breakIdx == breaks.size()) && paragraphEnd;
     size_t numWords = lineEnd - lineStart;
     size_t numSpaces = (numWords > 1) ? numWords - 1 : 0;
 
@@ -201,7 +196,6 @@ int16_t KnuthPlassLayoutStrategy::layoutAndRender(const std::vector<Word>& words
   }
 
   // After rendering, lineStart is the index of the next word (in words[]) after the last rendered one
-  outNextWordIndex = lineStart;
   return y;
 }
 
@@ -321,51 +315,4 @@ float KnuthPlassLayoutStrategy::calculateDemerits(float badness, bool isLastLine
   return demerits;
 }
 
-int KnuthPlassLayoutStrategy::getPreviousPageStart(WordProvider& provider, TextRenderer& renderer,
-                                                   const LayoutConfig& config, int currentEndPosition) {
-  // For Knuth-Plass, use the same approximate approach as Greedy for now
-  // Save current provider state
-  int savedPosition = provider.getCurrentIndex();
-
-  // Set provider to the end of current page
-  provider.setPosition(currentEndPosition);
-
-  const int16_t maxWidth = config.pageWidth - config.marginLeft - config.marginRight;
-  const int16_t maxY = config.pageHeight - config.marginBottom;
-  int16_t y = config.marginTop;
-  spaceWidth_ = config.minSpaceWidth;
-
-  // Go backwards collecting words until we fill a page
-  while (provider.getCurrentIndex() > 0 && y < maxY) {
-    String t = provider.getPrevWord(renderer);
-    int16_t bx = 0, by = 0;
-    uint16_t bw = 0, bh = 0;
-    renderer.getTextBounds(t.c_str(), 0, 0, &bx, &by, &bw, &bh);
-    LayoutStrategy::Word word{t, static_cast<int16_t>(bw)};
-
-    if (word.text.length() == 0)
-      break;  // No more words
-
-    // Check for paragraph breaks
-    if (word.text == "\n\n") {
-      y += config.lineHeight / 2;
-      if (y >= maxY)
-        break;
-    } else if (word.text == "\n") {
-      if (y >= maxY)
-        break;
-    }
-
-    // Simulate adding this word to a line
-    // For simplicity, assume each word takes one line (this is approximate)
-    y += config.lineHeight;
-  }
-
-  // The current position is where the previous page starts
-  int previousPageStart = provider.getCurrentIndex();
-
-  // Restore provider state
-  provider.setPosition(savedPosition);
-
-  return previousPageStart;
-}
+// Using default getPreviousPageStart implementation from base class

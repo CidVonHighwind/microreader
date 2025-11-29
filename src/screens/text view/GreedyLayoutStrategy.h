@@ -17,28 +17,17 @@ class GreedyLayoutStrategy : public LayoutStrategy {
   // Main interface implementation
   int layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) override;
 
-  // Calculate the start position of the previous page
-  int getPreviousPageStart(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config,
-                           int currentStartPosition) override;
-
  private:
-  uint16_t spaceWidth_;
-
-  // Helper methods
-  std::vector<LayoutStrategy::Word> getNextLine(WordProvider& provider, TextRenderer& renderer, int16_t maxWidth,
-                                                bool& isParagraphEnd);
-  std::vector<LayoutStrategy::Word> getPrevLine(WordProvider& provider, TextRenderer& renderer, int16_t maxWidth,
-                                                bool& isParagraphEnd);
+  // prev-line helper moved to base class
   int16_t renderLine(const std::vector<LayoutStrategy::Word>& line, TextRenderer& renderer, int16_t x, int16_t y,
                      int16_t maxWidth, int16_t lineHeight, TextAlignment alignment);
 
  public:
-  // Test-only public wrappers to exercise internal line layout helpers from unit tests.
-  // These call the private implementations and should not be used by production code.
+  // Test-only public wrapper to exercise internal line layout helpers from unit tests.
+  // Delegates to the strategy-specific getNextLine
   std::vector<LayoutStrategy::Word> test_getNextLine(WordProvider& provider, TextRenderer& renderer, int16_t maxWidth,
                                                      bool& isParagraphEnd);
-  std::vector<LayoutStrategy::Word> test_getPrevLine(WordProvider& provider, TextRenderer& renderer, int16_t maxWidth,
-                                                     bool& isParagraphEnd);
+  Paragraph test_layoutParagraph(WordProvider& provider, TextRenderer& renderer, int16_t maxWidth);
 };
 
 #endif

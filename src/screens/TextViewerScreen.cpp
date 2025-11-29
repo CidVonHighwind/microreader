@@ -17,7 +17,8 @@ TextViewerScreen::TextViewerScreen(EInkDisplay& display, TextRenderer& renderer,
                                    UIManager& uiManager)
     : display(display),
       textRenderer(renderer),
-      layoutStrategy(new GreedyLayoutStrategy()),
+      layoutStrategy(new KnuthPlassLayoutStrategy()),
+      // layoutStrategy(new GreedyLayoutStrategy()),
       sdManager(sdManager),
       uiManager(uiManager) {
   // Initialize layout config

@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "../src/EInkDisplay.h"
-#include "../src/Fonts/Font24.h"
+#include "../src/Fonts/NotoSans26.h"
 #include "../src/screens/text view/GreedyLayoutStrategy.h"
 #include "../src/screens/text view/StringWordProvider.h"
 #include "../src/text_renderer/TextRenderer.h"
@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
   EInkDisplay display(-1, -1, -1, -1, -1, -1);
   display.begin();
   TextRenderer renderer(display);
-  renderer.setFont(&Font24);
+  renderer.setFont(&NotoSans26);
 
   GreedyLayoutStrategy layout;
 

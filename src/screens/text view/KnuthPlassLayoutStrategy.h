@@ -17,12 +17,8 @@ class KnuthPlassLayoutStrategy : public LayoutStrategy {
   // Main interface implementation
   int layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) override;
 
-  // Calculate the start position of the previous page
-  int getPreviousPageStart(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config,
-                           int currentEndPosition) override;
-
  private:
-  int16_t spaceWidth_;
+  // spaceWidth_ is defined in base class
 
   // Knuth-Plass parameters
   static constexpr float INFINITY_PENALTY = 10000.0f;
@@ -41,7 +37,7 @@ class KnuthPlassLayoutStrategy : public LayoutStrategy {
   // Helper methods
   int16_t layoutAndRender(const std::vector<Word>& words, TextRenderer& renderer, int16_t x, int16_t y,
                           int16_t maxWidth, int16_t lineHeight, int16_t maxY, TextAlignment alignment,
-                          size_t& outNextWordIndex);
+                          bool paragraphEnd = true);
   std::vector<size_t> calculateBreaks(const std::vector<Word>& words, int16_t maxWidth);
   float calculateBadness(int16_t actualWidth, int16_t targetWidth);
   float calculateDemerits(float badness, bool isLastLine);

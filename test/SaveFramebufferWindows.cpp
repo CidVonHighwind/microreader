@@ -9,6 +9,7 @@
 #include "../src/EInkDisplay.h"
 #include "../src/Fonts/NotoSans26.h"
 #include "../src/screens/text view/GreedyLayoutStrategy.h"
+#include "../src/screens/text view/KnuthPlassLayoutStrategy.h"
 #include "../src/screens/text view/StringWordProvider.h"
 #include "../src/text_renderer/TextRenderer.h"
 #include "WString.h"
@@ -16,6 +17,7 @@
 // For test build convenience we include some implementation units so the
 // single-file test binary links without changing the global build tasks.
 #include "../src/screens/text view/GreedyLayoutStrategy.cpp"
+#include "../src/screens/text view/KnuthPlassLayoutStrategy.cpp"
 #include "../src/screens/text view/StringWordProvider.cpp"
 
 int main() {
@@ -76,7 +78,8 @@ int main() {
   const int lineSpacing = (int)tbh + 4;
 
   StringWordProvider provider(fullText);
-  GreedyLayoutStrategy layout;
+  // GreedyLayoutStrategy layout;
+  KnuthPlassLayoutStrategy layout;
   LayoutStrategy::LayoutConfig layoutConfig;
   layoutConfig.marginLeft = 10;
   layoutConfig.marginRight = 10;
@@ -153,7 +156,7 @@ int main() {
     provider.setPosition(computedPrevStart);
     int computedPrevEnd = layout.layoutText(provider, renderer, layoutConfig);
     pageIndex--;
-    // savePage(pageIndex, "_1");
+    savePage(pageIndex, "_1");
 
     bool startMatch = (computedPrevStart == expectedPrevStart);
     bool endMatch = (computedPrevEnd == expectedPrevEnd);
