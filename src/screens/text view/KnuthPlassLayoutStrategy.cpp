@@ -173,6 +173,11 @@ int16_t KnuthPlassLayoutStrategy::layoutAndRender(const std::vector<Word>& words
       int16_t currentX = x;
       float accumulatedSpace = 0.0f;
 
+      if (spacePerGap > 16 * spaceWidth_) {
+        // Limit maximum space stretch to avoid extreme gaps
+        spacePerGap = spaceWidth_;
+      }
+
       for (size_t i = lineStart; i < lineEnd; i++) {
         renderer.setCursor(currentX, y);
         renderer.print(words[i].text);
