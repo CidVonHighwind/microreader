@@ -32,7 +32,7 @@ void UIManager::begin() {
   currentScreen = ScreenId::FileBrowser;
   if (sdManager.ready()) {
     char buf[16];
-    size_t r = sdManager.readFileToBuffer("/ui_state.txt", buf, sizeof(buf));
+    size_t r = sdManager.readFileToBuffer("/Microreader/ui_state.txt", buf, sizeof(buf));
     if (r > 0) {
       int saved = atoi(buf);
       if (saved >= 0 && saved <= static_cast<int>(ScreenId::TextViewer)) {
@@ -92,7 +92,7 @@ void UIManager::prepareForSleep() {
   // Persist which screen was active so we can restore it on next boot.
   if (sdManager.ready()) {
     String content = String(static_cast<int>(currentScreen));
-    if (!sdManager.writeFile("/ui_state.txt", content)) {
+    if (!sdManager.writeFile("/Microreader/ui_state.txt", content)) {
       Serial.println("UIManager: Failed to write ui_state.txt to SD");
     }
   } else {
@@ -114,4 +114,5 @@ void UIManager::showScreen(ScreenId id) {
   // active (this also ensures TextViewerScreen::activate is invoked to open
   // any pending file that was loaded during begin()).
   screens[id]->activate();
+  screens[id]->show();
 }

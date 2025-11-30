@@ -34,7 +34,6 @@ void FileBrowserScreen::handleButtons(Buttons& buttons) {
 
 void FileBrowserScreen::activate() {
   loadFolder();
-  show();
 }
 
 void FileBrowserScreen::show() {
@@ -131,7 +130,7 @@ void FileBrowserScreen::renderSdBrowser() {
 void FileBrowserScreen::confirm() {
   if (!sdFiles.empty()) {
     String filename = sdFiles[sdSelectedIndex];
-    String fullPath = String("/Microreader/") + filename;
+    String fullPath = String("/") + filename;
     Serial.printf("Selected file: %s\n", fullPath.c_str());
 
     // Ask UI manager to open the selected file in the text viewer
@@ -175,7 +174,7 @@ void FileBrowserScreen::loadFolder(int maxFiles) {
     return;
   }
 
-  auto files = sdManager.listFiles("/Microreader", maxFiles);
+  auto files = sdManager.listFiles("/", maxFiles);
   for (auto& name : files) {
     // Only include .txt files (case-insensitive .txt/.TXT)
     if (name.length() >= 4) {
@@ -190,6 +189,8 @@ void FileBrowserScreen::loadFolder(int maxFiles) {
   std::sort(sdFiles.begin(), sdFiles.end(),
             [](const String& a, const String& b) { return std::strcmp(a.c_str(), b.c_str()) < 0; });
 
-  sdSelectedIndex = 0;
-  sdScrollOffset = 0;
+  if (sdSelectedIndex >= sdFiles.size()) {
+    sdSelectedIndex = 0;
+    sdScrollOffset = 0;
+  }
 }

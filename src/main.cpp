@@ -154,7 +154,7 @@ void setup() {
     sdManager.writeFile("/log.txt", dbg);
 
     if (sdManager.ready()) {
-      if (!sdManager.writeFile("/Microreader/debug.txt", dbg)) {
+      if (!sdManager.writeFile("/log.txt", dbg)) {
         Serial.println("UIManager: Failed to write debug.txt to SD");
       }
     } else {
