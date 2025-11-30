@@ -13,7 +13,7 @@
 #define UART0_RXD 20  // Used for USB connection detection
 
 // Power button timing
-const unsigned long POWER_BUTTON_WAKEUP_MS = 500;  // Time required to confirm boot from sleep
+const unsigned long POWER_BUTTON_WAKEUP_MS = 250;  // Time required to confirm boot from sleep
 // Power button pin (used in multiple places)
 const int POWER_BUTTON_PIN = 3;
 

@@ -47,8 +47,7 @@ int KnuthPlassLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& r
       }
     }
 
-    if (words.empty()) {
-    } else {
+    if (!words.empty()) {
       // We've collected as many words for the paragraph as available.
       // Now render as many as fit on the page using Knuth-Plass.
       y = yStart;
@@ -78,42 +77,6 @@ int16_t KnuthPlassLayoutStrategy::layoutAndRender(const std::vector<Word>& words
 
   // Render lines
   size_t lineStart = 0;
-
-  // If no breaks, render all words on one line (this is the last line)
-  if (breaks.empty()) {
-    // Last line: use alignment, no justification
-    int16_t lineWidth = 0;
-    for (size_t i = 0; i < words.size(); i++) {
-      lineWidth += words[i].width;
-      if (i < words.size() - 1) {
-        lineWidth += spaceWidth_;
-      }
-    }
-
-    int16_t xPos = x;
-    if (alignment == ALIGN_CENTER) {
-      xPos = x + (maxWidth - lineWidth) / 2;
-    } else if (alignment == ALIGN_RIGHT) {
-      xPos = x + maxWidth - lineWidth;
-    }
-
-    int16_t currentX = xPos;
-    for (size_t i = 0; i < words.size(); i++) {
-      renderer.setCursor(currentX, y);
-      renderer.print(words[i].text);
-      currentX += words[i].width;
-      if (i < words.size() - 1) {
-        currentX += spaceWidth_;
-      }
-    }
-
-#ifdef DEBUG_LAYOUT
-    int16_t rightEdge = currentX;
-    Serial.printf("[Layout] Last line right edge: %d (xPos=%d, lineWidth=%d)\n", rightEdge, xPos, lineWidth);
-#endif
-
-    return y + lineHeight;
-  }
 
   // Render each line
   for (size_t breakIdx = 0; breakIdx <= breaks.size() && y < maxY; breakIdx++) {
@@ -175,7 +138,7 @@ int16_t KnuthPlassLayoutStrategy::layoutAndRender(const std::vector<Word>& words
 
       if (spacePerGap > 16 * spaceWidth_) {
         // Limit maximum space stretch to avoid extreme gaps
-        spacePerGap = spaceWidth_;
+        spacePerGap = std::max(spacePerGap * 0.5f, (float)spaceWidth_);
       }
 
       for (size_t i = lineStart; i < lineEnd; i++) {
