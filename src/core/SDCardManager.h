@@ -22,6 +22,8 @@ class SDCardManager {
   // Write a string to `path` on the SD card. Overwrites existing file.
   // Returns true on success.
   bool writeFile(const char* path, const String& content);
+  // Ensure a directory exists, creating it if necessary. Returns true on success.
+  bool ensureDirectoryExists(const char* path);
 
  private:
   uint8_t epd_sclk;

@@ -139,6 +139,11 @@ void setup() {
   // Initialize SD card manager
   sdManager.begin();
 
+  // Ensure /Microreader/ directory exists
+  if (sdManager.ready()) {
+    sdManager.ensureDirectoryExists("/Microreader");
+  }
+
   // Write debug log
   writeDebugLog();
 

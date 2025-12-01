@@ -171,3 +171,30 @@ bool SDCardManager::writeFile(const char* path, const String& content) {
   f.close();
   return (written == content.length());
 }
+
+bool SDCardManager::ensureDirectoryExists(const char* path) {
+  if (!initialized) {
+    Serial.println("SDCardManager: not initialized; cannot create directory");
+    return false;
+  }
+
+  // Check if directory already exists
+  if (SD.exists(path)) {
+    File dir = SD.open(path);
+    if (dir && dir.isDirectory()) {
+      dir.close();
+      Serial.printf("Directory already exists: %s\n", path);
+      return true;
+    }
+    dir.close();
+  }
+
+  // Create the directory
+  if (SD.mkdir(path)) {
+    Serial.printf("Created directory: %s\n", path);
+    return true;
+  } else {
+    Serial.printf("Failed to create directory: %s\n", path);
+    return false;
+  }
+}
