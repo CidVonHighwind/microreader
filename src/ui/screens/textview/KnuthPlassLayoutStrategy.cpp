@@ -39,22 +39,34 @@ int KnuthPlassLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& r
   int startIndex = provider.getCurrentIndex();
   while (y < maxY) {
     int16_t yStart = y;
+    int16_t lineCount = 0;
     bool isParagraphEnd = false;
 
     // Collect words for the paragraph
     while (y < maxY && !isParagraphEnd) {
       std::vector<LayoutStrategy::Word> line = getNextLine(provider, renderer, maxWidth, isParagraphEnd);
       y += config.lineHeight;
+      lineCount++;
+
       // iterate line by line until paragraph end
       for (size_t i = 0; i < line.size(); i++) {
         words.push_back(line[i]);
       }
     }
 
+    // // print out all the collected words for the paragraph
+    // Serial.print("Paragraph words: ");
+    // for (const auto& word : words) {
+    //   Serial.print(word.text);
+    //   Serial.print("/");
+    // }
+    // Serial.println();
+
     if (!words.empty()) {
       // We've collected as many words for the paragraph as available.
       // Now render as many as fit on the page using Knuth-Plass.
-      layoutAndRender(words, renderer, x, yStart, maxWidth, config.lineHeight, maxY, alignment, isParagraphEnd);
+      layoutAndRender(words, renderer, x, yStart, maxWidth, config.lineHeight, lineCount, maxY, alignment,
+                      isParagraphEnd);
       words.clear();
     }
   }
@@ -67,16 +79,27 @@ int KnuthPlassLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& r
 }
 
 void KnuthPlassLayoutStrategy::layoutAndRender(const std::vector<Word>& words, TextRenderer& renderer, int16_t x,
-                                               int16_t y, int16_t maxWidth, int16_t lineHeight, int16_t maxY,
-                                               TextAlignment alignment, bool paragraphEnd) {
+                                               int16_t y, int16_t maxWidth, int16_t lineHeight, int16_t lineCount,
+                                               int16_t maxY, TextAlignment alignment, bool paragraphEnd) {
   // Calculate line breaks using Knuth-Plass algorithm
   std::vector<size_t> breaks = calculateBreaks(words, maxWidth);
+
+  if (lineCount != breaks.size() + 1) {
+    lineCountMismatch_ = true;
+    expectedLineCount_ = lineCount;
+    actualLineCount_ = breaks.size() + 1;
+    Serial.print("Warning: line count mismatch! Expected ");
+    Serial.print(lineCount);
+    Serial.print(", got ");
+    Serial.print(breaks.size() + 1);
+    Serial.println();
+  }
 
   // Render lines
   size_t lineStart = 0;
 
   // Render each line
-  for (size_t breakIdx = 0; breakIdx <= breaks.size() && y < maxY; breakIdx++) {
+  for (size_t breakIdx = 0; breakIdx <= breaks.size(); breakIdx++) {
     size_t lineEnd = (breakIdx < breaks.size()) ? breaks[breakIdx] : words.size();
 
     if (lineStart >= lineEnd) {
@@ -197,6 +220,10 @@ std::vector<size_t> KnuthPlassLayoutStrategy::calculateBreaks(const std::vector<
           // Force this oversized word onto its own line with a high but not infinite penalty
           // Use a large fixed penalty (100) rather than INFINITY_PENALTY to allow progress
           float demerits = 100.0f;
+
+          // Add a constant penalty per line to favor fewer lines
+          demerits += 50.0f;
+
           float totalDemerits = minDemerits[i] + demerits;
           if (totalDemerits < minDemerits[j + 1]) {
             minDemerits[j + 1] = totalDemerits;
@@ -210,6 +237,10 @@ std::vector<size_t> KnuthPlassLayoutStrategy::calculateBreaks(const std::vector<
       bool isLastLine = (j == n - 1);
       float badness = calculateBadness(lineWidth, maxWidth);
       float demerits = calculateDemerits(badness, isLastLine);
+
+      // Add a constant penalty per line to favor fewer lines
+      // This makes layouts with fewer lines always preferable
+      demerits += 50.0f;
 
       // Update minimum demerits to reach position j+1
       float totalDemerits = minDemerits[i] + demerits;
@@ -274,5 +305,3 @@ float KnuthPlassLayoutStrategy::calculateDemerits(float badness, bool isLastLine
 
   return demerits;
 }
-
-// Using default getPreviousPageStart implementation from base class

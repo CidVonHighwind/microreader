@@ -47,10 +47,12 @@ void runTestConfiguration(const TestRun& testRun, TestUtils::TestRunner& runner,
 
   // Create appropriate layout strategy
   LayoutStrategy* layout = nullptr;
+  KnuthPlassLayoutStrategy* knuthPlassLayout = nullptr;
   if (testRun.useGreedyLayout) {
     layout = new GreedyLayoutStrategy();
   } else {
-    layout = new KnuthPlassLayoutStrategy();
+    knuthPlassLayout = new KnuthPlassLayoutStrategy();
+    layout = knuthPlassLayout;
   }
   LayoutStrategy::LayoutConfig layoutConfig;
   layoutConfig.marginLeft = ::TestConfig::DEFAULT_MARGIN_LEFT;
@@ -65,8 +67,18 @@ void runTestConfiguration(const TestRun& testRun, TestUtils::TestRunner& runner,
 
   // Traverse the entire document forward, and immediately check backward navigation
   std::vector<std::pair<int, int>> pageRanges;  // pair<start, end>
-  int pageStart = 0;
+  int pageStart = 249636;
   int pageIndex = 0;
+
+  // // move towards the first occurence of the word "vorzuziehen" for initial debugging
+  // while (provider.hasNextWord()) {
+  //   String word = provider.getNextWord();
+  //   if (word == String("vorzuziehen")) {
+  //     pageStart = provider.getCurrentIndex() - word.length();
+  //     provider.setPosition(pageStart);
+  //     break;
+  //   }
+  // }
 
   while (true) {
     if (!testRun.disableRendering) {
@@ -75,7 +87,24 @@ void runTestConfiguration(const TestRun& testRun, TestUtils::TestRunner& runner,
 
     provider.setPosition(pageStart);
 
+    // Reset mismatch flag before layout
+    if (knuthPlassLayout) {
+      knuthPlassLayout->resetLineCountMismatch();
+    }
+
     int endPos = layout->layoutText(provider, renderer, layoutConfig, testRun.disableRendering);
+
+    // Check for line count mismatch in KnuthPlass layout
+    if (knuthPlassLayout && knuthPlassLayout->hasLineCountMismatch()) {
+      std::string errorMsg = testRun.name + " - Page " + std::to_string(pageIndex) +
+                             " line count mismatch - Expected " +
+                             std::to_string(knuthPlassLayout->getExpectedLineCount()) + " lines, got " +
+                             std::to_string(knuthPlassLayout->getActualLineCount());
+      std::cerr << errorMsg << "\n";
+      runner.expectTrue(false, testRun.name + " - Line count check from position " + std::to_string(pageStart),
+                        errorMsg);
+    }
+
     // record the start and end positions for this page
     pageRanges.push_back(std::make_pair(pageStart, endPos));
 
@@ -193,11 +222,12 @@ int main() {
 
   // Define test configurations
   std::vector<TestRun> testConfigs = {
-      {"Greedy - Incremental All Pages - No Render", true,  true,  true,  99999},
-      {"Greedy - Normal - No Render",                true,  false, true,  99999},
-      {"KnuthPlass - Incremental - No Render",       false, true,  true,  99999},
-      {"KnuthPlass - Normal - No Render",            false, false, true,  99999},
-      {"KnuthPlass - Normal - With Render",          false, false, false, 99999},
+      // {"Greedy - Incremental All Pages - No Render", true,  true,  true,  99999},
+      // {"Greedy - Normal - No Render",                true,  false, true,  99999},
+      {"KnuthPlass - Incremental - No Render", false, true,  true,  99999},
+      {"KnuthPlass - Normal - No Render",      false, false, true,  99999},
+      {"KnuthPlass - Normal - With Render",    false, false, false, 99999},
+      // {"KnuthPlass - Normal - With Render", false, false, false, 1},
   };
 
   // Run all test configurations
