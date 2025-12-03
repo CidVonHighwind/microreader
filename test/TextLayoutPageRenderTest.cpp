@@ -227,11 +227,11 @@ int main() {
 
   // Define test configurations
   std::vector<TestRun> testConfigs = {
-      // {"Greedy - Incremental All Pages - No Render", true,  true,  true,  99999, 0},
-      // {"Greedy - Normal - No Render",                true,  false, true,  99999, 0},
-      // {"KnuthPlass - Incremental - No Render",       false, true,  true,  99999, 0},
-      // {"KnuthPlass - Normal - No Render",            false, false, true,  99999, 0},
-      {"KnuthPlass - Normal - With Render", false, false, false, 99999, 0},
+      {"Greedy - Incremental All Pages - No Render", true,  true,  true,  99999, 0},
+      {"Greedy - Normal - No Render",                true,  false, true,  99999, 0},
+      {"KnuthPlass - Incremental - No Render",       false, true,  true,  99999, 0},
+      {"KnuthPlass - Normal - No Render",            false, false, true,  99999, 0},
+      {"KnuthPlass - Normal - With Render",          false, false, false, 99999, 0},
       // {"KnuthPlass - Normal - With Render",          false, false, false, 20,    0},
   };
 

@@ -100,32 +100,13 @@ int main(int argc, char** argv) {
 
     int paragraphEndPos = provider.getCurrentIndex();
 
-    // Backward pass: move back through the same paragraph
-    // First, move back past the paragraph's ending newline if there is one
-    if (paragraphEndPos > paragraphStartPos) {
-      // Peek at what's before the current position
-      String prevWord = provider.getPrevWord();
-      if (prevWord != String("\n")) {
-        // Not a newline, put it back
-        provider.ungetWord();
-      }
-      // If it was a newline, we've now skipped past it
-    }
-
     std::vector<LineInfo> backwardLines;
     bool hitParagraphStart = false;
-    int backwardIterations = 0;
-    while (provider.getCurrentIndex() > 0 && backwardIterations < 50) {
+    while (provider.getCurrentIndex() > 0) {
       bool isParagraphEnd = false;
       int endPos = provider.getCurrentIndex();
       auto line = layout.test_getPrevLine(provider, renderer, maxWidth, isParagraphEnd);
       int startPos = provider.getCurrentIndex();
-      backwardIterations++;
-
-      if (paragraphNum <= 3) {
-        std::cerr << "  Backward iter " << backwardIterations << ": endPos=" << endPos << ", startPos=" << startPos
-                  << ", isParagraphEnd=" << isParagraphEnd << ", lineSize=" << line.size() << "\n";
-      }
 
       std::string lineText = joinLine(line);
       backwardLines.insert(backwardLines.begin(), {lineText, startPos, endPos, isParagraphEnd});
@@ -134,16 +115,12 @@ int main(int argc, char** argv) {
       if (isParagraphEnd) {
         hitParagraphStart = true;
         // Position is now at the newline, advance past it to get paragraph start
-        provider.setPosition(provider.getCurrentIndex() + 1);
+        provider.setPosition(provider.getCurrentIndex());
         break;
       }
 
       // Also stop if we've gone back past the paragraph start (shouldn't happen with correct logic)
       if (provider.getCurrentIndex() <= paragraphStartPos) {
-        if (paragraphNum <= 3) {
-          std::cerr << "  Stopping: getCurrentIndex=" << provider.getCurrentIndex()
-                    << " <= paragraphStartPos=" << paragraphStartPos << "\n";
-        }
         break;
       }
     }
@@ -153,19 +130,22 @@ int main(int argc, char** argv) {
     // Compare forward and backward passes for this paragraph
     // The line breaks don't need to match, but the paragraph start/end positions should
     std::string errorMsg;
+    bool hasParagraphError = false;
 
     // Check that both passes cover the same text range
     if (paragraphStartPos != backwardStartPos) {
+      hasParagraphError = true;
       errorMsg = "Paragraph " + std::to_string(paragraphNum) +
                  " start position mismatch! Forward: " + std::to_string(paragraphStartPos) +
                  ", Backward: " + std::to_string(backwardStartPos);
       runner.expectTrue(false, "Paragraph start position match", errorMsg);
     } else {
-      runner.expectTrue(true, "Paragraph " + std::to_string(paragraphNum) + " start position match");
+      runner.expectTrue(true, "Paragraph " + std::to_string(paragraphNum) + " start position match", "", true);
     }
 
     // Both should have same paragraph end
     if (forwardLines.empty() != backwardLines.empty()) {
+      hasParagraphError = true;
       runner.expectTrue(false, "Paragraph " + std::to_string(paragraphNum) + " line consistency",
                         "One pass has lines, the other doesn't!");
     } else if (!forwardLines.empty() && !backwardLines.empty()) {
@@ -180,12 +160,31 @@ int main(int argc, char** argv) {
       bool isFirstParagraph = (paragraphStartPos == 0);
 
       if (forwardHasParagraphEnd != backwardHasParagraphEnd && !isLastParagraph && !isFirstParagraph) {
+        hasParagraphError = true;
         errorMsg = "Paragraph end flag mismatch! Forward last line: " + std::to_string(forwardHasParagraphEnd) +
                    ", Backward first line: " + std::to_string(backwardHasParagraphEnd);
         runner.expectTrue(false, "Paragraph " + std::to_string(paragraphNum) + " end flag match", errorMsg);
       } else {
-        runner.expectTrue(true, "Paragraph " + std::to_string(paragraphNum) + " end flag match");
+        runner.expectTrue(true, "Paragraph " + std::to_string(paragraphNum) + " end flag match", "", true);
       }
+    }
+
+    // Print detailed debug info only for failing paragraphs
+    if (hasParagraphError) {
+      std::cerr << "\n=== Paragraph " << paragraphNum << " FAILED ===\n";
+      std::cerr << "Forward start: " << paragraphStartPos << ", end: " << paragraphEndPos << "\n";
+      std::cerr << "Backward start: " << backwardStartPos << ", end: " << paragraphEndPos << "\n";
+      std::cerr << "Forward lines (" << forwardLines.size() << "):\n";
+      for (size_t i = 0; i < forwardLines.size(); i++) {
+        std::cerr << "  [" << i << "] pos " << forwardLines[i].startPos << "-" << forwardLines[i].endPos
+                  << " isParagraphEnd=" << forwardLines[i].isParagraphEnd << ": \"" << forwardLines[i].text << "\"\n";
+      }
+      std::cerr << "Backward lines (" << backwardLines.size() << "):\n";
+      for (size_t i = 0; i < backwardLines.size(); i++) {
+        std::cerr << "  [" << i << "] pos " << backwardLines[i].startPos << "-" << backwardLines[i].endPos
+                  << " isParagraphEnd=" << backwardLines[i].isParagraphEnd << ": \"" << backwardLines[i].text << "\"\n";
+      }
+      std::cerr << "===========================\n\n";
     }
 
     totalLines += forwardLines.size();

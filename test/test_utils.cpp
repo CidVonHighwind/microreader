@@ -116,9 +116,11 @@ bool TestRunner::expectEqual(const std::string& expected, const std::string& act
   }
 }
 
-bool TestRunner::expectTrue(bool condition, const std::string& testName, const std::string& message) {
+bool TestRunner::expectTrue(bool condition, const std::string& testName, const std::string& message, bool silent) {
   if (condition) {
-    std::cout << "  ✓ PASS: " << testName << "\n";
+    if (!silent) {
+      std::cout << "  ✓ PASS: " << testName << "\n";
+    }
     passCount_++;
     return true;
   } else {

@@ -33,7 +33,7 @@ class TestRunner {
   void runTest(const std::string& testName, bool passed, const std::string& failureMessage = "");
   bool expectEqual(const std::string& expected, const std::string& actual, const std::string& testName,
                    bool verbose = false);
-  bool expectTrue(bool condition, const std::string& testName, const std::string& message = "");
+  bool expectTrue(bool condition, const std::string& testName, const std::string& message = "", bool silent = false);
 
   int getPassCount() const {
     return passCount_;
