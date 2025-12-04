@@ -20,20 +20,17 @@ KnuthPlassLayoutStrategy::KnuthPlassLayoutStrategy() {}
 
 KnuthPlassLayoutStrategy::~KnuthPlassLayoutStrategy() {}
 
-int KnuthPlassLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config,
-                                         bool disableRendering) {
+LayoutStrategy::PageLayout KnuthPlassLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& renderer,
+                                                                const LayoutConfig& config) {
   const int16_t maxWidth = config.pageWidth - config.marginLeft - config.marginRight;
-  const int16_t x = config.marginLeft;
   int16_t y = config.marginTop;
   const int16_t maxY = config.pageHeight - config.marginBottom;
-  const TextAlignment alignment = config.alignment;
-
-  // Set rendering flag
-  renderingEnabled_ = !disableRendering;
 
   // Measure space width using renderer
   renderer.getTextBounds(" ", 0, 0, nullptr, nullptr, &spaceWidth_, nullptr);
 
+  PageLayout result;
+  std::vector<ParagraphLayoutInfo> paragraphs;
   std::vector<LayoutStrategy::Word> words;
 
   int startIndex = provider.getCurrentIndex();
@@ -44,8 +41,6 @@ int KnuthPlassLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& r
 
     // Collect words for the paragraph
     while (y < maxY && !isParagraphEnd) {
-      // Check if this could be the last line on the page
-      // bool isLastLineOnPage = (y + config.lineHeight >= maxY);
       std::vector<LayoutStrategy::Word> line = getNextLine(provider, renderer, maxWidth, isParagraphEnd);
       y += config.lineHeight;
       lineCount++;
@@ -56,133 +51,120 @@ int KnuthPlassLayoutStrategy::layoutText(WordProvider& provider, TextRenderer& r
       }
     }
 
-    // // print out all the collected words for the paragraph
-    // Serial.print("Paragraph words: ");
-    // // Serial.print("Paragraph end: ");
-    // // Serial.println(isParagraphEnd ? "true" : "false");
-    // for (const auto& word : words) {
-    //   Serial.print(word.text);
-    //   Serial.print("/");
-    // }
-    // Serial.println();
-
     if (!words.empty()) {
-      // We've collected as many words for the paragraph as available.
-      // Now render as many as fit on the page using Knuth-Plass.
-      layoutAndRender(words, renderer, x, yStart, maxWidth, config.lineHeight, lineCount, maxY, alignment,
-                      isParagraphEnd);
+      // Calculate line breaks using Knuth-Plass algorithm
+      std::vector<size_t> breaks = calculateBreaks(words, maxWidth);
+
+      if (lineCount != breaks.size() + 1) {
+        lineCountMismatch_ = true;
+        expectedLineCount_ = lineCount;
+        actualLineCount_ = breaks.size() + 1;
+      }
+
+      // Convert breaks into lines and calculate positions
+      const int16_t x = config.marginLeft;
+      const TextAlignment alignment = config.alignment;
+      int16_t currentY = yStart;
+
+      size_t lineStart = 0;
+      for (size_t breakIdx = 0; breakIdx <= breaks.size(); breakIdx++) {
+        size_t lineEnd = (breakIdx < breaks.size()) ? breaks[breakIdx] : words.size();
+        if (lineStart >= lineEnd)
+          break;
+
+        std::vector<Word> lineWords;
+        for (size_t i = lineStart; i < lineEnd; i++) {
+          lineWords.push_back(words[i]);
+        }
+
+        // Calculate positions for words in this line
+        bool isLastLine = (breakIdx == breaks.size()) && isParagraphEnd;
+        size_t numWords = lineWords.size();
+        size_t numSpaces = (numWords > 1) ? numWords - 1 : 0;
+
+        if (isLastLine || numSpaces == 0) {
+          // Last line: use alignment, no justification
+          int16_t lineWidth = 0;
+          for (size_t i = 0; i < lineWords.size(); i++) {
+            lineWidth += lineWords[i].width;
+            if (i < lineWords.size() - 1) {
+              lineWidth += spaceWidth_;
+            }
+          }
+
+          int16_t xPos = x;
+          if (alignment == ALIGN_CENTER) {
+            xPos = x + (maxWidth - lineWidth) / 2;
+          } else if (alignment == ALIGN_RIGHT) {
+            xPos = x + maxWidth - lineWidth;
+          }
+
+          int16_t currentX = xPos;
+          for (size_t i = 0; i < lineWords.size(); i++) {
+            lineWords[i].x = currentX;
+            lineWords[i].y = currentY;
+            currentX += lineWords[i].width;
+            if (i < lineWords.size() - 1) {
+              currentX += spaceWidth_;
+            }
+          }
+        } else {
+          // Non-last line: justify by distributing space evenly
+          int16_t totalWordWidth = 0;
+          for (size_t i = 0; i < lineWords.size(); i++) {
+            totalWordWidth += lineWords[i].width;
+          }
+
+          // Calculate space to distribute between words
+          int16_t totalSpaceWidth = maxWidth - totalWordWidth;
+          float spacePerGap = (float)totalSpaceWidth / (float)numSpaces;
+
+          if (spacePerGap > 16 * spaceWidth_) {
+            // Limit maximum space stretch to avoid extreme gaps
+            spacePerGap = std::max(spacePerGap * 0.25f, (float)spaceWidth_);
+          }
+
+          int16_t currentX = x;
+          float accumulatedSpace = 0.0f;
+
+          for (size_t i = 0; i < lineWords.size(); i++) {
+            lineWords[i].x = currentX;
+            lineWords[i].y = currentY;
+            currentX += lineWords[i].width;
+
+            if (i < lineWords.size() - 1) {
+              accumulatedSpace += spacePerGap;
+              int16_t spaceToAdd = (int16_t)accumulatedSpace;
+              currentX += spaceToAdd;
+              accumulatedSpace -= spaceToAdd;
+            }
+          }
+        }
+
+        result.lines.push_back(lineWords);
+        lineStart = lineEnd;
+        currentY += config.lineHeight;
+      }
+
       words.clear();
     }
   }
 
-  int endIndex = provider.getCurrentIndex();
+  result.endPosition = provider.getCurrentIndex();
   // reset the provider to the start index
   provider.setPosition(startIndex);
 
-  return endIndex;
+  return result;
 }
 
-void KnuthPlassLayoutStrategy::layoutAndRender(const std::vector<Word>& words, TextRenderer& renderer, int16_t x,
-                                               int16_t y, int16_t maxWidth, int16_t lineHeight, int16_t lineCount,
-                                               int16_t maxY, TextAlignment alignment, bool paragraphEnd) {
-  // Calculate line breaks using Knuth-Plass algorithm
-  std::vector<size_t> breaks = calculateBreaks(words, maxWidth);
-
-  if (lineCount != breaks.size() + 1) {
-    lineCountMismatch_ = true;
-    expectedLineCount_ = lineCount;
-    actualLineCount_ = breaks.size() + 1;
-    Serial.print("Warning: line count mismatch! Expected ");
-    Serial.print(lineCount);
-    Serial.print(", got ");
-    Serial.print(breaks.size() + 1);
-    Serial.println();
-  }
-
-  // Render lines
-  size_t lineStart = 0;
-
-  // Render each line
-  for (size_t breakIdx = 0; breakIdx <= breaks.size(); breakIdx++) {
-    size_t lineEnd = (breakIdx < breaks.size()) ? breaks[breakIdx] : words.size();
-
-    if (lineStart >= lineEnd) {
-      break;
+void KnuthPlassLayoutStrategy::renderPage(const PageLayout& layout, TextRenderer& renderer,
+                                          const LayoutConfig& config) {
+  for (const auto& line : layout.lines) {
+    for (const auto& word : line) {
+      renderer.setCursor(word.x, word.y);
+      renderer.print(word.text);
     }
-
-    bool isLastLine = (breakIdx == breaks.size()) && paragraphEnd;
-    size_t numWords = lineEnd - lineStart;
-    size_t numSpaces = (numWords > 1) ? numWords - 1 : 0;
-
-    if (isLastLine || numSpaces == 0) {
-      // Last line: use alignment, no justification
-      int16_t lineWidth = 0;
-      for (size_t i = lineStart; i < lineEnd; i++) {
-        lineWidth += words[i].width;
-        if (i < lineEnd - 1) {
-          lineWidth += spaceWidth_;
-        }
-      }
-
-      int16_t xPos = x;
-      if (alignment == ALIGN_CENTER) {
-        xPos = x + (maxWidth - lineWidth) / 2;
-      } else if (alignment == ALIGN_RIGHT) {
-        xPos = x + maxWidth - lineWidth;
-      }
-
-      if (renderingEnabled_) {
-        int16_t currentX = xPos;
-        for (size_t i = lineStart; i < lineEnd; i++) {
-          renderer.setCursor(currentX, y);
-          renderer.print(words[i].text);
-          currentX += words[i].width;
-          if (i < lineEnd - 1) {
-            currentX += spaceWidth_;
-          }
-        }
-      }
-    } else {
-      // Non-last line: justify by distributing space evenly
-      int16_t totalWordWidth = 0;
-      for (size_t i = lineStart; i < lineEnd; i++) {
-        totalWordWidth += words[i].width;
-      }
-
-      // Calculate space to distribute between words
-      int16_t totalSpaceWidth = maxWidth - totalWordWidth;
-      float spacePerGap = (float)totalSpaceWidth / (float)numSpaces;
-
-      // Render justified line
-      int16_t currentX = x;
-      float accumulatedSpace = 0.0f;
-
-      if (spacePerGap > 16 * spaceWidth_) {
-        // Limit maximum space stretch to avoid extreme gaps
-        spacePerGap = std::max(spacePerGap * 0.25f, (float)spaceWidth_);
-      }
-
-      if (renderingEnabled_) {
-        for (size_t i = lineStart; i < lineEnd; i++) {
-          renderer.setCursor(currentX, y);
-          renderer.print(words[i].text);
-          currentX += words[i].width;
-
-          if (i < lineEnd - 1) {
-            accumulatedSpace += spacePerGap;
-            int16_t spaceToAdd = (int16_t)accumulatedSpace;
-            currentX += spaceToAdd;
-            accumulatedSpace -= spaceToAdd;
-          }
-        }
-      }
-    }
-
-    lineStart = lineEnd;
-    y += lineHeight;
   }
-
-  return;
 }
 
 std::vector<size_t> KnuthPlassLayoutStrategy::calculateBreaks(const std::vector<Word>& words, int16_t maxWidth) {

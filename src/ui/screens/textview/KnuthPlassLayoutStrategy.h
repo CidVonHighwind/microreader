@@ -31,11 +31,18 @@ class KnuthPlassLayoutStrategy : public LayoutStrategy {
   }
 
   // Main interface implementation
-  int layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config,
-                 bool disableRendering = false) override;
+  PageLayout layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) override;
+  void renderPage(const PageLayout& layout, TextRenderer& renderer, const LayoutConfig& config) override;
 
  private:
   // spaceWidth_ is defined in base class
+
+  struct ParagraphLayoutInfo {
+    std::vector<Word> words;
+    std::vector<size_t> breaks;
+    bool paragraphEnd;
+    int16_t yStart;
+  };
 
   // Knuth-Plass parameters
   static constexpr float INFINITY_PENALTY = 10000.0f;
@@ -52,14 +59,9 @@ class KnuthPlassLayoutStrategy : public LayoutStrategy {
   };
 
   // Helper methods
-  void layoutAndRender(const std::vector<Word>& words, TextRenderer& renderer, int16_t x, int16_t y, int16_t maxWidth,
-                       int16_t lineHeight, int16_t lineCount, int16_t maxY, TextAlignment alignment,
-                       bool paragraphEnd = true);
   std::vector<size_t> calculateBreaks(const std::vector<Word>& words, int16_t maxWidth);
   float calculateBadness(int16_t actualWidth, int16_t targetWidth);
   float calculateDemerits(float badness, bool isLastLine);
-
-  bool renderingEnabled_ = true;  // Controls whether to actually render text
 
   // Line count mismatch tracking for testing
   bool lineCountMismatch_ = false;

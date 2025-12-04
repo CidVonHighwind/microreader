@@ -15,12 +15,8 @@ class GreedyLayoutStrategy : public LayoutStrategy {
   }
 
   // Main interface implementation
-  int layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config,
-                 bool disableRendering = false) override;
-
- private:
-  void renderLine(const std::vector<LayoutStrategy::Word>& line, TextRenderer& renderer, int16_t x, int16_t y,
-                  int16_t maxWidth, TextAlignment alignment);
+  PageLayout layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) override;
+  void renderPage(const PageLayout& layout, TextRenderer& renderer, const LayoutConfig& config) override;
 
  public:
   // Test-only public wrapper to exercise internal line layout helpers from unit tests.

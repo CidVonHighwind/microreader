@@ -93,7 +93,12 @@ void runTestConfiguration(const TestRun& testRun, TestUtils::TestRunner& runner,
       knuthPlassLayout->resetLineCountMismatch();
     }
 
-    int endPos = layout->layoutText(provider, renderer, layoutConfig, testRun.disableRendering);
+    LayoutStrategy::PageLayout pageLayout = layout->layoutText(provider, renderer, layoutConfig);
+    int endPos = pageLayout.endPosition;
+
+    if (!testRun.disableRendering) {
+      layout->renderPage(pageLayout, renderer, layoutConfig);
+    }
 
     // Check for line count mismatch in KnuthPlass layout
     if (knuthPlassLayout && knuthPlassLayout->hasLineCountMismatch()) {
@@ -125,7 +130,12 @@ void runTestConfiguration(const TestRun& testRun, TestUtils::TestRunner& runner,
         display.clearScreen(0xFF);
       }
       provider.setPosition(computedPrevStart);
-      int computedPrevEnd = layout->layoutText(provider, renderer, layoutConfig, testRun.disableRendering);
+      LayoutStrategy::PageLayout prevLayout = layout->layoutText(provider, renderer, layoutConfig);
+      int computedPrevEnd = prevLayout.endPosition;
+
+      if (!testRun.disableRendering) {
+        layout->renderPage(prevLayout, renderer, layoutConfig);
+      }
 
       bool startMatch = (computedPrevStart == expectedPrevStart);
       bool endMatch = (computedPrevEnd == expectedPrevEnd);

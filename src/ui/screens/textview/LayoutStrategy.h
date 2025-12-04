@@ -27,6 +27,8 @@ class LayoutStrategy {
   struct Word {
     String text;
     int16_t width;
+    int16_t x;
+    int16_t y;
   };
 
   struct LayoutConfig {
@@ -48,6 +50,11 @@ class LayoutStrategy {
     std::vector<int> lineEndPositions;  // provider index after each line
   };
 
+  struct PageLayout {
+    std::vector<std::vector<Word>> lines;
+    int endPosition;  // provider index at end of page
+  };
+
   LayoutStrategy();
   virtual ~LayoutStrategy();
   virtual Type getType() const = 0;
@@ -55,10 +62,12 @@ class LayoutStrategy {
   // Set the language for hyphenation (updates hyphenation strategy)
   void setLanguage(Language language);
 
-  // Main layout method: takes words from a provider and renders them
-  // Returns the provider character index at the end of the page (end position)
-  virtual int layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config,
-                         bool disableRendering = false) = 0;
+  // Main layout method: takes words from a provider and computes layout
+  // Returns page layout with lines and end position
+  virtual PageLayout layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config) = 0;
+
+  // Render a previously computed page layout
+  virtual void renderPage(const PageLayout& layout, TextRenderer& renderer, const LayoutConfig& config) = 0;
 
   // Calculate the start position of the previous page given current position
   // Calculate the start position of the previous page. A default implementation is
