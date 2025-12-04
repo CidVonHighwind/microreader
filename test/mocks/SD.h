@@ -33,6 +33,14 @@ struct MockFile {
     currentPos += toRead;
     return toRead;
   }
+  int read() {
+    if (!isOpen || currentPos >= content.size())
+      return -1;
+    return static_cast<unsigned char>(content[currentPos++]);
+  }
+  bool available() {
+    return isOpen && currentPos < content.size();
+  }
   void close() {
     isOpen = false;
     content.clear();
@@ -41,7 +49,7 @@ struct MockFile {
 };
 
 struct MockSD {
-  MockFile open(const char* path) {
+  MockFile open(const char* path, int mode = 0) {
     MockFile f;
     std::ifstream in(path, std::ios::binary);
     if (in.is_open()) {
@@ -55,7 +63,18 @@ struct MockSD {
     }
     return f;
   }
+  bool exists(const char* path) {
+    std::ifstream in(path);
+    return in.good();
+  }
+  bool mkdir(const char* path) {
+    return true;  // Mock implementation
+  }
 };
 
 extern MockSD SD;
 typedef MockFile File;
+
+// File open modes
+#define FILE_READ 0
+#define FILE_WRITE 1

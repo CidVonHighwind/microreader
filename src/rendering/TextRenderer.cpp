@@ -62,25 +62,46 @@ static uint32_t decodeUtf8Codepoint(const unsigned char*& p) {
   return UTF8_REPLACEMENT_CHAR;
 }
 
+// Initialize the glyph map for fast lookup
+void initFontGlyphMap(SimpleGFXfont* font) {
+  if (!font || font->glyphCount == 0) {
+    return;
+  }
+
+  // Create the map if it doesn't exist
+  if (!font->glyphMap) {
+    font->glyphMap = new std::unordered_map<uint32_t, uint16_t>();
+  }
+
+  // Clear and rebuild
+  font->glyphMap->clear();
+  font->glyphMap->reserve(font->glyphCount);
+
+  for (uint16_t i = 0; i < font->glyphCount; i++) {
+    (*font->glyphMap)[font->glyph[i].codepoint] = i;
+  }
+}
+
 // Helper function to find a glyph index by codepoint
 static int findGlyphIndex(const SimpleGFXfont* font, uint32_t codepoint) {
-  if (!font) {
+  if (!font || !font->glyphMap) {
     return -1;
   }
 
-  for (uint16_t i = 0; i < font->glyphCount; ++i) {
-    if (font->glyph[i].codepoint == codepoint) {
-      return static_cast<int>(i);
-    }
-  }
-  return -1;
+  auto it = font->glyphMap->find(codepoint);
+  return (it != font->glyphMap->end()) ? it->second : -1;
 }
 
 TextRenderer::TextRenderer(EInkDisplay& display) : display(display) {
   Serial.printf("[%lu] TextRenderer: Constructor called\n", millis());
 }
 
-void TextRenderer::drawPixel(int16_t x, int16_t y, uint16_t color) {
+void TextRenderer::drawPixel(int16_t x, int16_t y, bool state) {
+  // Early return if no framebuffer is set
+  if (!frameBuffer) {
+    return;
+  }
+
   // Bounds checking (portrait: 480x800)
   if (x < 0 || x >= EInkDisplay::DISPLAY_HEIGHT || y < 0 || y >= EInkDisplay::DISPLAY_WIDTH) {
     return;
@@ -91,61 +112,24 @@ void TextRenderer::drawPixel(int16_t x, int16_t y, uint16_t color) {
   int16_t rotatedX = y;
   int16_t rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - x;
 
-  // Get frame buffer
-  uint8_t* frameBuffer = display.getFrameBuffer();
-
   // Calculate byte position and bit position
   uint16_t byteIndex = rotatedY * EInkDisplay::DISPLAY_WIDTH_BYTES + (rotatedX / 8);
   uint8_t bitPosition = 7 - (rotatedX % 8);  // MSB first
 
-  // Set or clear the bit (0 = black, 1 = white in e-ink)
-  if (color == COLOR_BLACK) {
-    frameBuffer[byteIndex] &= ~(1 << bitPosition);  // Clear bit (black)
+  // Set or clear the bit
+  if (state) {
+    frameBuffer[byteIndex] &= ~(1 << bitPosition);  // Clear bit
   } else {
-    frameBuffer[byteIndex] |= (1 << bitPosition);  // Set bit (white)
+    frameBuffer[byteIndex] |= (1 << bitPosition);  // Set bit
   }
 }
 
-void TextRenderer::drawPixelGray(int16_t x, int16_t y, bool bw, bool lsb, bool msb) {
-  // Bounds checking (portrait: 480x800)
-  if (x < 0 || x >= EInkDisplay::DISPLAY_HEIGHT || y < 0 || y >= EInkDisplay::DISPLAY_WIDTH) {
-    return;
-  }
+void TextRenderer::setFrameBuffer(uint8_t* buffer) {
+  frameBuffer = buffer;
+}
 
-  // Rotate coordinates: portrait (480x800) -> landscape (800x480)
-  // Rotation: 90 degrees clockwise
-  int16_t rotatedX = y;
-  int16_t rotatedY = EInkDisplay::DISPLAY_HEIGHT - 1 - x;
-
-  // Get buffers
-  uint8_t* bwBuffer = display.getFrameBuffer();
-  uint8_t* lsbBuffer = display.getFrameBufferLSB();
-  uint8_t* msbBuffer = display.getFrameBufferMSB();
-
-  // Calculate byte position and bit position
-  uint16_t byteIndex = rotatedY * EInkDisplay::DISPLAY_WIDTH_BYTES + (rotatedX / 8);
-  uint8_t bitPosition = 7 - (rotatedX % 8);  // MSB first
-
-  // Set BW buffer
-  if (bw) {
-    bwBuffer[byteIndex] &= ~(1 << bitPosition);
-  }
-
-  if (lsb || msb) {
-    // Set LSB buffer
-    if (lsb) {
-      lsbBuffer[byteIndex] &= ~(1 << bitPosition);
-    } else {
-      lsbBuffer[byteIndex] |= (1 << bitPosition);
-    }
-
-    // Set MSB buffer
-    if (msb) {
-      msbBuffer[byteIndex] &= ~(1 << bitPosition);
-    } else {
-      msbBuffer[byteIndex] |= (1 << bitPosition);
-    }
-  }
+void TextRenderer::setBitmapType(BitmapType type) {
+  bitmapType = type;
 }
 
 void TextRenderer::setFont(const SimpleGFXfont* f) {
@@ -154,10 +138,6 @@ void TextRenderer::setFont(const SimpleGFXfont* f) {
 
 void TextRenderer::setTextColor(uint16_t c) {
   textColor = c;
-}
-
-void TextRenderer::setGrayscaleMode(bool enable) {
-  grayscaleMode = enable;
 }
 
 void TextRenderer::setCursor(int16_t x, int16_t y) {
@@ -251,9 +231,27 @@ void TextRenderer::drawChar(uint32_t codepoint) {
   }
 
   const SimpleGFXglyph* glyph = &f->glyph[glyphIndex];
-  const uint8_t* bitmap = f->bitmap;
-  const uint8_t* bitmap_gray_lsb = f->bitmap_gray_lsb;
-  const uint8_t* bitmap_gray_msb = f->bitmap_gray_msb;
+
+  // Select the appropriate bitmap based on bitmapType
+  const uint8_t* bitmap = nullptr;
+  switch (bitmapType) {
+    case BITMAP_BW:
+      bitmap = f->bitmap;
+      break;
+    case BITMAP_GRAY_LSB:
+      bitmap = f->bitmap_gray_lsb;
+      break;
+    case BITMAP_GRAY_MSB:
+      bitmap = f->bitmap_gray_msb;
+      break;
+  }
+
+  // If the selected bitmap doesn't exist, skip rendering
+  if (!bitmap) {
+    cursorX += glyph->xAdvance + GLYPH_PADDING;
+    return;
+  }
+
   uint16_t bitmapOffset = glyph->bitmapOffset;
   uint8_t w = glyph->width;
   uint8_t h = glyph->height;
@@ -262,6 +260,11 @@ void TextRenderer::drawChar(uint32_t codepoint) {
 
   // Calculate row stride in bytes (width rounded up to byte boundary)
   uint8_t rowStride = (w + 7) / 8;
+
+  // Cache the grayscale bitmap pointers outside the loop for better performance
+  const uint8_t* bitmap_lsb = f->bitmap_gray_lsb;
+  const uint8_t* bitmap_msb = f->bitmap_gray_msb;
+  bool isGrayscale = (bitmapType != BITMAP_BW);
 
   // Render each pixel in the glyph
   for (uint8_t yy = 0; yy < h; yy++) {
@@ -273,26 +276,18 @@ void TextRenderer::drawChar(uint32_t codepoint) {
       uint16_t byteIndex = bitmapOffset + (yy * rowStride) + (xx / 8);
       uint8_t bitMask = 1 << (7 - (xx % 8));
 
-      if (grayscaleMode && bitmap_gray_lsb && bitmap_gray_msb) {
-        // Grayscale mode - read from all three buffers
-        bool bwBit = (bitmap[byteIndex] & bitMask) != 0;
-        bool lsbBit = (bitmap_gray_lsb[byteIndex] & bitMask) != 0;
-        bool msbBit = (bitmap_gray_msb[byteIndex] & bitMask) != 0;
-
-        drawPixelGray(px, py, !bwBit, !lsbBit, !msbBit);
+      if (isGrayscale) {
+        // skip writing over black/white pixels
+        if ((bitmap_lsb[byteIndex] & bitMask) == 0 || (bitmap_msb[byteIndex] & bitMask) == 0) {
+          drawPixel(px, py, (bitmap[byteIndex] & bitMask) == 0);
+        }
       } else {
-        // Black & white mode - only use main bitmap
-        bool pixelOn = (bitmap[byteIndex] & bitMask) == 0;
-        if (pixelOn) {
-          drawPixel(px, py, textColor);
+        // Check if pixel is set (0 = pixel on in our bitmap format)
+        if ((bitmap[byteIndex] & bitMask) == 0) {
+          drawPixel(px, py, true);
         }
       }
     }
-  }
-
-  if (grayscaleMode && bitmap_gray_lsb && bitmap_gray_msb) {
-    // In grayscale mode, ensure we inform the display to use grayscale drawing
-    display.enableGrayscaleDrawing(true);
   }
 
   // Advance cursor by xAdvance

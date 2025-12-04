@@ -67,21 +67,25 @@ void UIManager::showSleepScreen() {
   display.drawImage(bebop_image, 0, 0, BEBOP_IMAGE_WIDTH, BEBOP_IMAGE_HEIGHT, true);
 
   // Add "Sleeping..." text at the bottom
-  textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
-  textRenderer.setFont(&Font14);
+  {
+    textRenderer.setFrameBuffer(display.getFrameBuffer());
+    textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
+    textRenderer.setFont(&Font14);
 
-  const char* sleepText = "Sleeping...";
-  int16_t x1, y1;
-  uint16_t w, h;
-  textRenderer.getTextBounds(sleepText, 0, 0, &x1, &y1, &w, &h);
-  int16_t centerX = (480 - w) / 2;
+    const char* sleepText = "Sleeping...";
+    int16_t x1, y1;
+    uint16_t w, h;
+    textRenderer.getTextBounds(sleepText, 0, 0, &x1, &y1, &w, &h);
+    int16_t centerX = (480 - w) / 2;
 
-  textRenderer.setCursor(centerX, 780);
-  textRenderer.print(sleepText);
+    textRenderer.setCursor(centerX, 780);
+    textRenderer.print(sleepText);
+  }
 
   // show the image with the grayscale antialiasing
-  display.setGrayscaleBuffers(nullptr, bebop_image_lsb, bebop_image_msb);
   display.displayBuffer(EInkDisplay::FULL_REFRESH);
+  display.copyGrayscaleBuffers(bebop_image_lsb, bebop_image_msb);
+  display.displayGrayBuffer();
 }
 
 void UIManager::prepareForSleep() {

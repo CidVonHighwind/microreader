@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <unordered_map>
 
 // Minimal font struct used by our TextRenderer
 typedef struct {
@@ -14,10 +15,14 @@ typedef struct {
 } SimpleGFXglyph;
 
 typedef struct {
-  const uint8_t* bitmap;           ///< Glyph bitmaps, concatenated
-  const uint8_t* bitmap_gray_lsb;  ///< Glyph bitmaps, concatenated
-  const uint8_t* bitmap_gray_msb;  ///< Glyph bitmaps, concatenated
-  const SimpleGFXglyph* glyph;     ///< Glyph array
-  uint16_t glyphCount;             ///< Number of entries in `glyph`.
-  uint8_t yAdvance;                ///< Newline distance (y axis)
+  const uint8_t* bitmap;                             ///< Glyph bitmaps, concatenated
+  const uint8_t* bitmap_gray_lsb;                    ///< Glyph bitmaps, concatenated
+  const uint8_t* bitmap_gray_msb;                    ///< Glyph bitmaps, concatenated
+  const SimpleGFXglyph* glyph;                       ///< Glyph array
+  uint16_t glyphCount;                               ///< Number of entries in `glyph`.
+  uint8_t yAdvance;                                  ///< Newline distance (y axis)
+  std::unordered_map<uint32_t, uint16_t>* glyphMap;  ///< Runtime lookup map (codepoint -> index)
 } SimpleGFXfont;
+
+// Helper to initialize the glyph map for a font
+void initFontGlyphMap(SimpleGFXfont* font);

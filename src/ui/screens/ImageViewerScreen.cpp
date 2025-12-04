@@ -31,13 +31,17 @@ void ImageViewerScreen::show() {
   switch (index % NUM_SCREENS) {
     case 0:
       Serial.printf("[%lu] ImageViewer: IMAGE 0\n", millis());
-      display.setGrayscaleBuffers(test_image, test_image_lsb, test_image_msb);
+      display.setFramebuffer(test_image);
       display.displayBuffer(EInkDisplay::FAST_REFRESH);
+      display.copyGrayscaleBuffers(test_image_lsb, test_image_msb);
+      display.displayGrayBuffer();
       break;
     case 1:
       Serial.printf("[%lu] ImageViewer: IMAGE 1\n", millis());
-      display.setGrayscaleBuffers(bebop_image, bebop_image_lsb, bebop_image_msb);
+      display.setFramebuffer(bebop_image);
       display.displayBuffer(EInkDisplay::FAST_REFRESH);
+      display.copyGrayscaleBuffers(bebop_image_lsb, bebop_image_msb);
+      display.displayGrayBuffer();
       break;
     case 2:
       Serial.printf("[%lu] ImageViewer: WHITE\n", millis());

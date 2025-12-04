@@ -47,6 +47,10 @@ void FileBrowserScreen::renderSdBrowser() {
   textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
   textRenderer.setFont(&Font27);
 
+  // Set framebuffer to BW buffer for rendering
+  textRenderer.setFrameBuffer(display.getFrameBuffer());
+  textRenderer.setBitmapType(TextRenderer::BITMAP_BW);
+
   // Center the title horizontally (page width is 480 in portrait coordinate system)
   {
     const char* title = "Microreader";
@@ -84,10 +88,12 @@ void FileBrowserScreen::renderSdBrowser() {
     String name = sdFiles[idx];
     // For display, strip the .txt extension if present but keep the stored
     // filename intact so confirm() can open it later.
+    // For .epub files, keep the extension visible.
     String displayNameRaw = name;
     if (displayNameRaw.length() >= 4) {
       String ext = displayNameRaw.substring(displayNameRaw.length() - 4);
-      if (ext == String(".txt") || ext == String(".TXT")) {
+      ext.toLowerCase();
+      if (ext == String(".txt")) {
         displayNameRaw = displayNameRaw.substring(0, displayNameRaw.length() - 4);
       }
     }
@@ -177,10 +183,20 @@ void FileBrowserScreen::loadFolder(int maxFiles) {
 
   auto files = sdManager.listFiles("/", maxFiles);
   for (auto& name : files) {
-    // Only include .txt files (case-insensitive .txt/.TXT)
+    // Include .txt and .epub files (case-insensitive)
     if (name.length() >= 4) {
       String ext = name.substring(name.length() - 4);
-      if (ext == String(".txt") || ext == String(".TXT")) {
+      ext.toLowerCase();
+      if (ext == String(".txt")) {
+        sdFiles.push_back(name);
+        continue;  // Avoid checking for .epub if we already matched .txt
+      }
+    }
+    // Check for .epub extension (5 characters)
+    if (name.length() >= 5) {
+      String ext = name.substring(name.length() - 5);
+      ext.toLowerCase();
+      if (ext == String(".epub")) {
         sdFiles.push_back(name);
       }
     }

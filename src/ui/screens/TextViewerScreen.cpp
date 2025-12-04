@@ -8,6 +8,7 @@
 
 #include "../../core/Buttons.h"
 #include "../../core/SDCardManager.h"
+#include "textview/EpubWordProvider.h"
 #include "textview/FileWordProvider.h"
 #include "textview/GreedyLayoutStrategy.h"
 #include "textview/KnuthPlassLayoutStrategy.h"
@@ -194,26 +195,43 @@ void TextViewerScreen::showPage() {
   textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
   textRenderer.setFont(&NotoSans26);
 
-  try {
-    // print out current percentage
-    Serial.print("Page start: ");
-    Serial.println(provider->getCurrentIndex());
+  // print out current percentage
+  Serial.print("Page start: ");
+  Serial.println(provider->getCurrentIndex());
 
-    pageStartIndex = provider->getCurrentIndex();
-    pageEndIndex = layoutStrategy->layoutText(*provider, textRenderer, layoutConfig);
+  unsigned long layoutStart = millis();
+  LayoutStrategy::PageLayout layout = layoutStrategy->layoutText(*provider, textRenderer, layoutConfig);
+  unsigned long layoutEnd = millis();
 
-    Serial.print("Page end: ");
-    Serial.println(pageEndIndex);
-  } catch (const std::exception& e) {
-    Serial.printf("Exception during layout: %s\n", e.what());
-    abort();
-  } catch (...) {
-    Serial.println("Unknown exception during layout");
-    abort();
-  }
+  Serial.print("Layout time: ");
+  Serial.print(layoutEnd - layoutStart);
+  Serial.println(" ms");
+
+  pageStartIndex = provider->getCurrentIndex();
+  pageEndIndex = layout.endPosition;
+
+  unsigned long renderStart = millis();
+
+  // Render to BW buffer
+  textRenderer.setFrameBuffer(display.getFrameBuffer());
+  textRenderer.setBitmapType(TextRenderer::BITMAP_BW);
+  layoutStrategy->renderPage(layout, textRenderer, layoutConfig);
+
+  unsigned long renderEnd = millis();
+
+  Serial.print("Render time: ");
+  Serial.print(renderEnd - renderStart);
+  Serial.println(" ms");
+
+  Serial.print("Page end: ");
+  Serial.println(pageEndIndex);
 
   // page indicator - now shows percentage
   {
+    // Render to BW buffer
+    textRenderer.setFrameBuffer(display.getFrameBuffer());
+    textRenderer.setBitmapType(TextRenderer::BITMAP_BW);
+
     // If there are no more words, set percentage to 100%
     float pagePercentage = 1.0f;
     if (provider->getPercentage(pageEndIndex) < 1.0f)
@@ -229,7 +247,31 @@ void TextViewerScreen::showPage() {
     textRenderer.print(percentageIndicator);
   }
 
+  // display bw parts
   display.displayBuffer(EInkDisplay::FAST_REFRESH);
+
+  // grayscale rendering
+  {
+    textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
+    textRenderer.setFont(&NotoSans26);
+
+    // Render and copy to LSB buffer
+    display.clearScreen(0x00);
+    textRenderer.setFrameBuffer(display.getFrameBuffer());
+    textRenderer.setBitmapType(TextRenderer::BITMAP_GRAY_LSB);
+    layoutStrategy->renderPage(layout, textRenderer, layoutConfig);
+    display.copyGrayscaleLsbBuffers(display.getFrameBuffer());
+
+    // Render and copy to MSB buffer
+    display.clearScreen(0x00);
+    textRenderer.setFrameBuffer(display.getFrameBuffer());
+    textRenderer.setBitmapType(TextRenderer::BITMAP_GRAY_MSB);
+    layoutStrategy->renderPage(layout, textRenderer, layoutConfig);
+    display.copyGrayscaleMsbBuffers(display.getFrameBuffer());
+
+    // display grayscale part
+    display.displayGrayBuffer();
+  }
 }
 
 void TextViewerScreen::nextPage() {
@@ -284,15 +326,39 @@ void TextViewerScreen::openFile(const String& sdPath) {
   delete provider;
   provider = nullptr;
   currentFilePath = sdPath;
-  FileWordProvider* fp = new FileWordProvider(sdPath.c_str());
-  if (!fp->isValid()) {
-    Serial.printf("TextViewerScreen: failed to open %s\n", sdPath.c_str());
-    delete fp;
-    currentFilePath = String("");
-    return;
+
+  // Check if this is an EPUB file
+  bool isEpub = false;
+  if (sdPath.length() >= 5) {
+    String ext = sdPath.substring(sdPath.length() - 5);
+    ext.toLowerCase();
+    if (ext == String(".epub")) {
+      isEpub = true;
+    }
   }
 
-  provider = fp;
+  if (isEpub) {
+    // Use EPUB word provider
+    EpubWordProvider* ep = new EpubWordProvider(sdPath.c_str());
+    if (!ep->isValid()) {
+      Serial.printf("TextViewerScreen: failed to open EPUB %s\n", sdPath.c_str());
+      delete ep;
+      currentFilePath = String("");
+      return;
+    }
+    provider = ep;
+  } else {
+    // Use regular file word provider for text files
+    FileWordProvider* fp = new FileWordProvider(sdPath.c_str());
+    if (!fp->isValid()) {
+      Serial.printf("TextViewerScreen: failed to open %s\n", sdPath.c_str());
+      delete fp;
+      currentFilePath = String("");
+      return;
+    }
+    provider = fp;
+  }
+
   pageStartIndex = 0;
   pageEndIndex = 0;
   // Load a saved position from SD if present

@@ -1041,4 +1041,4 @@ const SimpleGFXglyph Font14Glyphs[] PROGMEM = {
     {4178, 0x256C, 11, 11, 10, -1, -11}
 };
 
-const SimpleGFXfont Font14 PROGMEM = {Font14Bitmaps, nullptr, nullptr, Font14Glyphs, 305, 16};
+extern SimpleGFXfont Font14;

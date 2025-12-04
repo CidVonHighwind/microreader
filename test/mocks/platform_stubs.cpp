@@ -64,6 +64,9 @@ void MockSerial::print(const String& s) {
 // Provide a concrete SPI object for host tests
 MockSPI SPI;
 
+// Provide ESP mock object
+MockESP ESP;
+
 // Provide millis() implementation for host tests
 unsigned long millis() {
   using namespace std::chrono;

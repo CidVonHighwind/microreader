@@ -7,6 +7,10 @@
 #include "core/Buttons.h"
 #include "core/EInkDisplay.h"
 #include "core/SDCardManager.h"
+#include "rendering/SimpleFont.h"
+#include "resources/fonts/Font14.h"
+#include "resources/fonts/Font27.h"
+#include "resources/fonts/NotoSans26.h"
 #include "ui/UIManager.h"
 
 // USB detection pin
@@ -127,10 +131,19 @@ void setup() {
     verifyWakeupLongPress();
   }
 
+  delay(1000);  // Allow time for serial to initialize
+
   Serial.println("\n=================================");
   Serial.println("  MicroReader - ESP32-C3 E-Ink");
   Serial.println("=================================");
   Serial.println();
+
+  // Initialize font glyph maps for fast lookup
+  Serial.println("Initializing font lookup maps...");
+  initFontGlyphMap(&Font14);
+  initFontGlyphMap(&Font27);
+  initFontGlyphMap(&NotoSans26);
+  Serial.println("Font maps initialized");
 
   // Initialize buttons
   buttons.begin();
@@ -147,7 +160,8 @@ void setup() {
   // Write debug log
   writeDebugLog();
 
-  // Initialize display driver (handles SPI, display init, and configuration)
+  // Initialize display driver FIRST (allocate frame buffers before EPUB test to avoid fragmentation)
+  Serial.printf("Free memory before display init: %d bytes\n", ESP.getFreeHeap());
   einkDisplay.begin();
 
   // Initialize display controller (handles application logic)
@@ -159,7 +173,7 @@ void setup() {
 void loop() {
   // Print memory stats every second
   static unsigned long lastMemPrint = 0;
-  if (Serial && millis() - lastMemPrint >= 1000) {
+  if (Serial && millis() - lastMemPrint >= 4000) {
     Serial.printf("[%lu] Memory - Free: %d bytes, Total: %d bytes, Min Free: %d bytes\n", millis(), ESP.getFreeHeap(),
                   ESP.getHeapSize(), ESP.getMinFreeHeap());
     lastMemPrint = millis();

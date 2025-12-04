@@ -1637,4 +1637,4 @@ const SimpleGFXglyph Font27Glyphs[] PROGMEM = {
     {15453, 0x256C, 17, 21, 17, 0,  -21}
 };
 
-const SimpleGFXfont Font27 PROGMEM = {Font27Bitmaps, nullptr, nullptr, Font27Glyphs, 305, 29};
+extern SimpleGFXfont Font27;

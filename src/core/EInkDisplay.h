@@ -36,12 +36,20 @@ class EInkDisplay {
   void clearScreen(uint8_t color = 0xFF);
   void drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool fromProgmem = false);
 
-  void setGrayscaleBuffers(const uint8_t* bwBuffer, const uint8_t* lsbBuffer, const uint8_t* msbBuffer);
-  void enableGrayscaleDrawing(bool enable);
-  void grayscaleRevert();
+  void swapBuffers();
+  void setFramebuffer(const uint8_t* bwBuffer);
+
+  void copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* msbBuffer);
+  void copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer);
+  void copyGrayscaleMsbBuffers(const uint8_t* msbBuffer);
 
   void displayBuffer(RefreshMode mode = FAST_REFRESH);
+  void displayGrayBuffer();
+
   void refreshDisplay(RefreshMode mode = FAST_REFRESH);
+
+  // debug function
+  void grayscaleRevert();
 
   // LUT control
   void setCustomLUT(bool enabled, const unsigned char* lutData = nullptr);
@@ -53,12 +61,6 @@ class EInkDisplay {
   uint8_t* getFrameBuffer() {
     return frameBuffer;
   }
-  uint8_t* getFrameBufferLSB() {
-    return frameBuffer_lsb;
-  }
-  uint8_t* getFrameBufferMSB() {
-    return frameBuffer_msb;
-  }
 
   // Save the current framebuffer to a PBM file (desktop/test builds only)
   void saveFrameBufferAsPBM(const char* filename);
@@ -67,16 +69,12 @@ class EInkDisplay {
   // Pin configuration
   int8_t _sclk, _mosi, _cs, _dc, _rst, _busy;
 
-  // Frame buffer
+  // Frame buffer (statically allocated)
   uint8_t frameBuffer0[BUFFER_SIZE];
   uint8_t frameBuffer1[BUFFER_SIZE];
 
-  // grayscale buffers
-  uint8_t frameBuffer_lsb[BUFFER_SIZE];
-  uint8_t frameBuffer_msb[BUFFER_SIZE];
-
-  uint8_t* frameBuffer = frameBuffer0;
-  uint8_t* frameBufferActive = frameBuffer1;
+  uint8_t* frameBuffer;
+  uint8_t* frameBufferActive;
 
   // SPI settings
   SPISettings spiSettings;

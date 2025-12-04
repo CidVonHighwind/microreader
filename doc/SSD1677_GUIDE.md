@@ -463,26 +463,6 @@ The driver implements 4-level grayscale using a multi-pass technique with custom
 2. **Second pass (Grayscale):** Write LSB and MSB grayscale buffers, apply custom grayscale LUT, perform fast refresh
 3. The custom LUT creates intermediate gray levels by controlling pixel voltage phases
 
-### Grayscale Workflow
-
-```c
-// 1. Prepare three buffers
-uint8_t frameBuffer[48000];      // Base BW image
-uint8_t frameBuffer_lsb[48000];  // Grayscale LSB
-uint8_t frameBuffer_msb[48000];  // Grayscale MSB
-
-// 2. Set grayscale mode
-setGrayscaleBuffers(frameBuffer, frameBuffer_lsb, frameBuffer_msb);
-enableGrayscaleDrawing(true);
-
-// 3. Display with automatic grayscale pass
-displayBuffer(FAST_REFRESH);
-// This performs: BW refresh → load grayscale LUT → grayscale refresh
-
-// 4. To revert to pure BW later
-grayscaleRevert();  // Clears grayscale artifacts
-```
-
 ### Grayscale LUT Structure
 
 The driver includes two grayscale LUTs (111 bytes each):

@@ -79,9 +79,21 @@ struct MockSerial {
   void print(const char*);
   void print(int v);
   void print(const String& s);
+  void write(uint8_t c) {
+    putchar(c);
+  }
 };
 
 extern MockSerial Serial;
+
+// Mock ESP class for ESP32-specific functions
+struct MockESP {
+  uint32_t getFreeHeap() {
+    return 100000;  // Return a reasonable fake value
+  }
+};
+
+extern MockESP ESP;
 
 // Host millis() declaration (defined in platform_stubs.cpp)
 unsigned long millis();

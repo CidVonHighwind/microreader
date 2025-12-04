@@ -108,20 +108,30 @@ const unsigned char lut_grayscale_revert[] PROGMEM = {
     0x00, 0x00};
 
 EInkDisplay::EInkDisplay(int8_t sclk, int8_t mosi, int8_t cs, int8_t dc, int8_t rst, int8_t busy)
-    : _sclk(sclk), _mosi(mosi), _cs(cs), _dc(dc), _rst(rst), _busy(busy), customLutActive(false) {
+    : _sclk(sclk),
+      _mosi(mosi),
+      _cs(cs),
+      _dc(dc),
+      _rst(rst),
+      _busy(busy),
+      frameBuffer(nullptr),
+      frameBufferActive(nullptr),
+      customLutActive(false) {
   Serial.printf("[%lu] EInkDisplay: Constructor called\n", millis());
   Serial.printf("[%lu]   SCLK=%d, MOSI=%d, CS=%d, DC=%d, RST=%d, BUSY=%d\n", millis(), sclk, mosi, cs, dc, rst, busy);
-
-  memset(frameBuffer, 0xFF, BUFFER_SIZE);  // Initialize to white
-  Serial.printf("[%lu]   Frame buffer initialized (%lu bytes)\n", millis(), BUFFER_SIZE);
-}
-
-EInkDisplay::~EInkDisplay() {
-  Serial.printf("[%lu] EInkDisplay: Destructor called\n", millis());
 }
 
 void EInkDisplay::begin() {
   Serial.printf("[%lu] EInkDisplay: begin() called\n", millis());
+
+  frameBuffer = frameBuffer0;
+  frameBufferActive = frameBuffer1;
+
+  // Initialize to white
+  memset(frameBuffer0, 0xFF, BUFFER_SIZE);
+  memset(frameBuffer1, 0xFF, BUFFER_SIZE);
+
+  Serial.printf("[%lu]   Static frame buffers (2 x %lu bytes = 96KB)\n", millis(), BUFFER_SIZE);
   Serial.printf("[%lu]   Initializing e-ink display driver...\n", millis());
 
   // Initialize SPI with custom pins
@@ -290,15 +300,15 @@ void EInkDisplay::setRamArea(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
 }
 
 void EInkDisplay::clearScreen(uint8_t color) {
-  // Serial.printf("[%lu]   Clearing frame buffer to 0x%02X...\n", millis(), color);
   memset(frameBuffer, color, BUFFER_SIZE);
-  memset(frameBuffer_lsb, 0x00, BUFFER_SIZE);
-  memset(frameBuffer_msb, 0x00, BUFFER_SIZE);
 }
 
 void EInkDisplay::drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                             bool fromProgmem) {
-  // Serial.printf("[%lu]   Drawing image to frame buffer at (%d,%d) size %dx%d...\n", millis(), x, y, w, h);
+  if (!frameBuffer) {
+    Serial.printf("[%lu]   ERROR: Frame buffer not allocated!\n", millis());
+    return;
+  }
 
   // Calculate bytes per line for the image
   uint16_t imageWidthBytes = w / 8;
@@ -339,22 +349,14 @@ void EInkDisplay::writeRamBuffer(uint8_t ramBuffer, const uint8_t* data, uint32_
   Serial.printf("[%lu]   %s RAM write complete (%lu ms)\n", millis(), bufferName, duration);
 }
 
-void EInkDisplay::setGrayscaleBuffers(const uint8_t* bwBuffer, const uint8_t* lsbBuffer, const uint8_t* msbBuffer) {
-  if (bwBuffer != nullptr) {
-    memcpy(frameBuffer, bwBuffer, BUFFER_SIZE);
-  }
-  if (lsbBuffer != nullptr) {
-    memcpy(frameBuffer_lsb, lsbBuffer, BUFFER_SIZE);
-  }
-  if (msbBuffer != nullptr) {
-    memcpy(frameBuffer_msb, msbBuffer, BUFFER_SIZE);
-  }
-
-  drawGrayscale = true;
+void EInkDisplay::setFramebuffer(const uint8_t* bwBuffer) {
+  memcpy(frameBuffer, bwBuffer, BUFFER_SIZE);
 }
 
-void EInkDisplay::enableGrayscaleDrawing(bool enable) {
-  drawGrayscale = enable;
+void EInkDisplay::swapBuffers() {
+  uint8_t* temp = frameBuffer;
+  frameBuffer = frameBufferActive;
+  frameBufferActive = temp;
 }
 
 void EInkDisplay::grayscaleRevert() {
@@ -364,6 +366,22 @@ void EInkDisplay::grayscaleRevert() {
   setCustomLUT(true, lut_grayscale_revert);
   refreshDisplay(FAST_REFRESH);
   setCustomLUT(false);
+}
+
+void EInkDisplay::copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer) {
+  setRamArea(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+  writeRamBuffer(CMD_WRITE_RAM_BW, lsbBuffer, BUFFER_SIZE);
+}
+
+void EInkDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) {
+  setRamArea(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+  writeRamBuffer(CMD_WRITE_RAM_RED, msbBuffer, BUFFER_SIZE);
+}
+
+void EInkDisplay::copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* msbBuffer) {
+  setRamArea(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+  writeRamBuffer(CMD_WRITE_RAM_BW, lsbBuffer, BUFFER_SIZE);
+  writeRamBuffer(CMD_WRITE_RAM_RED, msbBuffer, BUFFER_SIZE);
 }
 
 void EInkDisplay::displayBuffer(RefreshMode mode) {
@@ -391,27 +409,21 @@ void EInkDisplay::displayBuffer(RefreshMode mode) {
     writeRamBuffer(CMD_WRITE_RAM_RED, frameBufferActive, BUFFER_SIZE);
   }
 
-  // switch active buffer for next time
-  uint8_t* temp = frameBuffer;
-  frameBuffer = frameBufferActive;
-  frameBufferActive = temp;
+  // swap active buffer for next time
+  swapBuffers();
 
   // Refresh the display
   refreshDisplay(mode);
+}
 
-  if (drawGrayscale) {
-    drawGrayscale = false;
-    inGrayscaleMode = true;
+void EInkDisplay::displayGrayBuffer() {
+  drawGrayscale = false;
+  inGrayscaleMode = true;
 
-    // grayscale pass
-    writeRamBuffer(CMD_WRITE_RAM_BW, frameBuffer_lsb, BUFFER_SIZE);
-    writeRamBuffer(CMD_WRITE_RAM_RED, frameBuffer_msb, BUFFER_SIZE);
-
-    // activate the custom LUT for grayscale rendering and refresh
-    setCustomLUT(true, lut_grayscale);
-    refreshDisplay(FAST_REFRESH);
-    setCustomLUT(false);
-  }
+  // activate the custom LUT for grayscale rendering and refresh
+  setCustomLUT(true, lut_grayscale);
+  refreshDisplay(FAST_REFRESH);
+  setCustomLUT(false);
 }
 
 void EInkDisplay::refreshDisplay(RefreshMode mode) {
@@ -432,24 +444,23 @@ void EInkDisplay::refreshDisplay(RefreshMode mode) {
   // 0   | 01  | CLOCK_OFF               | Disable internal oscillator
 
   // Select appropriate display mode based on refresh type
-  uint8_t displayMode;
+  uint8_t displayMode = 0x00;
 
-  // enable counter and analog is not already on
+  // Enable counter and analog if not already on
   if (!isScreenOn) {
     isScreenOn = true;
     displayMode |= 0xC0;  // Set CLOCK_ON and ANALOG_ON bits
   }
 
   if (mode == FULL_REFRESH) {
-    displayMode |= 0x34;  // Full refresh
+    displayMode |= 0x34;
   } else if (mode == HALF_REFRESH) {
-    // write high temp to the register for a faster refresh
-    // this is not a real mode
+    // Write high temp to the register for a faster refresh
     sendCommand(CMD_WRITE_TEMP);
     sendData(0x5A);
     displayMode |= 0xD4;
-  } else {                                         // FAST_REFRESH
-    displayMode |= customLutActive ? 0x0C : 0x1C;  // turn off stuff
+  } else {  // FAST_REFRESH
+    displayMode |= customLutActive ? 0x0C : 0x1C;
   }
 
   // Power on and refresh display
@@ -491,8 +502,6 @@ void EInkDisplay::setCustomLUT(bool enabled, const unsigned char* lutData) {
     Serial.printf("[%lu]   Custom LUT loaded\n", millis());
   } else {
     customLutActive = false;
-    // Reinitialize display to restore default LUT
-    // initDisplayController();
     Serial.printf("[%lu]   Custom LUT disabled\n", millis());
   }
 }
