@@ -27,6 +27,7 @@ class LayoutStrategy {
   struct Word {
     String text;
     int16_t width;
+    bool forceBreakAfter = false;
   };
 
   struct LayoutConfig {

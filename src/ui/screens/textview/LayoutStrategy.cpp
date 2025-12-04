@@ -73,7 +73,7 @@ std::vector<LayoutStrategy::Word> LayoutStrategy::getNextLine(WordProvider& prov
         int16_t bx2 = 0, by2 = 0;
         uint16_t bw2 = 0, bh2 = 0;
         renderer.getTextBounds(firstPart.c_str(), 0, 0, &bx2, &by2, &bw2, &bh2);
-        line.push_back({firstPart, static_cast<int16_t>(bw2)});
+        line.push_back({firstPart, static_cast<int16_t>(bw2), true});
 
         // Move provider position: after the split point
         // For existing hyphens, skip past the hyphen character (+1)

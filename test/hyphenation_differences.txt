@@ -1,0 +1,69 @@
+Knuth-Plass hyphenation differences
+Sample: data/german_hyphenation_sample.txt
+
+Paragraph 3
+-------------
+Ein Alpenwanderverein veröffentlichte einen Reisebericht über eine mehrtägige Schneeschuhhochtour, bei der Lawinenlageberichte, Wetterumschwünge und Höhenakklimatisation im Mittelpunkt standen. Die Teilnehmenden lobten die zuverlässige Bergführerorganisation, die für konfliktfreie Routenplanung und brückenstabile Übergänge sorgte. Abends im Berghüttenlesezimmer tauschten sie Geschichten über Schokoladenkrokantknusperriegel, Outdoorwasseraufbereitungssysteme und Stirnlampenakkuladestationen aus.
+
+Legacy layout:
+  Ein Alpenwanderve-
+  rein veröffentlichte
+  einen Reisebericht
+  über eine mehrtä-
+  gige Schneeschuh-
+  hochtour, bei der
+  Lawinenlageberich-
+  te, Wetterum-
+  schwünge und Hö-
+  henakklimatisation
+  im Mittelpunkt stan-
+  den. Die Teilneh-
+  menden lobten die
+  zuverlässige Berg-
+  führerorganisation,
+  die für konfliktfreie
+  Routenplanung
+  und brückenstabile
+  Über- gänge sorgte.
+  Abends im Berghüt-
+  tenlesezimmer tau-
+  schten sie Geschich-
+  ten über Schokola-
+  denkrokantknu-
+  sperriegel, Outdoor-
+  wasseraufberei-
+  tungssysteme und
+  Stirnlampenakkula-
+  destationen aus.
+
+Fixed layout:
+  Ein Alpenwanderve-
+  rein veröffentlichte
+  einen Reisebericht
+  über eine mehrtä-
+  gige Schneeschuh-
+  hochtour, bei der
+  Lawinenlageberich-
+  te, Wetterum-
+  schwünge und Hö-
+  henakklimatisation
+  im Mittelpunkt stan-
+  den. Die Teilneh-
+  menden lobten die
+  zuverlässige Berg-
+  führerorganisation,
+  die für konfliktfreie
+  Routenplanung und
+  brückenstabile Über-
+  gänge sorgte.
+  Abends im Berghüt-
+  tenlesezimmer tau-
+  schten sie Geschich-
+  ten über Schokola-
+  denkrokantknu-
+  sperriegel, Outdoor-
+  wasseraufberei-
+  tungssysteme und
+  Stirnlampenakkula-
+  destationen aus.
+

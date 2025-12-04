@@ -34,6 +34,15 @@ class KnuthPlassLayoutStrategy : public LayoutStrategy {
   int layoutText(WordProvider& provider, TextRenderer& renderer, const LayoutConfig& config,
                  bool disableRendering = false) override;
 
+#ifdef TEST_BUILD
+  std::vector<size_t> test_calculateBreaks(const std::vector<Word>& words, int16_t maxWidth) {
+    return calculateBreaks(words, maxWidth);
+  }
+#endif
+
+  // Test helper to compare current behavior with legacy forced-break handling
+  void setIgnoreForceBreakAfterForTest(bool ignore) { ignoreForceBreakAfterForTest_ = ignore; }
+
  private:
   // spaceWidth_ is defined in base class
 
@@ -58,6 +67,8 @@ class KnuthPlassLayoutStrategy : public LayoutStrategy {
   std::vector<size_t> calculateBreaks(const std::vector<Word>& words, int16_t maxWidth);
   float calculateBadness(int16_t actualWidth, int16_t targetWidth);
   float calculateDemerits(float badness, bool isLastLine);
+
+  bool ignoreForceBreakAfterForTest_ = false;
 
   bool renderingEnabled_ = true;  // Controls whether to actually render text
 

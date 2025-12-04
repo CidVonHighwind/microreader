@@ -216,11 +216,13 @@ std::vector<size_t> KnuthPlassLayoutStrategy::calculateBreaks(const std::vector<
       }
       lineWidth += words[j].width;
 
-      // Check if line is too wide
-      if (lineWidth > maxWidth) {
+      bool shouldForceBreak = (j > i && words[j - 1].forceBreakAfter && !ignoreForceBreakAfterForTest_);
+
+      // Check if line is too wide or the previous word mandates a break
+      if (lineWidth > maxWidth || shouldForceBreak) {
         // Special case: if this is the first word on the line and it's too wide,
         // we must still place it on its own line to make progress
-        if (j == i) {
+        if (!shouldForceBreak && j == i) {
           // Force this oversized word onto its own line with a high but not infinite penalty
           // Use a large fixed penalty (100) rather than INFINITY_PENALTY to allow progress
           float demerits = 100.0f;
