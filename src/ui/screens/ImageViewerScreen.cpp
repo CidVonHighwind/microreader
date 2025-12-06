@@ -12,17 +12,17 @@ ImageViewerScreen::ImageViewerScreen(EInkDisplay& display, UIManager& uiManager)
     : display(display), uiManager(uiManager) {}
 
 void ImageViewerScreen::handleButtons(Buttons& buttons) {
-  if (buttons.wasPressed(Buttons::LEFT)) {
+  if (buttons.isPressed(Buttons::LEFT)) {
     index = (index - 1 + NUM_SCREENS) % NUM_SCREENS;
     show();
-  } else if (buttons.wasPressed(Buttons::RIGHT)) {
+  } else if (buttons.isPressed(Buttons::RIGHT)) {
     index = (index + 1) % NUM_SCREENS;
     show();
-  } else if (buttons.wasPressed(Buttons::VOLUME_UP)) {
+  } else if (buttons.isPressed(Buttons::VOLUME_UP)) {
     uiManager.showScreen(UIManager::ScreenId::FileBrowser);
-  } else if (buttons.wasPressed(Buttons::VOLUME_DOWN)) {
+  } else if (buttons.isPressed(Buttons::VOLUME_DOWN)) {
     display.refreshDisplay(EInkDisplay::FULL_REFRESH);
-  } else if (buttons.wasPressed(Buttons::BACK)) {
+  } else if (buttons.isPressed(Buttons::BACK)) {
     display.grayscaleRevert();
   }
 }

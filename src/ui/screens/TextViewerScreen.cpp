@@ -150,16 +150,33 @@ void TextViewerScreen::activate() {
 
 // Ensure member function is in class scope
 void TextViewerScreen::handleButtons(Buttons& buttons) {
-  if (buttons.wasPressed(Buttons::BACK)) {
+  // Long press threshold in milliseconds
+  const unsigned long LONG_PRESS_MS = 500;
+
+  if (buttons.isPressed(Buttons::BACK)) {
     // Save current position for the opened book (if any) before leaving
     savePositionToFile();
     saveSettingsToFile();
     uiManager.showScreen(UIManager::ScreenId::FileBrowser);
-  } else if (buttons.wasPressed(Buttons::LEFT)) {
-    nextPage();
-  } else if (buttons.wasPressed(Buttons::RIGHT)) {
-    prevPage();
-  } else if (buttons.wasPressed(Buttons::VOLUME_UP)) {
+  } else if (buttons.isDown(Buttons::LEFT)) {
+    if (buttons.getHoldDuration(Buttons::LEFT) >= LONG_PRESS_MS) {
+      // Long press - jump to next chapter (or end if last chapter)
+      jumpToNextChapter();
+    } else {
+      // Short press - go to next page (or next chapter if at end)
+      nextPage();
+    }
+  } else if (buttons.isDown(Buttons::RIGHT)) {
+    if (buttons.getHoldDuration(Buttons::RIGHT) >= LONG_PRESS_MS) {
+      // Long press - go to chapter start, then previous chapter
+      jumpToPreviousChapter();
+    } else {
+      // Short press - go to previous page
+      prevPage();
+    }
+  }
+
+  if (buttons.isPressed(Buttons::VOLUME_UP)) {
     // switch through alignments (cycle through enum values safely)
     layoutConfig.alignment =
         static_cast<LayoutStrategy::TextAlignment>((static_cast<int>(layoutConfig.alignment) + 1) % 3);
@@ -238,13 +255,22 @@ void TextViewerScreen::showPage() {
       pagePercentage = provider->getPercentage();
 
     textRenderer.setFont(&Font14);
-    String percentageIndicator = String((int)(pagePercentage * 100));
+
+    // Build indicator string: "Chapter X/Y - Z%"
+    String indicator;
+    if (provider->hasChapters()) {
+      int currentChapter = provider->getCurrentChapter() + 1;  // 1-based for display
+      int chapterCount = provider->getChapterCount();
+      indicator = String(currentChapter) + "/" + String(chapterCount) + " - ";
+    }
+    indicator += String((int)(pagePercentage * 100)) + "%";
+
     int16_t x1, y1;
     uint16_t w, h;
-    textRenderer.getTextBounds(percentageIndicator.c_str(), 0, 0, &x1, &y1, &w, &h);
+    textRenderer.getTextBounds(indicator.c_str(), 0, 0, &x1, &y1, &w, &h);
     int16_t centerX = (480 - w) / 2;
     textRenderer.setCursor(centerX, 790);
-    textRenderer.print(percentageIndicator);
+    textRenderer.print(indicator);
   }
 
   // display bw parts
@@ -275,16 +301,50 @@ void TextViewerScreen::showPage() {
 }
 
 void TextViewerScreen::nextPage() {
-  // Check if there are more words before advancing
-  if (provider && provider->getPercentage(pageEndIndex) < 1.0f) {
+  if (!provider)
+    return;
+
+  // Check if there are more words in current chapter
+  if (provider->getPercentage(pageEndIndex) < 1.0f) {
     provider->setPosition(pageEndIndex);
     showPage();
+  } else {
+    // End of chapter - try to move to next chapter
+    if (provider->hasChapters()) {
+      int currentChapter = provider->getCurrentChapter();
+      int chapterCount = provider->getChapterCount();
+      if (currentChapter + 1 < chapterCount) {
+        provider->setChapter(currentChapter + 1);
+        pageStartIndex = 0;
+        pageEndIndex = 0;
+        showPage();
+      }
+    }
   }
 }
 
 void TextViewerScreen::prevPage() {
-  if (!provider || pageStartIndex <= 0)
+  if (!provider)
     return;
+
+  // If at the beginning of current chapter, try to go to previous chapter
+  if (pageStartIndex <= 0) {
+    if (provider->hasChapters()) {
+      int currentChapter = provider->getCurrentChapter();
+      if (currentChapter > 0) {
+        // Go to previous chapter and position at the end
+        provider->setChapter(currentChapter - 1);
+        // Go to end of previous chapter by setting position to a large value
+        // then use getPreviousPageStart to find the last page
+        provider->setPosition(0x7FFFFFFF);  // Seek to end
+        pageStartIndex = provider->getCurrentIndex();
+        pageEndIndex = pageStartIndex;
+      }
+    }
+    // If we can't go to previous chapter (or no chapters), do nothing
+    if (pageStartIndex <= 0)
+      return;
+  }
 
   textRenderer.setFont(&NotoSans26);
 
@@ -296,6 +356,59 @@ void TextViewerScreen::prevPage() {
 
   // Do normal forward layout from this position
   showPage();
+}
+
+void TextViewerScreen::jumpToNextChapter() {
+  if (!provider)
+    return;
+
+  if (provider->hasChapters()) {
+    int currentChapter = provider->getCurrentChapter();
+    int chapterCount = provider->getChapterCount();
+    if (currentChapter + 1 < chapterCount) {
+      // Go to next chapter
+      provider->setChapter(currentChapter + 1);
+      pageStartIndex = 0;
+      pageEndIndex = 0;
+      showPage();
+    } else {
+      // At last chapter - go to end of chapter
+      provider->setPosition(0x7FFFFFFF);
+      pageStartIndex = provider->getCurrentIndex();
+      pageEndIndex = pageStartIndex;
+      showPage();
+    }
+  } else {
+    // No chapters - go to end of document
+    provider->setPosition(0x7FFFFFFF);
+    pageStartIndex = provider->getCurrentIndex();
+    pageEndIndex = pageStartIndex;
+    showPage();
+  }
+}
+
+void TextViewerScreen::jumpToPreviousChapter() {
+  if (!provider)
+    return;
+
+  // If not at start, go to start first
+  if (pageStartIndex > 0) {
+    provider->setPosition(0);
+    pageStartIndex = 0;
+    pageEndIndex = 0;
+    showPage();
+  } else if (provider->hasChapters()) {
+    // Already at chapter start - go to previous chapter
+    int currentChapter = provider->getCurrentChapter();
+    if (currentChapter > 0) {
+      provider->setChapter(currentChapter - 1);
+      pageStartIndex = 0;
+      pageEndIndex = 0;
+      showPage();
+    }
+    // If at first chapter, already at start - do nothing
+  }
+  // If no chapters and at start, already at beginning - do nothing
 }
 
 void TextViewerScreen::loadTextFromString(const String& content) {
@@ -372,7 +485,9 @@ void TextViewerScreen::savePositionToFile() {
   // Build pos file name by appending ".pos" to path
   String posPath = currentFilePath + String(".pos");
   int idx = provider->getCurrentIndex();
-  String content = String(idx);
+  int chapter = provider->getCurrentChapter();
+  // Format: chapter,position
+  String content = String(chapter) + "," + String(idx);
   if (!sdManager.writeFile(posPath.c_str(), content)) {
     Serial.printf("Failed to save position for %s\n", currentFilePath.c_str());
   }
@@ -382,14 +497,34 @@ void TextViewerScreen::loadPositionFromFile() {
   if (currentFilePath.length() == 0 || !provider)
     return;
   String posPath = currentFilePath + String(".pos");
-  char buf[32];
+  char buf[64];
   size_t r = sdManager.readFileToBuffer(posPath.c_str(), buf, sizeof(buf));
   if (r > 0) {
-    int saved = atoi(buf);
-    if (saved < 0)
-      saved = 0;
-    provider->setPosition(saved);
-    pageStartIndex = saved;
+    buf[sizeof(buf) - 1] = '\0';
+    // Parse format: chapter,position (or just position for backwards compatibility)
+    int chapter = 0;
+    int position = 0;
+    char* comma = strchr(buf, ',');
+    if (comma) {
+      // New format: chapter,position
+      *comma = '\0';
+      chapter = atoi(buf);
+      position = atoi(comma + 1);
+    } else {
+      // Old format: just position (assume chapter 0)
+      position = atoi(buf);
+    }
+    if (chapter < 0)
+      chapter = 0;
+    if (position < 0)
+      position = 0;
+
+    // Set chapter first (if provider supports it), then position within chapter
+    if (provider->hasChapters() && chapter > 0) {
+      provider->setChapter(chapter);
+    }
+    provider->setPosition(position);
+    pageStartIndex = position;
   } else {
     pageStartIndex = 0;
   }

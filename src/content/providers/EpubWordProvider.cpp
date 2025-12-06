@@ -2,8 +2,6 @@
 
 #include <Arduino.h>
 
-#include "../epub/EpubReader.h"
-
 // Helper to check if two strings are equal (case-insensitive)
 static bool equalsIgnoreCase(const String& str, const char* target) {
   if (str.length() != strlen(target))
@@ -51,9 +49,10 @@ static bool isBlockElement(const String& name) {
 }
 
 EpubWordProvider::EpubWordProvider(const char* path, size_t bufSize)
-    : bufSize_(bufSize), prevFilePos_(0), fileSize_(0) {
+    : bufSize_(bufSize), prevFilePos_(0), fileSize_(0), currentChapter_(0) {
   epubPath_ = String(path);
   valid_ = false;
+  isEpub_ = false;
 
   // Check if this is a direct XHTML file or an EPUB
   String pathStr = String(path);
@@ -63,60 +62,46 @@ EpubWordProvider::EpubWordProvider(const char* path, size_t bufSize)
                  (len > 4 && pathStr.substring(len - 4) == ".htm");
 
   if (isXhtml) {
-    // Direct XHTML file - use it directly
+    // Direct XHTML file - use it directly (no chapter support)
+    isEpub_ = false;
     xhtmlPath_ = pathStr;
+
+    // Open the XHTML file with SimpleXmlParser for buffered reading
+    parser_ = new SimpleXmlParser();
+    if (!parser_->open(xhtmlPath_.c_str())) {
+      delete parser_;
+      parser_ = nullptr;
+      return;
+    }
+
+    // Get file size for percentage calculation
+    fileSize_ = parser_->getFileSize();
+
+    // Position parser at first node for reading
+    parser_->read();
+    prevFilePos_ = 0;
+    insideParagraph_ = false;
+
+    valid_ = true;
   } else {
-    // EPUB file - extract and get XHTML
-    EpubReader epubReader(path);
-    if (!epubReader.isValid()) {
+    // EPUB file - create and keep EpubReader for chapter navigation
+    isEpub_ = true;
+    epubReader_ = new EpubReader(path);
+    if (!epubReader_->isValid()) {
+      delete epubReader_;
+      epubReader_ = nullptr;
       return;
     }
 
-    int spineCount = epubReader.getSpineCount();
-
-    const int targetSpineIndex = 7;
-    if (targetSpineIndex >= spineCount) {
+    // Open the first chapter (index 0)
+    if (!openChapter(0)) {
+      delete epubReader_;
+      epubReader_ = nullptr;
       return;
     }
 
-    const SpineItem* spineItem = epubReader.getSpineItem(targetSpineIndex);
-    if (!spineItem) {
-      return;
-    }
-
-    // Build full path: content.opf is at OEBPS/content.opf, so hrefs are relative to OEBPS/
-    String contentOpfPath = epubReader.getContentOpfPath();
-    String baseDir = "";
-    int lastSlash = contentOpfPath.lastIndexOf('/');
-    if (lastSlash >= 0) {
-      baseDir = contentOpfPath.substring(0, lastSlash + 1);
-    }
-    String fullHref = baseDir + spineItem->href;
-
-    // Get the XHTML file (will extract if needed)
-    xhtmlPath_ = epubReader.getFile(fullHref.c_str());
-    if (xhtmlPath_.isEmpty()) {
-      return;
-    }
+    valid_ = true;
   }
-
-  // Open the XHTML file with SimpleXmlParser for buffered reading
-  parser_ = new SimpleXmlParser();
-  if (!parser_->open(xhtmlPath_.c_str())) {
-    delete parser_;
-    parser_ = nullptr;
-    return;
-  }
-
-  // Get file size for percentage calculation
-  fileSize_ = parser_->getFileSize();
-
-  // Position parser at first node for reading
-  parser_->read();
-  prevFilePos_ = 0;
-  insideParagraph_ = false;
-
-  valid_ = true;
 }
 
 EpubWordProvider::~EpubWordProvider() {
@@ -124,6 +109,92 @@ EpubWordProvider::~EpubWordProvider() {
     parser_->close();
     delete parser_;
   }
+  if (epubReader_) {
+    delete epubReader_;
+  }
+}
+
+bool EpubWordProvider::openChapter(int chapterIndex) {
+  if (!epubReader_) {
+    return false;
+  }
+
+  int spineCount = epubReader_->getSpineCount();
+  if (chapterIndex < 0 || chapterIndex >= spineCount) {
+    return false;
+  }
+
+  const SpineItem* spineItem = epubReader_->getSpineItem(chapterIndex);
+  if (!spineItem) {
+    return false;
+  }
+
+  // Build full path: content.opf is at OEBPS/content.opf, so hrefs are relative to OEBPS/
+  String contentOpfPath = epubReader_->getContentOpfPath();
+  String baseDir = "";
+  int lastSlash = contentOpfPath.lastIndexOf('/');
+  if (lastSlash >= 0) {
+    baseDir = contentOpfPath.substring(0, lastSlash + 1);
+  }
+  String fullHref = baseDir + spineItem->href;
+
+  // Get the XHTML file (will extract if needed)
+  String newXhtmlPath = epubReader_->getFile(fullHref.c_str());
+  if (newXhtmlPath.isEmpty()) {
+    return false;
+  }
+
+  // Close existing parser if any
+  if (parser_) {
+    parser_->close();
+    delete parser_;
+    parser_ = nullptr;
+  }
+
+  // Open the new XHTML file
+  parser_ = new SimpleXmlParser();
+  if (!parser_->open(newXhtmlPath.c_str())) {
+    delete parser_;
+    parser_ = nullptr;
+    return false;
+  }
+
+  xhtmlPath_ = newXhtmlPath;
+  currentChapter_ = chapterIndex;
+  fileSize_ = parser_->getFileSize();
+
+  // Position parser at first node for reading
+  parser_->read();
+  prevFilePos_ = 0;
+  insideParagraph_ = false;
+
+  return true;
+}
+
+int EpubWordProvider::getChapterCount() {
+  if (!epubReader_) {
+    return 1;  // Single XHTML file = 1 chapter
+  }
+  return epubReader_->getSpineCount();
+}
+
+int EpubWordProvider::getCurrentChapter() {
+  return currentChapter_;
+}
+
+bool EpubWordProvider::setChapter(int chapterIndex) {
+  if (!isEpub_) {
+    // Direct XHTML file - only chapter 0 is valid
+    return chapterIndex == 0;
+  }
+
+  if (chapterIndex == currentChapter_) {
+    // Already on this chapter, just reset to start
+    reset();
+    return true;
+  }
+
+  return openChapter(chapterIndex);
 }
 
 bool EpubWordProvider::hasNextWord() {
@@ -526,11 +597,15 @@ void EpubWordProvider::setPosition(int index) {
     return;
   }
 
-  size_t filePos = static_cast<size_t>(index);
-  if (filePos < 0)
+  // Clamp position to valid range
+  size_t filePos;
+  if (index < 0) {
     filePos = 0;
-  if (filePos > fileSize_)
+  } else if (static_cast<size_t>(index) > fileSize_) {
     filePos = fileSize_;
+  } else {
+    filePos = static_cast<size_t>(index);
+  }
 
   // First, determine if we're inside a paragraph by seeking and scanning backward
   // Seek to the file position

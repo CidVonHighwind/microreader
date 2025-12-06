@@ -21,14 +21,14 @@ void FileBrowserScreen::begin() {
 
 // Ensure member function is in class scope
 void FileBrowserScreen::handleButtons(Buttons& buttons) {
-  if (buttons.wasPressed(Buttons::CONFIRM)) {
+  if (buttons.isPressed(Buttons::CONFIRM)) {
     confirm();
-  } else if (buttons.wasPressed(Buttons::LEFT)) {
+  } else if (buttons.isPressed(Buttons::LEFT)) {
     selectNext();
-  } else if (buttons.wasPressed(Buttons::RIGHT)) {
+  } else if (buttons.isPressed(Buttons::RIGHT)) {
     selectPrev();
   }
-  //  else if (buttons.wasPressed(Buttons::VOLUME_UP)) {
+  //  else if (buttons.isPressed(Buttons::VOLUME_UP)) {
   //   uiManager.showScreen(UIManager::ScreenId::ImageViewer);
   // }
 }

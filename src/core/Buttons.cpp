@@ -4,14 +4,13 @@ const int Buttons::ADC_THRESHOLDS_1[] = {3470, 2655, 1470, 3};
 const int Buttons::ADC_THRESHOLDS_2[] = {2205, 3};
 const char* Buttons::BUTTON_NAMES[] = {"Back", "Confirm", "Left", "Right", "Volume Up", "Volume Down", "Power"};
 
-Buttons::Buttons()
-    : currentState(0),
-      lastState(0),
-      pressedEvents(0),
-      releasedEvents(0),
-      lastDebounceTime(0),
-      powerButtonPressStart(0),
-      powerButtonWasPressed(false) {}
+Buttons::Buttons() : currentState(0), previousState(0) {
+  // Initialize per-button debounce state
+  for (uint8_t i = 0; i < NUM_BUTTONS; i++) {
+    lastButtonState[i] = 0;
+    lastDebounceTime[i] = 0;
+  }
+}
 
 void Buttons::begin() {
   pinMode(BUTTON_ADC_PIN_1, INPUT);
@@ -61,47 +60,53 @@ uint8_t Buttons::getState() {
 
 void Buttons::update() {
   unsigned long currentTime = millis();
-  uint8_t state = getState();
+  uint8_t rawState = getState();
 
-  // Always clear events first
-  pressedEvents = 0;
-  releasedEvents = 0;
+  // Save current state as previous before updating
+  previousState = currentState;
 
-  // Debounce
-  if (state != lastState) {
-    lastDebounceTime = currentTime;
-    lastState = state;
-  }
+  // Per-button debouncing (only for press, not release)
+  for (uint8_t i = 0; i < NUM_BUTTONS; i++) {
+    uint8_t buttonMask = (1 << i);
+    uint8_t rawButtonState = (rawState & buttonMask) ? 1 : 0;
+    uint8_t currentButtonState = (currentState & buttonMask) ? 1 : 0;
+    uint8_t lastRawState = lastButtonState[i];
 
-  if ((currentTime - lastDebounceTime) > DEBOUNCE_DELAY) {
-    if (state != currentState) {
-      // Calculate pressed and released events
-      pressedEvents = state & ~currentState;
-      releasedEvents = currentState & ~state;
-      currentState = state;
+    // If raw state changed, reset debounce timer for this button
+    if (rawButtonState != lastRawState) {
+      lastDebounceTime[i] = currentTime;
+      lastButtonState[i] = rawButtonState;
+    }
 
-      // Track power button press timing
-      if (pressedEvents & (1 << POWER)) {
-        powerButtonPressStart = currentTime;
-        powerButtonWasPressed = true;
+    // Handle press with debounce, release immediately
+    if (rawButtonState && !currentButtonState) {
+      // Button is being pressed - wait for debounce
+      if ((currentTime - lastDebounceTime[i]) > DEBOUNCE_DELAY) {
+        currentState |= buttonMask;
       }
-      if (releasedEvents & (1 << POWER)) {
-        powerButtonWasPressed = false;
-      }
+    } else if (!rawButtonState && currentButtonState) {
+      // Button is being released - update immediately
+      currentState &= ~buttonMask;
     }
   }
 }
 
-bool Buttons::isPressed(uint8_t buttonIndex) {
+bool Buttons::isDown(uint8_t buttonIndex) {
   return currentState & (1 << buttonIndex);
 }
 
-bool Buttons::wasPressed(uint8_t buttonIndex) {
-  return pressedEvents & (1 << buttonIndex);
+bool Buttons::isPressed(uint8_t buttonIndex) {
+  uint8_t mask = (1 << buttonIndex);
+  return (currentState & mask) && !(previousState & mask);
+}
+
+bool Buttons::wasDown(uint8_t buttonIndex) {
+  return previousState & (1 << buttonIndex);
 }
 
 bool Buttons::wasReleased(uint8_t buttonIndex) {
-  return releasedEvents & (1 << buttonIndex);
+  uint8_t mask = (1 << buttonIndex);
+  return !(currentState & mask) && (previousState & mask);
 }
 
 const char* Buttons::getButtonName(uint8_t buttonIndex) {
@@ -111,6 +116,13 @@ const char* Buttons::getButtonName(uint8_t buttonIndex) {
   return "Unknown";
 }
 
-bool Buttons::isPowerButtonPressed() {
-  return isPressed(POWER);
+bool Buttons::isPowerButtonDown() {
+  return isDown(POWER);
+}
+
+unsigned long Buttons::getHoldDuration(uint8_t buttonIndex) {
+  if (!isDown(buttonIndex)) {
+    return 0;  // Button not held
+  }
+  return millis() - lastDebounceTime[buttonIndex];
 }

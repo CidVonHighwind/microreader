@@ -24,6 +24,8 @@ class TextViewerScreen : public Screen {
 
   void nextPage();
   void prevPage();
+  void jumpToNextChapter();
+  void jumpToPreviousChapter();
 
   void showPage();
 

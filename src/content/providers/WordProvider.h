@@ -44,6 +44,28 @@ class WordProvider {
 
   // Resets the provider to the beginning (optional, for rewinding)
   virtual void reset() = 0;
+
+  // Chapter navigation (for providers that support multiple chapters like EPUB)
+  // Returns the number of chapters/sections (1 for single-file providers)
+  virtual int getChapterCount() {
+    return 1;
+  }
+
+  // Returns the current chapter index (0-based)
+  virtual int getCurrentChapter() {
+    return 0;
+  }
+
+  // Sets the current chapter and optionally resets position to start of chapter
+  // Returns true if successful, false if chapter index is out of range
+  virtual bool setChapter(int chapterIndex) {
+    return chapterIndex == 0;
+  }
+
+  // Returns true if the provider supports multiple chapters
+  virtual bool hasChapters() {
+    return false;
+  }
 };
 
 #endif

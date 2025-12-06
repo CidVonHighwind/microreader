@@ -2,6 +2,8 @@
 #include <FS.h>
 #include <SD.h>
 #include <esp_sleep.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include "core/BatteryMonitor.h"
 #include "core/Buttons.h"
@@ -40,6 +42,15 @@ SDCardManager sdManager(EPD_SCLK, SD_SPI_MISO, EPD_MOSI, SD_SPI_CS, EINK_SPI_CS)
 #define BAT_GPIO0 0
 BatteryMonitor g_battery(BAT_GPIO0);
 UIManager uiManager(einkDisplay, sdManager);
+
+// Button update task - runs continuously to keep button state fresh
+void buttonUpdateTask(void* parameter) {
+  Buttons* btns = static_cast<Buttons*>(parameter);
+  while (true) {
+    btns->update();
+    vTaskDelay(pdMS_TO_TICKS(20));  // Update every 20ms
+  }
+}
 
 // Write debug log to SD card
 void writeDebugLog() {
@@ -147,6 +158,10 @@ void setup() {
   buttons.begin();
   Serial.println("Buttons initialized");
 
+  // Start button update task
+  xTaskCreate(buttonUpdateTask, "btnUpdate", 2048, &buttons, 1, nullptr);
+  Serial.println("Button update task started");
+
   // Initialize SD card manager
   sdManager.begin();
 
@@ -177,12 +192,11 @@ void loop() {
     lastMemPrint = millis();
   }
 
-  buttons.update();
-
+  // Button state is updated by background task
   uiManager.handleButtons(buttons);
 
   // Check for power button press to enter sleep
-  if (buttons.isPowerButtonPressed()) {
+  if (buttons.isPowerButtonDown()) {
     enterDeepSleep();
   }
 
