@@ -69,6 +69,7 @@ void UIManager::showSleepScreen() {
   // Add "Sleeping..." text at the bottom
   {
     textRenderer.setFrameBuffer(display.getFrameBuffer());
+    textRenderer.setBitmapType(TextRenderer::BITMAP_BW);
     textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
     textRenderer.setFont(&Font14);
 
