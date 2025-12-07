@@ -17,6 +17,6 @@ test/build/
 test/build_msvc/
 __pycache__
 .vscode
-/data/books
 /test/output
 /firmware_backup.bin
+/data/books

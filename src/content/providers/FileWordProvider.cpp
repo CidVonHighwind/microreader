@@ -177,6 +177,23 @@ char FileWordProvider::peekChar(int offset) {
   return charAt((size_t)pos);
 }
 
+int FileWordProvider::consumeChars(int n) {
+  if (n <= 0) {
+    return 0;
+  }
+
+  int consumed = 0;
+  while (consumed < n && index_ < fileSize_) {
+    char c = charAt(index_);
+    index_++;
+    // Skip carriage returns, they don't count as consumed characters
+    if (c != '\r') {
+      consumed++;
+    }
+  }
+  return consumed;
+}
+
 bool FileWordProvider::isInsideWord() {
   if (index_ <= 0 || index_ >= fileSize_) {
     return false;

@@ -14,7 +14,9 @@ SimpleXmlParser::SimpleXmlParser()
       peekedTextNodeChar_('\0'),
       hasPeekedTextNodeChar_(false),
       peekedPrevTextNodeChar_('\0'),
-      hasPeekedPrevTextNodeChar_(false) {}
+      hasPeekedPrevTextNodeChar_(false),
+      elementStartPos_(0),
+      elementEndPos_(0) {}
 
 SimpleXmlParser::~SimpleXmlParser() {
   close();
@@ -30,6 +32,7 @@ bool SimpleXmlParser::open(const char* filepath) {
   bufferStartPos_ = 0;
   bufferLen_ = 0;
   filePos_ = 0;
+  currentNodeType_ = None;
   textNodeStartPos_ = 0;
   textNodeEndPos_ = 0;
   textNodeCurrentPos_ = 0;
@@ -37,6 +40,8 @@ bool SimpleXmlParser::open(const char* filepath) {
   hasPeekedTextNodeChar_ = false;
   peekedPrevTextNodeChar_ = '\0';
   hasPeekedPrevTextNodeChar_ = false;
+  elementStartPos_ = 0;
+  elementEndPos_ = 0;
 
   return true;
 }
@@ -48,6 +53,7 @@ void SimpleXmlParser::close() {
   bufferStartPos_ = 0;
   bufferLen_ = 0;
   filePos_ = 0;
+  currentNodeType_ = None;
   textNodeStartPos_ = 0;
   textNodeEndPos_ = 0;
   textNodeCurrentPos_ = 0;
@@ -55,6 +61,8 @@ void SimpleXmlParser::close() {
   hasPeekedTextNodeChar_ = false;
   peekedPrevTextNodeChar_ = '\0';
   hasPeekedPrevTextNodeChar_ = false;
+  elementStartPos_ = 0;
+  elementEndPos_ = 0;
 }
 
 // Load buffer centered around the given position
@@ -63,8 +71,6 @@ bool SimpleXmlParser::loadBufferAround(size_t pos) {
     return false;
   }
 
-  // Position the buffer to contain pos
-  // Try to center the buffer, but respect file boundaries
   size_t fileSize = file_.size();
   if (fileSize == 0) {
     return false;
@@ -78,7 +84,6 @@ bool SimpleXmlParser::loadBufferAround(size_t pos) {
     idealStart = (fileSize > BUFFER_SIZE) ? (fileSize - BUFFER_SIZE) : 0;
   }
 
-  // Seek to position and read
   if (!file_.seek(idealStart)) {
     return false;
   }
@@ -89,7 +94,6 @@ bool SimpleXmlParser::loadBufferAround(size_t pos) {
   return bufferLen_ > 0;
 }
 
-// Get byte at any position in the file
 char SimpleXmlParser::getByteAt(size_t pos) {
   if (!file_) {
     return '\0';
@@ -105,7 +109,6 @@ char SimpleXmlParser::getByteAt(size_t pos) {
     return '\0';
   }
 
-  // Check if position is now in buffer
   if (pos >= bufferStartPos_ && pos < bufferStartPos_ + bufferLen_) {
     return (char)buffer_[pos - bufferStartPos_];
   }
@@ -141,15 +144,11 @@ bool SimpleXmlParser::skipWhitespace() {
 
 bool SimpleXmlParser::matchString(const char* str) {
   size_t len = strlen(str);
-
-  // Save current position for potential rewind
   size_t savedFilePos = filePos_;
 
-  // Try to match all characters
   for (size_t i = 0; i < len; i++) {
     char c = readChar();
     if (c != str[i]) {
-      // Rewind to saved position
       filePos_ = savedFilePos;
       return false;
     }
@@ -157,7 +156,7 @@ bool SimpleXmlParser::matchString(const char* str) {
   return true;
 }
 
-// ========== XmlReader-style API Implementation ==========
+// ========== Forward Reading ==========
 
 bool SimpleXmlParser::read() {
   if (!file_) {
@@ -167,10 +166,7 @@ bool SimpleXmlParser::read() {
 
   // If we just read a text node and haven't consumed it, skip to the next '<'
   if (currentNodeType_ == Text && textNodeCurrentPos_ > 0) {
-    // Position at where text reading left off
     filePos_ = textNodeCurrentPos_;
-
-    // Skip until we find '<' or EOF
     while (true) {
       char c = peekChar();
       if (c == '\0' || c == '<') {
@@ -191,8 +187,9 @@ bool SimpleXmlParser::read() {
   peekedTextNodeChar_ = '\0';
   hasPeekedTextNodeChar_ = false;
   hasPeekedPrevTextNodeChar_ = false;
+  elementStartPos_ = 0;
+  elementEndPos_ = 0;
 
-  // Check what's next
   while (true) {
     char c = peekChar();
     if (c == '\0') {
@@ -205,7 +202,6 @@ bool SimpleXmlParser::read() {
       char next = peekChar();
 
       if (next == '/') {
-        // End element
         return readEndElement();
       } else if (next == '!') {
         readChar();  // consume '!'
@@ -215,17 +211,15 @@ bool SimpleXmlParser::read() {
         } else if (peek2 == '[') {
           return readCDATA();
         }
-        // Unknown, skip
+        // Skip unknown declaration
         skipToEndOfTag();
         continue;
       } else if (next == '?') {
         return readProcessingInstruction();
       } else {
-        // Start element
         return readElement();
       }
     } else {
-      // Text node
       return readText();
     }
   }
@@ -234,54 +228,51 @@ bool SimpleXmlParser::read() {
 }
 
 bool SimpleXmlParser::readElement() {
+  elementStartPos_ = filePos_ - 1;  // -1 because we already consumed '<'
   currentNodeType_ = Element;
   currentName_ = readElementName();
-
-  // Parse attributes
   parseAttributes();
 
-  // Check for self-closing tag
   skipWhitespace();
   char c = peekChar();
   if (c == '/') {
-    readChar();  // consume '/'
+    readChar();
     isEmptyElement_ = true;
   }
 
-  // Skip to end of tag
   while (true) {
     c = readChar();
     if (c == '>' || c == '\0')
       break;
   }
+  elementEndPos_ = filePos_;
 
   return true;
 }
 
 bool SimpleXmlParser::readEndElement() {
+  elementStartPos_ = filePos_ - 1;  // -1 because we already consumed '<'
   currentNodeType_ = EndElement;
   readChar();  // consume '/'
   currentName_ = readElementName();
 
-  // Skip to '>'
   while (true) {
     char c = readChar();
     if (c == '>' || c == '\0')
       break;
   }
+  elementEndPos_ = filePos_;
 
   return true;
 }
 
 bool SimpleXmlParser::readText() {
+  elementStartPos_ = filePos_;
   currentNodeType_ = Text;
-
-  // Record start position of text node (right after '>')
   textNodeStartPos_ = filePos_;
   textNodeCurrentPos_ = filePos_;
 
-  // Scan ahead to find the end of text (the next '<')
-  // While scanning, also check if it's whitespace-only
+  // Scan to find end and check for whitespace-only
   size_t scanPos = filePos_;
   bool hasNonWhitespace = false;
 
@@ -290,19 +281,17 @@ bool SimpleXmlParser::readText() {
     if (c == '\0' || c == '<') {
       break;
     }
-    // Check if this character is not whitespace
     if (!hasNonWhitespace && c != ' ' && c != '\t' && c != '\n' && c != '\r') {
       hasNonWhitespace = true;
     }
     scanPos++;
   }
 
-  // Set end position to where we found '<' (no trimming)
   textNodeEndPos_ = scanPos;
+  elementEndPos_ = scanPos;
 
-  // Skip whitespace-only text nodes automatically
+  // Skip whitespace-only text nodes
   if (!hasNonWhitespace) {
-    // Move position past this text node and read the next node
     filePos_ = textNodeEndPos_;
     return read();
   }
@@ -311,26 +300,26 @@ bool SimpleXmlParser::readText() {
 }
 
 bool SimpleXmlParser::readComment() {
+  elementStartPos_ = filePos_ - 2;  // -2 for '<!' already consumed
   currentNodeType_ = Comment;
   currentValue_ = "";
 
-  // Expect "<!--"
   if (readChar() != '-' || peekChar() != '-') {
     skipToEndOfTag();
+    elementEndPos_ = filePos_;
     return false;
   }
   readChar();  // consume second '-'
 
-  // Read until "-->"
   while (true) {
     char c = readChar();
     if (c == '\0')
       break;
 
     if (c == '-' && peekChar() == '-') {
-      readChar();  // consume second '-'
+      readChar();
       if (peekChar() == '>') {
-        readChar();  // consume '>'
+        readChar();
         break;
       }
       currentValue_ += '-';
@@ -339,26 +328,26 @@ bool SimpleXmlParser::readComment() {
       currentValue_ += c;
     }
   }
+  elementEndPos_ = filePos_;
 
   return true;
 }
 
 bool SimpleXmlParser::readCDATA() {
+  elementStartPos_ = filePos_ - 2;  // -2 for '<!' already consumed
   currentNodeType_ = CDATA;
   currentValue_ = "";
 
-  // Expect "<![CDATA["
   if (matchString("[CDATA[")) {
-    // Read until "]]>"
     while (true) {
       char c = readChar();
       if (c == '\0')
         break;
 
       if (c == ']' && peekChar() == ']') {
-        readChar();  // consume second ']'
+        readChar();
         if (peekChar() == '>') {
-          readChar();  // consume '>'
+          readChar();
           break;
         }
         currentValue_ += ']';
@@ -368,30 +357,32 @@ bool SimpleXmlParser::readCDATA() {
       }
     }
   }
+  elementEndPos_ = filePos_;
 
   return true;
 }
 
 bool SimpleXmlParser::readProcessingInstruction() {
+  elementStartPos_ = filePos_ - 1;  // -1 for '<' already consumed
   currentNodeType_ = ProcessingInstruction;
   readChar();  // consume '?'
 
   currentName_ = readElementName();
   currentValue_ = "";
 
-  // Read until "?>"
   while (true) {
     char c = readChar();
     if (c == '\0')
       break;
 
     if (c == '?' && peekChar() == '>') {
-      readChar();  // consume '>'
+      readChar();
       break;
     }
 
     currentValue_ += c;
   }
+  elementEndPos_ = filePos_;
 
   return true;
 }
@@ -417,29 +408,25 @@ void SimpleXmlParser::parseAttributes() {
     skipWhitespace();
     char c = peekChar();
 
-    // Check for end of tag
     if (c == '>' || c == '/' || c == '\0')
       break;
 
-    // Read attribute name
     String attrName = readElementName();
     if (attrName.isEmpty())
       break;
 
     skipWhitespace();
 
-    // Expect '='
     if (peekChar() != '=')
       break;
-    readChar();  // consume '='
+    readChar();
 
     skipWhitespace();
 
-    // Read attribute value (quoted)
     char quote = peekChar();
     if (quote != '"' && quote != '\'')
       break;
-    readChar();  // consume quote
+    readChar();
 
     String attrValue;
     while (true) {
@@ -472,15 +459,14 @@ String SimpleXmlParser::getAttribute(const char* name) const {
     if (attrName.length() != nameLen)
       continue;
 
-    // Case-insensitive comparison
     bool match = true;
     for (size_t j = 0; j < nameLen; j++) {
       char c1 = attrName.charAt(j);
       char c2 = name[j];
       if (c1 >= 'A' && c1 <= 'Z')
-        c1 += 32;  // tolower
+        c1 += 32;
       if (c2 >= 'A' && c2 <= 'Z')
-        c2 += 32;  // tolower
+        c2 += 32;
       if (c1 != c2) {
         match = false;
         break;
@@ -494,27 +480,26 @@ String SimpleXmlParser::getAttribute(const char* name) const {
   return String("");
 }
 
+// ========== Text Node Character Reading ==========
+
 char SimpleXmlParser::readTextNodeCharForward() {
   if (currentNodeType_ != Text) {
     return '\0';
   }
 
-  // Clear any peeked character
   hasPeekedTextNodeChar_ = false;
 
-  // Check if we've reached the end of text
   if (textNodeEndPos_ > 0 && textNodeCurrentPos_ >= textNodeEndPos_) {
     return '\0';
   }
 
-  // Check if we've reached '<' (end of text)
   char c = getByteAt(textNodeCurrentPos_);
   if (c == '\0' || c == '<') {
     return '\0';
   }
 
-  // Move position forward
   textNodeCurrentPos_++;
+  filePos_ = textNodeCurrentPos_;
 
   return c;
 }
@@ -524,21 +509,18 @@ char SimpleXmlParser::readTextNodeCharBackward() {
     return '\0';
   }
 
-  // Clear any peeked character
   hasPeekedTextNodeChar_ = false;
 
-  // Check if we've reached the beginning
   if (textNodeCurrentPos_ <= textNodeStartPos_) {
     return '\0';
   }
 
-  // Move to previous position
   textNodeCurrentPos_--;
+  filePos_ = textNodeCurrentPos_;
 
-  // Read the character
   char c = getByteAt(textNodeCurrentPos_);
   if (c == '\0') {
-    textNodeCurrentPos_++;  // Restore position
+    textNodeCurrentPos_++;
     return '\0';
   }
 
@@ -554,16 +536,13 @@ char SimpleXmlParser::peekTextNodeChar() {
     return peekedTextNodeChar_;
   }
 
-  // Peeking forward
   peekedTextNodeChar_ = getByteAt(textNodeCurrentPos_);
 
-  // Check if we've reached '<' (end of text)
   if (peekedTextNodeChar_ == '<' || peekedTextNodeChar_ == '\0') {
     return '\0';
   }
 
   hasPeekedTextNodeChar_ = true;
-
   return peekedTextNodeChar_;
 }
 
@@ -572,162 +551,12 @@ bool SimpleXmlParser::hasMoreTextChars() const {
     return false;
   }
 
-  // Check if we've reached the end of text node (same check as readTextNodeCharForward)
   if (textNodeEndPos_ > 0 && textNodeCurrentPos_ >= textNodeEndPos_) {
     return false;
   }
 
-  // Reading forward - check if next char is '<'
   char c = const_cast<SimpleXmlParser*>(this)->getByteAt(textNodeCurrentPos_);
   return c != '\0' && c != '<';
-}
-
-bool SimpleXmlParser::readBackward() {
-  if (!file_) {
-    currentNodeType_ = EndOfFile;
-    return false;
-  }
-
-  // Clear previous state
-  currentName_ = "";
-  currentValue_ = "";
-  isEmptyElement_ = false;
-  attributes_.clear();
-  textNodeStartPos_ = 0;
-  textNodeEndPos_ = 0;
-  textNodeCurrentPos_ = 0;
-  peekedTextNodeChar_ = '\0';
-  hasPeekedTextNodeChar_ = false;
-  hasPeekedPrevTextNodeChar_ = false;
-
-  // If we're at the beginning, we've reached the end of backward reading
-  if (filePos_ == 0) {
-    currentNodeType_ = EndOfFile;
-    return false;
-  }
-
-  // Start scanning backward from current position
-  size_t originalPos = filePos_;  // Save original position
-  size_t scanPos = filePos_ - 1;
-
-  char c = getByteAt(scanPos);
-
-  // If we're at '>', this is the end of a tag - find its start and parse it
-  if (c == '>') {
-    // We're at the end of a tag - scan backward to find the opening '<'
-    size_t tagEnd = scanPos;
-    size_t tagStart = scanPos;
-
-    while (tagStart > 0) {
-      tagStart--;
-      char tagChar = getByteAt(tagStart);
-      if (tagChar == '<') {
-        break;
-      }
-    }
-
-    // Now parse the tag starting at tagStart
-    filePos_ = tagStart;
-
-    // Read and parse this tag using forward parsing
-    bool result = read();
-
-    // After reading, set filePos_ to start of this tag for next backward read
-    // The next readBackward() will process content that ends right before this tag
-    filePos_ = tagStart;
-
-    return result;
-
-  } else if (c == '<') {
-    // We're at '<' which means we're at the start of a tag
-    // This shouldn't happen in normal backward reading since we should hit '>' first
-    // But handle it: scan forward to find the '>' then come back and parse
-    size_t tagEnd = scanPos;
-    while (tagEnd < file_.size()) {
-      char ch = getByteAt(tagEnd);
-      if (ch == '>') {
-        break;
-      }
-      tagEnd++;
-    }
-
-    // Now parse from scanPos (the '<')
-    filePos_ = scanPos;
-
-    bool result = read();
-
-    // After reading, restore position for next backward read
-    filePos_ = scanPos;
-    return result;
-
-  } else {
-    // We're in text content
-    // Scan backward to find where this text starts (right after previous '>')
-    size_t textEnd = originalPos;  // The original position before we started scanning
-    size_t searchPos = scanPos;
-    size_t textStart = 0;
-
-    while (searchPos > 0) {
-      searchPos--;
-      char ch = getByteAt(searchPos);
-
-      if (ch == '>') {
-        // Found end of previous tag - text starts right after this
-        textStart = searchPos + 1;
-        break;
-      }
-      if (ch == '<') {
-        // Found start of a tag - we must have been inside a tag, not text
-        // This means the original character wasn't actually text
-        // Parse this tag instead
-        filePos_ = searchPos;
-
-        bool result = read();
-
-        // After reading, restore position for next backward read
-        filePos_ = searchPos;
-        return result;
-      }
-    }
-
-    // Set up text node and check if it's whitespace-only
-    bool hasNonWhitespace = false;
-    for (size_t pos = textStart; pos < textEnd; pos++) {
-      char ch = getByteAt(pos);
-      if (ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r') {
-        hasNonWhitespace = true;
-        break;
-      }
-    }
-
-    // Skip whitespace-only text nodes automatically
-    if (!hasNonWhitespace) {
-      // Move position before this text node and read the previous node
-      if (textStart == 0) {
-        // At beginning of file with whitespace-only text
-        currentNodeType_ = EndOfFile;
-        return false;
-      }
-      filePos_ = textStart - 1;
-      return readBackward();
-    }
-
-    currentNodeType_ = Text;
-    textNodeStartPos_ = textStart;
-    textNodeEndPos_ = textEnd;
-    // When reading backward, position at end of text for backward character reading
-    textNodeCurrentPos_ = textEnd;
-
-    // Set filePos_ to where the text starts for next backward read
-    // (The next scanPos will be textStart - 1, which is the '>' before the text)
-    filePos_ = textStart;
-
-    return true;
-  }
-
-  // Reached beginning of file
-  currentNodeType_ = EndOfFile;
-  return false;
 }
 
 bool SimpleXmlParser::hasMoreTextCharsBackward() const {
@@ -747,9 +576,7 @@ char SimpleXmlParser::peekPrevTextNodeChar() {
   if (textNodeCurrentPos_ <= textNodeStartPos_) {
     return '\0';
   }
-  // Get char before current
-  size_t pos = textNodeCurrentPos_ - 1;
-  peekedPrevTextNodeChar_ = getByteAt(pos);
+  peekedPrevTextNodeChar_ = getByteAt(textNodeCurrentPos_ - 1);
   hasPeekedPrevTextNodeChar_ = true;
   return peekedPrevTextNodeChar_;
 }
@@ -758,142 +585,170 @@ char SimpleXmlParser::readPrevTextNodeChar() {
   if (currentNodeType_ != Text) {
     return '\0';
   }
-  // Clear any peeked prev char
   hasPeekedPrevTextNodeChar_ = false;
 
   if (textNodeCurrentPos_ <= textNodeStartPos_) {
     return '\0';
   }
 
-  // Move to one char before current and read it
-  size_t pos = textNodeCurrentPos_ - 1;
-  char c = getByteAt(pos);
-  textNodeCurrentPos_ = pos;
+  textNodeCurrentPos_--;
+  filePos_ = textNodeCurrentPos_;  // Update filePos_ to match forward reading behavior
+  char c = getByteAt(textNodeCurrentPos_);
   return c;
 }
+
+// ========== Backward Reading ==========
+
+bool SimpleXmlParser::readBackward() {
+  if (!file_) {
+    currentNodeType_ = EndOfFile;
+    return false;
+  }
+
+  // Clear previous state
+  currentName_ = "";
+  currentValue_ = "";
+  isEmptyElement_ = false;
+  attributes_.clear();
+  textNodeStartPos_ = 0;
+  textNodeEndPos_ = 0;
+  textNodeCurrentPos_ = 0;
+  peekedTextNodeChar_ = '\0';
+  hasPeekedTextNodeChar_ = false;
+  hasPeekedPrevTextNodeChar_ = false;
+  elementStartPos_ = 0;
+  elementEndPos_ = 0;
+
+  if (filePos_ == 0) {
+    currentNodeType_ = EndOfFile;
+    return false;
+  }
+
+  // Look at the character just before current position
+  size_t scanPos = filePos_ - 1;
+  char c = getByteAt(scanPos);
+
+  // Case 1: We're right after a '>' - this means a tag just ended here
+  if (c == '>') {
+    // Find the '<' that starts this tag
+    size_t tagEnd = scanPos + 1;  // Position after '>'
+    size_t tagStart = scanPos;
+
+    while (tagStart > 0) {
+      tagStart--;
+      if (getByteAt(tagStart) == '<') {
+        break;
+      }
+    }
+
+    // Skip DOCTYPE and other declarations
+    char tagLead = getByteAt(tagStart + 1);
+    if (tagLead == '!') {
+      filePos_ = tagStart;
+      if (tagStart == 0) {
+        currentNodeType_ = EndOfFile;
+        return false;
+      }
+      return readBackward();
+    }
+
+    // Parse the tag by reading forward from tagStart
+    filePos_ = tagStart;
+    bool result = read();
+
+    // Element positions are already set by read()
+    // Just ensure they're correct for backward reading
+    elementStartPos_ = tagStart;
+    elementEndPos_ = tagEnd;
+
+    // Set position for next backward read to be before this tag
+    filePos_ = tagStart;
+
+    return result;
+  }
+
+  // Case 2: We're in text content (not right after '>')
+  // Find where this text starts (after previous '>') and ends (at next '<')
+  size_t textEnd = filePos_;
+  size_t textStart = 0;
+  size_t searchPos = scanPos;
+
+  // Scan backward to find '>' or '<'
+  while (searchPos > 0) {
+    char ch = getByteAt(searchPos);
+    if (ch == '>') {
+      textStart = searchPos + 1;
+      break;
+    }
+    if (ch == '<') {
+      // We're inside a tag, not text - parse the tag instead
+      size_t tagStart = searchPos;
+      filePos_ = searchPos;
+      bool result = read();
+      // Element positions are already set by read()
+      // Just ensure elementStartPos is correct
+      elementStartPos_ = tagStart;
+      filePos_ = searchPos;
+      return result;
+    }
+    searchPos--;
+  }
+
+  // If we reached the beginning without finding '>' or '<', text starts at 0
+  if (searchPos == 0 && getByteAt(0) != '<' && getByteAt(0) != '>') {
+    textStart = 0;
+  }
+
+  // Check if this is whitespace-only
+  bool hasNonWhitespace = false;
+  for (size_t pos = textStart; pos < textEnd; pos++) {
+    char ch = getByteAt(pos);
+    if (ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r') {
+      hasNonWhitespace = true;
+      break;
+    }
+  }
+
+  // Skip whitespace-only text nodes
+  if (!hasNonWhitespace) {
+    if (textStart == 0) {
+      currentNodeType_ = EndOfFile;
+      return false;
+    }
+    filePos_ = textStart;
+    return readBackward();
+  }
+
+  // Set up as text node
+  currentNodeType_ = Text;
+  textNodeStartPos_ = textStart;
+  textNodeEndPos_ = textEnd;
+  textNodeCurrentPos_ = textEnd;  // Start at end for backward reading
+  elementStartPos_ = textStart;
+  elementEndPos_ = textEnd;
+
+  // Position for next backward read
+  filePos_ = textStart;
+
+  return true;
+}
+
+// ========== Seeking ==========
 
 bool SimpleXmlParser::seekToFilePosition(size_t pos) {
   if (!file_) {
     return false;
   }
 
-  // Validate position
-  if (pos > file_.size()) {
+  size_t fileSize = file_.size();
+  if (pos > fileSize) {
     return false;
   }
 
-  // Special case: seeking to end of file
-  if (pos == file_.size()) {
-    filePos_ = pos;
-    currentNodeType_ = None;
-    currentName_ = "";
-    isEmptyElement_ = false;
-    attributes_.clear();
-    textNodeStartPos_ = 0;
-    textNodeEndPos_ = 0;
-    textNodeCurrentPos_ = 0;
-    hasPeekedTextNodeChar_ = false;
-    hasPeekedPrevTextNodeChar_ = false;
-    return true;
-  }
-
-  // Check if position is inside a text node (between '>' and '<')
-  // Scan backward to find the nearest '>' or '<'
-  size_t scanBack = pos;
-  bool foundTextStart = false;
-  size_t textStart = 0;
-
-  while (scanBack > 0) {
-    scanBack--;
-    char c = getByteAt(scanBack);
-    if (c == '>') {
-      // Found end of previous tag - pos is in text content after this tag
-      textStart = scanBack + 1;
-      foundTextStart = true;
-      break;
-    }
-    if (c == '<') {
-      // Found start of a tag - pos is inside a tag, not text
-      // Just set file position and let read() handle it
-      filePos_ = pos;
-      currentNodeType_ = None;
-      currentName_ = "";
-      isEmptyElement_ = false;
-      attributes_.clear();
-      textNodeStartPos_ = 0;
-      textNodeEndPos_ = 0;
-      textNodeCurrentPos_ = 0;
-      hasPeekedTextNodeChar_ = false;
-      hasPeekedPrevTextNodeChar_ = false;
-      return true;
-    }
-  }
-
-  // If we're at position 0 and didn't find '>', we're at the start
-  if (!foundTextStart && scanBack == 0) {
-    // Check if first char is '<' (tag) or text
-    if (getByteAt(0) == '<') {
-      filePos_ = pos;
-      currentNodeType_ = None;
-      currentName_ = "";
-      isEmptyElement_ = false;
-      attributes_.clear();
-      textNodeStartPos_ = 0;
-      textNodeEndPos_ = 0;
-      textNodeCurrentPos_ = 0;
-      hasPeekedTextNodeChar_ = false;
-      hasPeekedPrevTextNodeChar_ = false;
-      return true;
-    }
-    textStart = 0;
-    foundTextStart = true;
-  }
-
-  if (foundTextStart) {
-    // Scan forward to find where text ends (the next '<')
-    size_t textEnd = pos;
-    while (textEnd < file_.size()) {
-      char c = getByteAt(textEnd);
-      if (c == '<') {
-        break;
-      }
-      textEnd++;
-    }
-
-    // Check if this is actual text content (has non-whitespace)
-    // Also check if we're actually inside the text (not at the boundary)
-    bool hasNonWhitespace = false;
-    for (size_t i = textStart; i < textEnd; i++) {
-      char c = getByteAt(i);
-      if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
-        hasNonWhitespace = true;
-        break;
-      }
-    }
-
-    // Only set up as text node if:
-    // 1. There's actual content (non-whitespace)
-    // 2. The seek position is actually inside the text, not at the boundary
-    if (hasNonWhitespace && pos < textEnd && pos >= textStart) {
-      // Set up as a text node - this allows reading characters directly
-      currentNodeType_ = Text;
-      textNodeStartPos_ = textStart;
-      textNodeEndPos_ = textEnd;
-      textNodeCurrentPos_ = pos;
-      filePos_ = pos;
-      currentName_ = "";
-      isEmptyElement_ = false;
-      attributes_.clear();
-      hasPeekedTextNodeChar_ = false;
-      hasPeekedPrevTextNodeChar_ = false;
-      return true;
-    }
-  }
-
-  // Default: just set file position, let read() handle parsing
-  filePos_ = pos;
+  // Reset state
   currentNodeType_ = None;
   currentName_ = "";
+  currentValue_ = "";
   isEmptyElement_ = false;
   attributes_.clear();
   textNodeStartPos_ = 0;
@@ -902,27 +757,97 @@ bool SimpleXmlParser::seekToFilePosition(size_t pos) {
   hasPeekedTextNodeChar_ = false;
   hasPeekedPrevTextNodeChar_ = false;
 
-  return true;
-}
-void SimpleXmlParser::restoreState(size_t pos, NodeType nodeType, size_t textStart, size_t textEnd,
-                                   const String& elementName, bool isEmpty) {
-  if (!file_) {
-    return;
+  filePos_ = pos;
+
+  // If at end of file, nothing more to do
+  if (pos >= fileSize) {
+    return true;
   }
 
-  // Restore the node type and boundaries
-  currentNodeType_ = nodeType;
-  textNodeStartPos_ = textStart;
-  textNodeEndPos_ = textEnd;
-  textNodeCurrentPos_ = pos;
-  filePos_ = (nodeType == Text) ? textStart : pos;
+  // Check what character we're at
+  char c = getByteAt(pos);
 
-  // Restore element information
-  currentName_ = elementName;
-  isEmptyElement_ = isEmpty;
+  // If we're at a '<', we're at the start of a tag - nothing more to do
+  if (c == '<') {
+    return true;
+  }
 
-  // Clear any peeked characters
-  hasPeekedTextNodeChar_ = false;
-  peekedTextNodeChar_ = '\0';
-  hasPeekedPrevTextNodeChar_ = false;
+  // We might be in text content or inside a tag
+  // Scan backward to find context
+  size_t scanPos = pos;
+  while (scanPos > 0) {
+    scanPos--;
+    char ch = getByteAt(scanPos);
+    if (ch == '<') {
+      // We're inside a tag - just set filePos and let read() handle it
+      return true;
+    }
+    if (ch == '>') {
+      // We're in text content between tags
+      // Set up text node boundaries
+      size_t textStart = scanPos + 1;
+
+      // Find the end of this text (next '<')
+      size_t textEnd = pos;
+      while (textEnd < fileSize) {
+        char endCh = getByteAt(textEnd);
+        if (endCh == '<' || endCh == '\0') {
+          break;
+        }
+        textEnd++;
+      }
+
+      // Check if this is whitespace-only between textStart and textEnd
+      bool hasNonWhitespace = false;
+      for (size_t checkPos = textStart; checkPos < textEnd; checkPos++) {
+        char checkCh = getByteAt(checkPos);
+        if (checkCh != ' ' && checkCh != '\t' && checkCh != '\n' && checkCh != '\r') {
+          hasNonWhitespace = true;
+          break;
+        }
+      }
+
+      if (hasNonWhitespace) {
+        // Set up as text node positioned at 'pos'
+        currentNodeType_ = Text;
+        textNodeStartPos_ = textStart;
+        textNodeEndPos_ = textEnd;
+        textNodeCurrentPos_ = pos;
+      }
+      // If whitespace-only, leave as None and let read() skip it
+
+      return true;
+    }
+  }
+
+  // We reached the beginning without finding '>' or '<'
+  // This means we're in text at the start of the file
+  if (getByteAt(0) != '<') {
+    size_t textEnd = pos;
+    while (textEnd < fileSize) {
+      char endCh = getByteAt(textEnd);
+      if (endCh == '<' || endCh == '\0') {
+        break;
+      }
+      textEnd++;
+    }
+
+    bool hasNonWhitespace = false;
+    for (size_t checkPos = 0; checkPos < textEnd; checkPos++) {
+      char checkCh = getByteAt(checkPos);
+      if (checkCh != ' ' && checkCh != '\t' && checkCh != '\n' && checkCh != '\r') {
+        hasNonWhitespace = true;
+        break;
+      }
+    }
+
+    if (hasNonWhitespace) {
+      currentNodeType_ = Text;
+      textNodeStartPos_ = 0;
+      textNodeEndPos_ = textEnd;
+      textNodeCurrentPos_ = pos;
+    }
+  }
+
+  return true;
 }

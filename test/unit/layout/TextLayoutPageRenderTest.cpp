@@ -119,7 +119,7 @@ void runTestConfiguration(const PageTestConfig& testConfig, TestUtils::TestRunne
     }
 
     // test backward navigation from current page
-    if (provider.getPercentage(endPos) < 1.0f) {
+    if (provider.getChapterPercentage(endPos) < 1.0f) {
       int expectedPrevStart = pageRanges[pageIndex].first;
       int expectedPrevEnd = pageRanges[pageIndex].second;
 

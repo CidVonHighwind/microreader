@@ -44,6 +44,11 @@ class WordProvider {
   // Returns '\0' if position is out of bounds
   virtual char peekChar(int offset = 0) = 0;
 
+  // Consume n text characters, advancing through inline elements as needed
+  // This is useful for positioning after a hyphen split
+  // Returns the number of characters actually consumed
+  virtual int consumeChars(int n) = 0;
+
   // Check if current position is inside a word (surrounded by non-whitespace characters)
   // Returns true if both previous and current characters are word characters
   virtual bool isInsideWord() = 0;

@@ -32,6 +32,7 @@ class EpubWordProvider : public WordProvider {
   void setPosition(int index) override;
   int getCurrentIndex() override;
   char peekChar(int offset = 0) override;
+  int consumeChars(int n) override;
   bool isInsideWord() override;
   void ungetWord() override;
   void reset() override;
@@ -62,16 +63,8 @@ class EpubWordProvider : public WordProvider {
   SimpleXmlParser* parser_ = nullptr;
   int currentChapter_ = 0;  // Current chapter index (0-based)
 
-  size_t prevFilePos_;                                              // Previous parser file position for ungetWord()
-  bool prevInsideParagraph_ = false;                                // Previous paragraph state for ungetWord()
-  SimpleXmlParser::NodeType prevNodeType_ = SimpleXmlParser::None;  // Previous node type for ungetWord()
-  size_t prevTextNodeStart_ = 0;                                    // Previous text node start for ungetWord()
-  size_t prevTextNodeEnd_ = 0;                                      // Previous text node end for ungetWord()
-  String prevElementName_;                                          // Previous element name for ungetWord()
-  bool prevIsEmptyElement_ = false;                                 // Previous empty element flag for ungetWord()
-  size_t fileSize_;                                                 // Total file size for percentage calculation
-  bool insideParagraph_ = false;                                    // Track if we're inside a <p> tag
-  bool pendingNewline_ = false;  // For backward reading: newline to emit before next paragraph content
+  size_t prevFilePos_ = 0;  // Previous parser position for ungetWord()
+  size_t fileSize_;         // Total file size for percentage calculation
 };
 
 #endif

@@ -105,6 +105,23 @@ char StringWordProvider::peekChar(int offset) {
   return text_[pos];
 }
 
+int StringWordProvider::consumeChars(int n) {
+  if (n <= 0) {
+    return 0;
+  }
+
+  int consumed = 0;
+  while (consumed < n && index_ < text_.length()) {
+    char c = text_[index_];
+    index_++;
+    // Skip carriage returns, they don't count as consumed characters
+    if (c != '\r') {
+      consumed++;
+    }
+  }
+  return consumed;
+}
+
 bool StringWordProvider::isInsideWord() {
   if (index_ <= 0 || index_ >= text_.length()) {
     return false;

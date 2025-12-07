@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <SD.h>
 
+#include <utility>
 #include <vector>
 
 /**
@@ -116,44 +117,49 @@ class SimpleXmlParser {
    */
   char readPrevTextNodeChar();
 
-  /**
-   * Seek to a specific file position and determine the current node context
-   * If the position is within the current text node, updates position within that node
-   * Otherwise, scans to determine what element/node contains this position
-   * Returns true if successful
-   */
-  bool seekToFilePosition(size_t pos);
-
-  /**
-   * Restore complete parser state (for ungetWord support)
-   * Restores file position, node type, text node boundaries, and element info
-   */
-  void restoreState(size_t pos, NodeType nodeType, size_t textStart, size_t textEnd, const String& elementName,
-                    bool isEmpty);
-
-  /**
-   * Get text node boundaries for state saving
-   */
-  size_t getTextNodeStart() const {
-    return textNodeStartPos_;
-  }
-  size_t getTextNodeEnd() const {
-    return textNodeEndPos_;
-  }
-
   // Text node reading helpers
   char readTextNodeCharForward();
   char readTextNodeCharBackward();
 
   /**
+   * Seek to a specific file position.
+   * After seeking, you must call read() or readBackward() to parse a node.
+   * Returns true if successful
+   */
+  bool seekToFilePosition(size_t pos);
+
+  /**
    * Get current file position
+   * For text nodes: returns current position within the text
+   * For elements: returns the start of the element (where '<' begins)
+   * This ensures seeking to this position will re-read the same node
    */
   size_t getFilePosition() const {
     // When in a text node, return the current position within the text
-    if (currentNodeType_ == Text && textNodeCurrentPos_ > 0) {
+    if (currentNodeType_ == Text) {
       return textNodeCurrentPos_;
     }
+    // For elements, return the start position so seeking here re-reads the element
+    if (currentNodeType_ == Element || currentNodeType_ == EndElement) {
+      return elementStartPos_;
+    }
     return filePos_;
+  }
+
+  /**
+   * Get the start position of the current element/node in the file
+   * This is the position where the element begins (e.g., the '<' for tags)
+   */
+  size_t getElementStartPos() const {
+    return elementStartPos_;
+  }
+
+  /**
+   * Get the end position of the current element/node in the file
+   * This is the position after the element ends (e.g., after '>' for tags)
+   */
+  size_t getElementEndPos() const {
+    return elementEndPos_;
   }
 
   /**
@@ -205,6 +211,10 @@ class SimpleXmlParser {
   // Backward text node reading state
   char peekedPrevTextNodeChar_;
   bool hasPeekedPrevTextNodeChar_;
+
+  // Element/node position tracking
+  size_t elementStartPos_;  // Start position of current element in file
+  size_t elementEndPos_;    // End position of current element in file
 
   // XmlReader helper methods
   bool readElement();

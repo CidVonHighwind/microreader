@@ -14,6 +14,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <filesystem>
 
 #include "content/epub/EpubReader.h"
 #include "test_config.h"
@@ -485,6 +486,12 @@ void testSpineSizes(TestUtils::TestRunner& runner, EpubReader& reader) {
 int main() {
   TestUtils::TestRunner runner("EPUB Reader Test Suite");
   std::cout << "Test EPUB: " << EpubReaderTests::TEST_EPUB_PATH << "\n";
+
+  if (!std::filesystem::exists(EpubReaderTests::TEST_EPUB_PATH)) {
+    std::cout << "\nSkipping EpubReader tests: missing fixture at " << EpubReaderTests::TEST_EPUB_PATH
+              << "\n";
+    return 0;
+  }
 
   // Load EPUB once for all tests
   std::cout << "\nLoading EPUB...\n";

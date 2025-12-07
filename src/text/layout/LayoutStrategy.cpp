@@ -75,9 +75,10 @@ std::vector<LayoutStrategy::Word> LayoutStrategy::getNextLine(WordProvider& prov
         renderer.getTextBounds(firstPart.c_str(), 0, 0, &bx2, &by2, &bw2, &bh2);
         line.push_back({firstPart, static_cast<int16_t>(bw2), 0, 0, true});  // wasSplit = true
 
-        // Move provider position: after the split point
-        // For existing hyphens, skip past the hyphen character (+1)
-        provider.setPosition(wordStartIndex + split.position + (split.isAlgorithmic ? 0 : 1));
+        // Move provider position: consume characters up to the split point
+        // For existing hyphens, include the hyphen character (+1)
+        provider.setPosition(wordStartIndex);
+        provider.consumeChars(split.position + (split.isAlgorithmic ? 0 : 1));
         break;
       } else if (currentWidth > 0) {
         // Can't split, put it back and end line
@@ -162,8 +163,9 @@ std::vector<LayoutStrategy::Word> LayoutStrategy::getPrevLine(WordProvider& prov
         renderer.getTextBounds(secondPart.c_str(), 0, 0, &bx2, &by2, &bw2, &bh2);
         line.insert(line.begin(), {secondPart, static_cast<int16_t>(bw2), 0, 0, false});
 
-        // Move provider position to the split point
-        provider.setPosition(wordStartIndex + split.position);
+        // Move provider position to the split point by consuming characters from word start
+        provider.setPosition(wordStartIndex);
+        provider.consumeChars(split.position);
         break;
       } else if (currentWidth > 0) {
         // Can't split, put it back

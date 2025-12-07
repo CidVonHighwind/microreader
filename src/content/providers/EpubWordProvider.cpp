@@ -49,7 +49,7 @@ static bool isBlockElement(const String& name) {
 }
 
 EpubWordProvider::EpubWordProvider(const char* path, size_t bufSize)
-    : bufSize_(bufSize), prevFilePos_(0), fileSize_(0), currentChapter_(0) {
+    : bufSize_(bufSize), fileSize_(0), currentChapter_(0) {
   epubPath_ = String(path);
   valid_ = false;
   isEpub_ = false;
@@ -79,8 +79,7 @@ EpubWordProvider::EpubWordProvider(const char* path, size_t bufSize)
 
     // Position parser at first node for reading
     parser_->read();
-    prevFilePos_ = 0;
-    insideParagraph_ = false;
+    prevFilePos_ = parser_->getFilePosition();
 
     valid_ = true;
   } else {
@@ -94,7 +93,7 @@ EpubWordProvider::EpubWordProvider(const char* path, size_t bufSize)
     }
 
     // Open the first chapter (index 0)
-    if (!openChapter(0)) {
+    if (!openChapter(43)) {
       delete epubReader_;
       epubReader_ = nullptr;
       return;
@@ -168,8 +167,7 @@ bool EpubWordProvider::openChapter(int chapterIndex) {
 
   // Position parser at first node for reading
   parser_->read();
-  prevFilePos_ = 0;
-  insideParagraph_ = false;
+  prevFilePos_ = parser_->getFilePosition();
 
   return true;
 }
@@ -220,25 +218,8 @@ String EpubWordProvider::getNextWord() {
     return String("");
   }
 
-  // Save position and state for ungetWord at start
+  // Save position for ungetWord at start
   prevFilePos_ = parser_->getFilePosition();
-  prevInsideParagraph_ = insideParagraph_;
-  prevNodeType_ = parser_->getNodeType();
-  prevTextNodeStart_ = parser_->getTextNodeStart();
-  prevTextNodeEnd_ = parser_->getTextNodeEnd();
-  prevElementName_ = parser_->getName();
-  prevIsEmptyElement_ = parser_->isEmptyElement();
-
-  // // print out current parser state
-  // Serial.print("getNextWord: filePos=");
-  // Serial.print(parser_->getFilePosition());
-  // Serial.print(", nodeType=");
-  // Serial.print(parser_->getNodeType());
-  // Serial.print(", elementName=");
-  // Serial.print(parser_->getName());
-  // Serial.print(", isEmptyElement=");
-  // Serial.print(parser_->isEmptyElement());
-  // Serial.println();
 
   // Skip to next text content
   while (true) {
@@ -255,25 +236,13 @@ String EpubWordProvider::getNextWord() {
     if (nodeType == SimpleXmlParser::Text) {
       // We're in a text node, try to read a character
       if (parser_->hasMoreTextChars()) {
-        // Only process text if we're inside a paragraph
-        if (!insideParagraph_) {
-          // Skip all characters in this text node
-          while (parser_->hasMoreTextChars()) {
-            parser_->readTextNodeCharForward();
-          }
-          if (!parser_->read()) {
-            return String("");  // End of document
-          }
-          continue;
-        }
-
         char c = parser_->readTextNodeCharForward();
 
         // Handle spaces
         if (c == ' ') {
           String token;
           token += c;
-          // Collect consecutive spaces
+          // Collect consecutive spaces (but don't cross into next node)
           while (parser_->hasMoreTextChars()) {
             char next = parser_->peekTextNodeChar();
             if (next != ' ')
@@ -294,35 +263,60 @@ String EpubWordProvider::getNextWord() {
         else {
           String token;
           token += c;
-          // Collect consecutive word characters, continuing across inline elements
+          // Collect word characters, crossing inline element boundaries
           while (true) {
-            if (parser_->hasMoreTextChars()) {
+            // First, consume all word chars in current text node
+            while (parser_->hasMoreTextChars()) {
               char next = parser_->peekTextNodeChar();
               if (next == '\0' || next == ' ' || next == '\n' || next == '\t' || next == '\r')
                 break;
               token += parser_->readTextNodeCharForward();
-            } else {
-              // No more chars in current text node - check if next node is an inline element
-              // If so, skip it and continue building the word
-              if (!parser_->read()) {
-                break;  // End of document
-              }
-              SimpleXmlParser::NodeType nextNodeType = parser_->getNodeType();
-              if (nextNodeType == SimpleXmlParser::Element || nextNodeType == SimpleXmlParser::EndElement) {
-                String elemName = parser_->getName();
-                if (isBlockElement(elemName)) {
-                  // Block element - stop building word, let outer loop handle it
-                  break;
+            }
+
+            // If we still have chars in this text node, we hit a delimiter - done
+            if (parser_->hasMoreTextChars()) {
+              break;
+            }
+
+            // Text node exhausted - check if next node continues the word
+            if (!parser_->read()) {
+              break;  // End of document
+            }
+
+            SimpleXmlParser::NodeType nextType = parser_->getNodeType();
+
+            // If next is text, check if it starts with word char
+            if (nextType == SimpleXmlParser::Text) {
+              if (parser_->hasMoreTextChars()) {
+                char peek = parser_->peekTextNodeChar();
+                if (peek != '\0' && peek != ' ' && peek != '\n' && peek != '\t' && peek != '\r') {
+                  // Continue building word from this text node
+                  continue;
                 }
-                // Inline element (like <span>, </span>, <em>, etc.) - skip and continue
-                continue;
-              } else if (nextNodeType == SimpleXmlParser::Text) {
-                // Continue reading from new text node
-                continue;
-              } else {
-                // Other node type - stop building word
-                break;
               }
+              // Text starts with delimiter or is empty - done with word
+              break;
+            }
+            // Skip inline elements (like <span>) and continue looking for text
+            else if (nextType == SimpleXmlParser::Element) {
+              if (!isBlockElement(parser_->getName())) {
+                // Inline element - skip it and continue
+                continue;
+              }
+              // Block element - done with word
+              break;
+            }
+            // Skip inline end elements (like </span>) and continue
+            else if (nextType == SimpleXmlParser::EndElement) {
+              if (!isBlockElement(parser_->getName())) {
+                // Inline end element - skip it and continue
+                continue;
+              }
+              // Block end element - done with word
+              break;
+            } else {
+              // Other node type - done with word
+              break;
             }
           }
           return token;
@@ -338,10 +332,8 @@ String EpubWordProvider::getNextWord() {
       // Check if this is a block element end tag
       String elementName = parser_->getName();
       if (isBlockElement(elementName)) {
-        if (equalsIgnoreCase(elementName, "p")) {
-          insideParagraph_ = false;
-        }
-        // Move past this end element, then return newline
+        // Move past this end element first, then return newline
+        // This way getCurrentIndex() before getNextWord() returns the element start
         parser_->read();
         return String('\n');
       }
@@ -352,18 +344,15 @@ String EpubWordProvider::getNextWord() {
     } else if (nodeType == SimpleXmlParser::Element) {
       String elementName = parser_->getName();
 
-      if (equalsIgnoreCase(elementName, "p")) {
-        // Check if this is a self-closing <p/> (unlikely but possible)
+      if (isBlockElement(elementName)) {
+        // Check if this is a self-closing element (like <br/>)
         if (parser_->isEmptyElement()) {
-          // Move past this element, then return newline
+          // Move past this element first, then return newline
           parser_->read();
           return String('\n');
         }
-        // Regular opening <p> tag
-        insideParagraph_ = true;
       }
-      // For inline elements (like <span>), just skip them
-
+      // Move past this element (opening tags don't produce tokens)
       if (!parser_->read()) {
         return String("");  // End of document
       }
@@ -381,21 +370,8 @@ String EpubWordProvider::getPrevWord() {
     return String("");
   }
 
-  // Save position and state for ungetWord at start
+  // Save position for ungetWord at start
   prevFilePos_ = parser_->getFilePosition();
-  prevInsideParagraph_ = insideParagraph_;
-  prevNodeType_ = parser_->getNodeType();
-  prevTextNodeStart_ = parser_->getTextNodeStart();
-  prevTextNodeEnd_ = parser_->getTextNodeEnd();
-  prevElementName_ = parser_->getName();
-  prevIsEmptyElement_ = parser_->isEmptyElement();
-
-  // Serial.print("getPrevWord: filePos=");
-  // Serial.print(parser_->getFilePosition());
-  // Serial.print(", paragraphsCompleted=");
-  // Serial.print(paragraphsCompleted_);
-  // Serial.print(", insideParagraph=");
-  // Serial.println(insideParagraph_);
 
   // Navigate backward through nodes
   while (true) {
@@ -412,33 +388,19 @@ String EpubWordProvider::getPrevWord() {
     if (nodeType == SimpleXmlParser::Text) {
       // We're in a text node, try to read a character backward
       if (parser_->hasMoreTextCharsBackward()) {
-        // Only process text if we're inside a paragraph
-        if (!insideParagraph_) {
-          // Skip all characters in this text node (including whitespace between tags)
-          while (parser_->hasMoreTextCharsBackward()) {
-            parser_->readPrevTextNodeChar();
-          }
-          if (!parser_->readBackward()) {
-            Serial.println("getPrevWord: reached beginning while skipping non-paragraph text");
-            return String("");  // Beginning of document
-          }
-          continue;
-        }
-
         char c = parser_->readPrevTextNodeChar();
 
         // Handle spaces
         if (c == ' ') {
           String token;
           token += c;
-          // Collect consecutive spaces backward
+          // Collect consecutive spaces backward (within this text node only)
           while (parser_->hasMoreTextCharsBackward()) {
             char prev = parser_->peekPrevTextNodeChar();
             if (prev != ' ')
               break;
             token += parser_->readPrevTextNodeChar();
           }
-          // Token consists of spaces, return as-is
           return token;
         }
         // Skip carriage return
@@ -453,35 +415,60 @@ String EpubWordProvider::getPrevWord() {
         else {
           String rev;
           rev += c;
-          // Collect consecutive word characters backward, continuing across inline elements
+          // Collect word characters backward, crossing inline element boundaries
           while (true) {
-            if (parser_->hasMoreTextCharsBackward()) {
+            // First, consume all word chars in current text node (backward)
+            while (parser_->hasMoreTextCharsBackward()) {
               char prev = parser_->peekPrevTextNodeChar();
               if (prev == '\0' || prev == ' ' || prev == '\n' || prev == '\t' || prev == '\r')
                 break;
               rev += parser_->readPrevTextNodeChar();
-            } else {
-              // No more chars in current text node - check if previous node is an inline element
-              // If so, skip it and continue building the word
-              if (!parser_->readBackward()) {
-                break;  // Beginning of document
-              }
-              SimpleXmlParser::NodeType prevNodeType = parser_->getNodeType();
-              if (prevNodeType == SimpleXmlParser::Element || prevNodeType == SimpleXmlParser::EndElement) {
-                String elemName = parser_->getName();
-                if (isBlockElement(elemName)) {
-                  // Block element - stop building word, let outer loop handle it
-                  break;
+            }
+
+            // If we still have chars backward in this text node, we hit a delimiter - done
+            if (parser_->hasMoreTextCharsBackward()) {
+              break;
+            }
+
+            // Text node exhausted backward - check if previous node continues the word
+            if (!parser_->readBackward()) {
+              break;  // Beginning of document
+            }
+
+            SimpleXmlParser::NodeType prevType = parser_->getNodeType();
+
+            // If previous is text, check if it ends with word char
+            if (prevType == SimpleXmlParser::Text) {
+              if (parser_->hasMoreTextCharsBackward()) {
+                char peek = parser_->peekPrevTextNodeChar();
+                if (peek != '\0' && peek != ' ' && peek != '\n' && peek != '\t' && peek != '\r') {
+                  // Continue building word from this text node
+                  continue;
                 }
-                // Inline element (like <span>, </span>, <em>, etc.) - skip and continue
-                continue;
-              } else if (prevNodeType == SimpleXmlParser::Text) {
-                // Continue reading from previous text node
-                continue;
-              } else {
-                // Other node type - stop building word
-                break;
               }
+              // Text ends with delimiter or is empty - done with word
+              break;
+            }
+            // Skip inline elements (like <span>) and continue looking for text
+            else if (prevType == SimpleXmlParser::Element) {
+              if (!isBlockElement(parser_->getName())) {
+                // Inline element - skip it and continue
+                continue;
+              }
+              // Block element - done with word
+              break;
+            }
+            // Skip inline end elements (like </span>) and continue
+            else if (prevType == SimpleXmlParser::EndElement) {
+              if (!isBlockElement(parser_->getName())) {
+                // Inline end element - skip it and continue
+                continue;
+              }
+              // Block end element - done with word
+              break;
+            } else {
+              // Other node type - done with word
+              break;
             }
           }
           // Reverse to get correct order
@@ -497,49 +484,33 @@ String EpubWordProvider::getPrevWord() {
         return String("");  // Beginning of document
       }
     } else if (nodeType == SimpleXmlParser::EndElement) {
-      // Check if this is a block element end tag
-      // Going backward: EndElement means we're ENTERING the paragraph (we'll read its content backward)
-      // In forward order, </p> produces a newline, so we produce it here too before reading content
+      // Block element end tag - return newline
       String elementName = parser_->getName();
       if (isBlockElement(elementName)) {
-        if (equalsIgnoreCase(elementName, "p")) {
-          insideParagraph_ = true;
-        }
-        // Move to previous node first
-        if (!parser_->readBackward()) {
-          return String("");  // Beginning of document
-        }
-        // Return newline - this corresponds to the newline that forward reading produces at block end
+        // Save position of this element for ungetWord before advancing
+        prevFilePos_ = parser_->getElementEndPos();
+        // Move to previous node, then return newline
+        parser_->readBackward();
         return String('\n');
       }
-      // Inline end element (like </span>) - just move to previous node
+      // Inline end element - just move to previous node
       if (!parser_->readBackward()) {
         return String("");  // Beginning of document
       }
     } else if (nodeType == SimpleXmlParser::Element) {
       String elementName = parser_->getName();
 
-      if (equalsIgnoreCase(elementName, "p")) {
-        // Check if this is a self-closing <p/> (unlikely but possible)
+      if (isBlockElement(elementName)) {
+        // Check if this is a self-closing element (like <br/>)
         if (parser_->isEmptyElement()) {
-          // Move past this element backward
+          // Save position of this element for ungetWord before advancing
+          prevFilePos_ = parser_->getElementEndPos();
+          // Move past this element backward, then return newline
           parser_->readBackward();
-          // Return newline handled at </p> entry point
-          continue;
+          return String('\n');
         }
-        // Regular opening <p> tag - going backward means we're EXITING the paragraph
-        // We've finished reading this paragraph's content backward
-        insideParagraph_ = false;
-
-        // Move past this element
-        parser_->readBackward();
-
-        // Don't return newline here - newlines are returned when entering the NEXT paragraph
-        continue;
       }
-      // Inline element (like <span>) - just move to previous node
-
-      // Move to previous node
+      // Move to previous node (opening tags don't produce tokens when going backward)
       if (!parser_->readBackward()) {
         return String("");  // Beginning of document
       }
@@ -617,6 +588,61 @@ char EpubWordProvider::peekChar(int offset) {
   return '\0';  // Not implemented
 }
 
+int EpubWordProvider::consumeChars(int n) {
+  if (!parser_ || n <= 0) {
+    return 0;
+  }
+
+  int consumed = 0;
+
+  while (consumed < n) {
+    SimpleXmlParser::NodeType nodeType = parser_->getNodeType();
+
+    // If we don't have a current node, read one
+    if (nodeType == SimpleXmlParser::None || nodeType == SimpleXmlParser::EndOfFile) {
+      if (!parser_->read()) {
+        break;  // End of document
+      }
+      continue;
+    }
+
+    if (nodeType == SimpleXmlParser::Text) {
+      // Consume characters from this text node
+      while (consumed < n && parser_->hasMoreTextChars()) {
+        char c = parser_->readTextNodeCharForward();
+        // Skip carriage returns, they don't count as consumed characters
+        if (c != '\r') {
+          consumed++;
+        }
+      }
+
+      // If text node exhausted, move to next node
+      if (!parser_->hasMoreTextChars()) {
+        if (!parser_->read()) {
+          break;  // End of document
+        }
+      }
+    } else if (nodeType == SimpleXmlParser::Element || nodeType == SimpleXmlParser::EndElement) {
+      // Skip inline elements, stop at block elements
+      String elementName = parser_->getName();
+      if (isBlockElement(elementName)) {
+        break;  // Stop at block elements
+      }
+      // Skip inline element
+      if (!parser_->read()) {
+        break;
+      }
+    } else {
+      // Skip other node types
+      if (!parser_->read()) {
+        break;
+      }
+    }
+  }
+
+  return consumed;
+}
+
 bool EpubWordProvider::isInsideWord() {
   if (!parser_) {
     return false;
@@ -631,10 +657,7 @@ void EpubWordProvider::ungetWord() {
   if (!parser_) {
     return;
   }
-  // Restore the file position, paragraph state, and parser state
-  parser_->restoreState(prevFilePos_, prevNodeType_, prevTextNodeStart_, prevTextNodeEnd_, prevElementName_,
-                        prevIsEmptyElement_);
-  insideParagraph_ = prevInsideParagraph_;
+  parser_->seekToFilePosition(prevFilePos_);
 }
 
 void EpubWordProvider::setPosition(int index) {
@@ -642,7 +665,6 @@ void EpubWordProvider::setPosition(int index) {
     return;
   }
 
-  // Clamp position to valid range
   size_t filePos;
   if (index < 0) {
     filePos = 0;
@@ -652,61 +674,14 @@ void EpubWordProvider::setPosition(int index) {
     filePos = static_cast<size_t>(index);
   }
 
-  // First, determine if we're inside a paragraph by seeking and scanning backward
-  // Seek to the file position
   parser_->seekToFilePosition(filePos);
-  prevFilePos_ = filePos;
-
-  // Save current state for backward scan
-  size_t savedPos = parser_->getFilePosition();
-  SimpleXmlParser::NodeType savedNodeType = parser_->getNodeType();
-  size_t savedTextStart = parser_->getTextNodeStart();
-  size_t savedTextEnd = parser_->getTextNodeEnd();
-  String savedName = parser_->getName();
-  bool savedIsEmpty = parser_->isEmptyElement();
-
-  // Only do backward scan if we have a valid node type
-  // If seekToFilePosition didn't establish a proper node context, skip the scan
-  if (savedNodeType != SimpleXmlParser::None && savedNodeType != SimpleXmlParser::EndOfFile) {
-    // Scan backward to find the nearest <p> or </p> tag
-    // When scanning BACKWARD from our position:
-    //   - Hitting <p> first means we're INSIDE the paragraph (between <p> and </p>)
-    //   - Hitting </p> first means we're OUTSIDE (after the paragraph ended)
-    insideParagraph_ = false;
-    while (parser_->readBackward()) {
-      SimpleXmlParser::NodeType nodeType = parser_->getNodeType();
-      if (nodeType == SimpleXmlParser::Element) {
-        String name = parser_->getName();
-        if (equalsIgnoreCase(name, "p")) {
-          // Found opening <p> tag - we're inside this paragraph
-          insideParagraph_ = true;
-          break;
-        }
-      } else if (nodeType == SimpleXmlParser::EndElement) {
-        String name = parser_->getName();
-        if (equalsIgnoreCase(name, "p")) {
-          // Found closing </p> tag - we're outside (after paragraph ended)
-          insideParagraph_ = false;
-          break;
-        }
-      }
-    }
-  } else {
-    // No valid node context, assume not inside paragraph
-    insideParagraph_ = false;
-  }
-
-  // Re-seek to the target position to ensure clean parser state
-  // This is important because readBackward() may have modified internal state
-  parser_->seekToFilePosition(filePos);
+  prevFilePos_ = parser_->getFilePosition();
 }
 
 void EpubWordProvider::reset() {
-  prevFilePos_ = 0;
-  insideParagraph_ = false;
-
-  // Reset parser to beginning - don't call read()
+  // Reset parser to beginning
   if (parser_) {
     parser_->seekToFilePosition(0);
+    prevFilePos_ = parser_->getFilePosition();
   }
 }

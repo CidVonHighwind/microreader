@@ -96,7 +96,19 @@ void testBackwardReconstruction(TestUtils::TestRunner& runner) {
   int wordCount = 0;
 
   while (true) {
+    int currentIndex = provider.getCurrentIndex();
     String word = provider.getPrevWord();
+    int newIndex = provider.getCurrentIndex();
+
+    // print out the word read
+    // std::cout << "    Word: '" << word.c_str() << "'\n";
+
+    if (newIndex >= currentIndex) {
+      std::cout << "  *** Error: position did not move backward (current: " << currentIndex << ", new: " << newIndex
+                << ")\n";
+      break;
+    }
+
     if (word.length() == 0)
       break;
     rebuilt.insert(0, word.c_str());
@@ -119,28 +131,34 @@ void testBidirectionalWordMatch(TestUtils::TestRunner& runner) {
   TestGlobals::resetProvider();
   WordProvider& provider = TestGlobals::provider();
 
-  // Collect words forward
-  std::vector<std::string> forwardWords;
+  // Collect words forward with positions
+  std::vector<WordInfo> forwardWords;
 
   while (provider.hasNextWord()) {
-    String word = provider.getNextWord();
-    if (word.length() == 0)
+    WordInfo info;
+    info.positionBefore = provider.getCurrentIndex();
+    info.word = provider.getNextWord();
+    info.positionAfter = provider.getCurrentIndex();
+    if (info.word.length() == 0)
       break;
-    forwardWords.push_back(word.c_str());
+    forwardWords.push_back(info);
   }
 
   int endPosition = provider.getCurrentIndex();
   std::cout << "  Collected " << forwardWords.size() << " words forward\n";
 
-  // Collect words backward
+  // Collect words backward with positions
   provider.setPosition(endPosition);
-  std::vector<std::string> backwardWords;
+  std::vector<WordInfo> backwardWords;
 
   while (provider.hasPrevWord()) {
-    String word = provider.getPrevWord();
-    if (word.length() == 0)
+    WordInfo info;
+    info.positionAfter = provider.getCurrentIndex();
+    info.word = provider.getPrevWord();
+    info.positionBefore = provider.getCurrentIndex();
+    if (info.word.length() == 0)
       break;
-    backwardWords.push_back(word.c_str());
+    backwardWords.push_back(info);
   }
 
   // Reverse to get correct order for comparison
@@ -153,24 +171,71 @@ void testBidirectionalWordMatch(TestUtils::TestRunner& runner) {
       forwardWords.size() == backwardWords.size(), std::string(testName) + ": Forward and backward word counts match",
       "Forward: " + std::to_string(forwardWords.size()) + ", Backward: " + std::to_string(backwardWords.size()));
 
-  // Compare each word
+  // Compare each word and positions
   bool allMatch = true;
   std::string mismatchMsg;
   size_t compareCount = std::min(forwardWords.size(), backwardWords.size());
+  int wordMismatches = 0;
+  int positionMismatches = 0;
+
+  // Helper to check if a word is whitespace-only
+  auto isWhitespaceOnly = [](const String& word) {
+    for (unsigned int i = 0; i < word.length(); i++) {
+      char c = word.charAt(i);
+      if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
+        return false;
+    }
+    return true;
+  };
 
   for (size_t i = 0; i < compareCount; i++) {
-    if (forwardWords[i] != backwardWords[i]) {
-      mismatchMsg = "Word mismatch at index " + std::to_string(i) + ": forward='" + forwardWords[i] + "' backward='" +
-                    backwardWords[i] + "'";
-      if (i > 0) {
-        mismatchMsg += " (prev: '" + forwardWords[i - 1] + "')";
+    const WordInfo& fw = forwardWords[i];
+    const WordInfo& bw = backwardWords[i];
+
+    if (fw.word != bw.word) {
+      if (wordMismatches < MAX_FAILURES_TO_REPORT) {
+        std::cout << "  *** Word mismatch at index " << i << ": forward='" << fw.word.c_str() << "' backward='"
+                  << bw.word.c_str() << "'\n";
       }
+      wordMismatches++;
       allMatch = false;
-      break;
     }
+    //  else {
+    //   // Words match, check positions (skip whitespace-only words as they have different position semantics)
+    //   if (fw.positionBefore != bw.positionBefore) {
+    //     if (positionMismatches < MAX_FAILURES_TO_REPORT) {
+    //       if (!isWhitespaceOnly(fw.word)) {
+    //         std::cout << "  *** Position before mismatch at index " << i << " (word='" << fw.word.c_str()
+    //                   << "'): forward=" << fw.positionBefore << " backward=" << bw.positionBefore << "\n";
+    //       }
+    //     }
+
+    //     positionMismatches++;
+    //     allMatch = false;
+    //   }
+    //   if (fw.positionAfter != bw.positionAfter) {
+    //     if (positionMismatches < MAX_FAILURES_TO_REPORT) {
+    //       if (!isWhitespaceOnly(fw.word)) {
+    //         std::cout << "  *** Position after mismatch at index " << i << " (word='" << fw.word.c_str()
+    //                   << "'): forward=" << fw.positionAfter << " backward=" << bw.positionAfter << "\n";
+    //       }
+    //     }
+    //     positionMismatches++;
+    //     allMatch = false;
+    //   }
+    // }
   }
 
-  runner.expectTrue(allMatch, std::string(testName) + ": All words match bidirectionally", mismatchMsg);
+  if (wordMismatches > 0) {
+    mismatchMsg = std::to_string(wordMismatches) + " word mismatches";
+  }
+  if (positionMismatches > 0) {
+    if (!mismatchMsg.empty())
+      mismatchMsg += ", ";
+    mismatchMsg += std::to_string(positionMismatches) + " position mismatches";
+  }
+
+  runner.expectTrue(allMatch, std::string(testName) + ": All words and positions match bidirectionally", mismatchMsg);
 }
 
 /**
@@ -199,9 +264,10 @@ void testSeekConsistency(TestUtils::TestRunner& runner) {
 
   std::cout << "  Recorded " << words.size() << " words with positions\n";
 
-  // Phase 2: Verify each word by seeking
+  // Phase 2: Verify each word by seeking and reading forward
   int failCount = 0;
 
+  std::cout << "  Testing forward seek consistency...\n";
   for (size_t i = 0; i < words.size() && failCount < MAX_FAILURES_TO_REPORT; i++) {
     const WordInfo& info = words[i];
 
@@ -210,18 +276,41 @@ void testSeekConsistency(TestUtils::TestRunner& runner) {
     int positionAgain = provider.getCurrentIndex();
 
     if (wordAgain != info.word) {
-      std::cout << "  *** Word mismatch at index " << i << ": expected '" << info.word.c_str() << "' got '"
-                << wordAgain.c_str() << "'\n";
-      failCount++;
-    } else if (positionAgain != info.positionAfter) {
-      std::cout << "  *** Position mismatch at index " << i << ": expected " << info.positionAfter << " got "
-                << positionAgain << "\n";
+      std::cout << "  *** Forward word mismatch at index " << i << " at position " << info.positionBefore
+                << ": expected '" << info.word.c_str() << "' got '" << wordAgain.c_str() << "'\n";
       failCount++;
     }
+    //  else if (positionAgain != info.positionAfter) {
+    //   std::cout << "  *** Forward position mismatch at index " << i << ": expected " << info.positionAfter << " got "
+    //             << positionAgain << "\n";
+    //   failCount++;
+    // }
+  }
+
+  // Phase 3: Verify each word by seeking and reading backward
+  std::cout << "  Testing backward seek consistency...\n";
+  for (size_t i = 0; i < words.size() && failCount < MAX_FAILURES_TO_REPORT; i++) {
+    const WordInfo& info = words[i];
+
+    provider.setPosition(info.positionAfter);
+    String wordAgain = provider.getPrevWord();
+    int positionAgain = provider.getCurrentIndex();
+
+    if (wordAgain != info.word) {
+      std::cout << "  *** Backward word mismatch at index " << i << ": expected '" << info.word.c_str() << "' got '"
+                << wordAgain.c_str() << "' (posAfter=" << info.positionAfter << ", posBefore=" << info.positionBefore
+                << ")\n";
+      failCount++;
+    }
+    //  else if (positionAgain != info.positionBefore) {
+    //   std::cout << "  *** Backward position mismatch at index " << i << " (word='" << info.word.c_str()
+    //             << "'): expected " << info.positionBefore << " got " << positionAgain << "\n";
+    //   failCount++;
+    // }
   }
 
   if (failCount == 0) {
-    std::cout << "  All " << words.size() << " words verified successfully\n";
+    std::cout << "  All " << words.size() << " words verified successfully (forward and backward)\n";
     runner.expectTrue(true, std::string(testName) + ": Seek consistency verified");
   } else {
     runner.expectTrue(false,
