@@ -54,8 +54,11 @@ class EpubWordProvider : public WordProvider {
   CssStyle getCurrentStyle() override {
     return CssStyle();
   }
-  bool hasStyleSupport() override {
-    return false;
+
+  TextAlign getParagraphAlignment() override {
+    if (fileProvider_)
+      return fileProvider_->getParagraphAlignment();
+    return TextAlign::Left;
   }
 
   // Streaming conversion mode (true = extract to memory, false = extract to file first)
@@ -87,6 +90,10 @@ class EpubWordProvider : public WordProvider {
 
   // Common conversion logic used by both convertXhtmlToTxt and convertXhtmlStreamToTxt
   void performXhtmlToTxtConversion(SimpleXmlParser& parser, File& out);
+
+  // Emit style properties for a paragraph's classes as an escaped token written to buffer
+  void writeParagraphStyleToken(String& writeBuffer, const String& pendingParagraphClasses,
+                                bool& paragraphClassesWritten);
 
   bool valid_ = false;
   bool isEpub_ = false;                 // True if source is EPUB, false if direct XHTML

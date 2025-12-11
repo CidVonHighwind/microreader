@@ -11,81 +11,150 @@ bool CssParser::parseFile(const char* filepath) {
     return false;
   }
 
-  // Read entire file into string (CSS files are usually small)
-  String cssContent;
-  cssContent.reserve(file.size());
-  while (file.available()) {
-    cssContent += (char)file.read();
-  }
-  file.close();
+  // Stream parse: read character-by-character and process rules
+  String selector;
+  String properties;
+  bool inComment = false;
+  bool inAtRule = false;
+  bool inRule = false;
+  bool inString = false;
+  char stringQuote = 0;
+  int braceCount = 0;
 
-  return parseString(cssContent);
-}
+  // Use a single-character pushback instead of File::peek(), which may be missing in mocks
+  int pushback = -1;
+  while (file.available() || pushback != -1) {
+    char c;
+    if (pushback != -1) {
+      c = (char)pushback;
+      pushback = -1;
+    } else {
+      c = (char)file.read();
+    }
 
-bool CssParser::parseString(const String& cssContent) {
-  size_t pos = 0;
-  size_t len = cssContent.length();
+    // Handle comment start '/*'
+    if (!inComment && c == '/') {
+      // Probe next char
+      int next = -1;
+      if (file.available())
+        next = file.read();
+      if (next == '*') {
+        inComment = true;
+        continue;
+      }
+      // Not a comment. Push back the next char if any, and continue processing '/'
+      if (next != -1)
+        pushback = next;
+    }
 
-  while (pos < len) {
-    // Skip whitespace and comments
-    pos = skipWhitespaceAndComments(cssContent, pos);
-    if (pos >= len)
-      break;
-
-    // Skip @rules (like @page, @media) - we don't support them yet
-    if (cssContent.charAt(pos) == '@') {
-      // Find the end of the @rule
-      int braceCount = 0;
-      bool foundBrace = false;
-      while (pos < len) {
-        char c = cssContent.charAt(pos);
-        if (c == '{') {
-          braceCount++;
-          foundBrace = true;
-        } else if (c == '}') {
-          braceCount--;
-          if (braceCount == 0 && foundBrace) {
-            pos++;
-            break;
-          }
-        } else if (c == ';' && !foundBrace) {
-          // Simple @rule like @import
-          pos++;
-          break;
+    if (inComment) {
+      // Look for end of comment '*/'
+      if (c == '*') {
+        int next = -1;
+        if (file.available())
+          next = file.read();
+        if (next == '/') {
+          inComment = false;
+        } else if (next != -1) {
+          pushback = next;
         }
-        pos++;
       }
       continue;
     }
 
-    // Find selector(s)
-    size_t selectorEnd = findSelectorEnd(cssContent, pos);
-    if (selectorEnd >= len || selectorEnd <= pos)
-      break;
+    // Ignore carriage returns entirely
+    if (c == '\r')
+      continue;
 
-    String selector = cssContent.substring(pos, selectorEnd);
-    selector.trim();
+    if (!inRule) {
+      // Handle AT-rules by skipping until ; or matching braces
+      if (inAtRule) {
+        if (c == '{') {
+          braceCount++;
+        } else if (c == '}') {
+          if (braceCount > 0) {
+            braceCount--;
+            if (braceCount == 0) {
+              inAtRule = false;
+            }
+          }
+        } else if (c == ';' && braceCount == 0) {
+          inAtRule = false;
+        }
+        continue;
+      }
 
-    // Skip the '{'
-    pos = selectorEnd + 1;
+      // Not in rule and not in AT-rule
+      if (c == '@') {
+        inAtRule = true;
+        braceCount = 0;
+        // start collecting the at-rule but we don't need it; skip it
+        continue;
+      }
 
-    // Find the end of the rule block
-    size_t ruleEnd = findRuleEnd(cssContent, pos);
-    if (ruleEnd >= len)
-      break;
+      if (c == '{') {
+        // start of a declaration block
+        inRule = true;
+        braceCount = 1;
+        selector.trim();
+        properties = "";
+        continue;
+      }
 
-    String properties = cssContent.substring(pos, ruleEnd);
-    properties.trim();
+      // Normal selector characters
+      selector += c;
+    } else {
+      // We are inside a declaration block for a selector
+      // Track quoted strings so braces inside values don't confuse us
+      if (!inString && (c == '"' || c == '\'')) {
+        inString = true;
+        stringQuote = c;
+        properties += c;
+        continue;
+      } else if (inString && c == stringQuote) {
+        inString = false;
+        stringQuote = 0;
+        properties += c;
+        continue;
+      }
 
-    // Parse the rule
-    if (selector.length() > 0 && properties.length() > 0) {
-      parseRule(selector, properties);
+      if (!inString) {
+        if (c == '{') {
+          braceCount++;
+          properties += c;
+          continue;
+        } else if (c == '}') {
+          braceCount--;
+          if (braceCount == 0) {
+            // End of declaration block; parse the rule
+            properties.trim();
+            if (selector.length() > 0 && properties.length() > 0) {
+              parseRule(selector, properties);
+            }
+            // Reset for next rule
+            selector = "";
+            properties = "";
+            inRule = false;
+            continue;
+          }
+        }
+      }
+
+      // Append character to properties
+      properties += c;
     }
-
-    // Skip the '}'
-    pos = ruleEnd + 1;
   }
 
+  // If EOF reached and still inside a rule, try to finalize it
+  if (inRule && properties.length() > 0) {
+    properties.trim();
+    selector.trim();
+    if (selector.length() > 0) {
+      parseRule(selector, properties);
+    }
+  }
+
+  file.close();
   Serial.printf("CssParser: Loaded %d style rules\n", styleMap_.size());
   return true;
 }
@@ -234,71 +303,11 @@ TextAlign CssParser::parseTextAlign(const String& value) {
   return TextAlign::Left;
 }
 
-size_t CssParser::skipWhitespaceAndComments(const String& css, size_t pos) {
-  size_t len = css.length();
+// skipWhitespaceAndComments removed (used by parseString which was removed)
 
-  while (pos < len) {
-    char c = css.charAt(pos);
+// findSelectorEnd removed (used by parseString)
 
-    // Skip whitespace
-    if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
-      pos++;
-      continue;
-    }
-
-    // Skip comments /* ... */
-    if (c == '/' && pos + 1 < len && css.charAt(pos + 1) == '*') {
-      pos += 2;
-      while (pos + 1 < len) {
-        if (css.charAt(pos) == '*' && css.charAt(pos + 1) == '/') {
-          pos += 2;
-          break;
-        }
-        pos++;
-      }
-      continue;
-    }
-
-    // Not whitespace or comment
-    break;
-  }
-
-  return pos;
-}
-
-size_t CssParser::findSelectorEnd(const String& css, size_t pos) {
-  size_t len = css.length();
-
-  while (pos < len) {
-    char c = css.charAt(pos);
-    if (c == '{') {
-      return pos;
-    }
-    pos++;
-  }
-
-  return len;
-}
-
-size_t CssParser::findRuleEnd(const String& css, size_t pos) {
-  size_t len = css.length();
-  int braceCount = 1;  // We're already inside one '{'
-
-  while (pos < len) {
-    char c = css.charAt(pos);
-    if (c == '{') {
-      braceCount++;
-    } else if (c == '}') {
-      braceCount--;
-      if (braceCount == 0) {
-        return pos;
-      }
-    }
-    pos++;
-  }
-
-  return len;
-}
+// findRuleEnd removed (used by parseString)
 
 String CssParser::extractClassName(const String& selector) {
   // Find the class selector (starts with '.')

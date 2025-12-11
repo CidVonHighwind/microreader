@@ -23,11 +23,11 @@
 // Test configuration
 namespace SeekTests {
 
-constexpr bool TEST_FORWARD_SEEK_CONSISTENCY = false;
-constexpr bool TEST_BACKWARD_SEEK_CONSISTENCY = false;
-constexpr bool TEST_BIDIRECTIONAL_SEEK_CONSISTENCY = false;
-constexpr bool TEST_READ_ALL_THEN_VERIFY = false;
-constexpr bool TEST_MID_WORD_SEEK_RECONSTRUCT = false;
+constexpr bool TEST_FORWARD_SEEK_CONSISTENCY = true;
+constexpr bool TEST_BACKWARD_SEEK_CONSISTENCY = true;
+constexpr bool TEST_BIDIRECTIONAL_SEEK_CONSISTENCY = true;
+constexpr bool TEST_READ_ALL_THEN_VERIFY = true;
+constexpr bool TEST_MID_WORD_SEEK_RECONSTRUCT = true;
 constexpr int MAX_WORDS = 500;
 constexpr int MAX_FAILURES_TO_REPORT = 10;
 

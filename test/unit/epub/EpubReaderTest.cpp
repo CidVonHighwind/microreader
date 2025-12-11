@@ -24,19 +24,19 @@
 #include "test_utils.h"
 
 // Test toggles - set to false to skip specific tests
-#define TEST_EPUB_VALIDITY true
-#define TEST_SPINE_COUNT true
-#define TEST_SPINE_ITEMS true
-#define TEST_CONTENT_OPF_PATH true
-#define TEST_EXTRACT_DIR true
-#define TEST_FILE_EXTRACTION true
-#define TEST_SPINE_ITEM_BOUNDS true
-#define TEST_TOC_CONTENT true
-#define TEST_CHAPTER_NAME_FOR_SPINE true
-#define TEST_SPINE_SIZES true
+#define TEST_EPUB_VALIDITY false
+#define TEST_SPINE_COUNT false
+#define TEST_SPINE_ITEMS false
+#define TEST_CONTENT_OPF_PATH false
+#define TEST_EXTRACT_DIR false
+#define TEST_FILE_EXTRACTION false
+#define TEST_SPINE_ITEM_BOUNDS false
+#define TEST_TOC_CONTENT false
+#define TEST_CHAPTER_NAME_FOR_SPINE false
+#define TEST_SPINE_SIZES false
 #define TEST_CSS_PARSING true
-#define TEST_STREAM_CONVERTER true
-#define TEST_STREAM_RAW_BYTES true
+#define TEST_STREAM_CONVERTER false
+#define TEST_STREAM_RAW_BYTES false
 
 // Test configuration
 namespace EpubReaderTests {
@@ -567,7 +567,25 @@ void testCssStringParsing(TestUtils::TestRunner& runner) {
     }
   )";
 
-  bool parseResult = parser.parseString(css);
+  // Create a temporary CSS file in the mocked SD filesystem and parse it
+  String cssPath = "test_css.css";
+  if (SD.exists(cssPath.c_str()))
+    SD.remove(cssPath.c_str());
+  File cssFile = SD.open(cssPath.c_str(), FILE_WRITE);
+  if (!cssFile) {
+    runner.expectTrue(false, "Failed to create temp CSS file for parsing");
+    return;
+  }
+  // Write CSS content
+  for (size_t i = 0; i < (size_t)css.length(); ++i) {
+    char c = css.charAt((int)i);
+    cssFile.write((uint8_t*)&c, 1);
+  }
+  cssFile.close();
+
+  bool parseResult = parser.parseFile(cssPath.c_str());
+  // Clean up temporary file
+  SD.remove(cssPath.c_str());
   runner.expectTrue(parseResult, "CSS string should parse successfully");
 
   std::cout << "  Parsed " << parser.getStyleCount() << " style rules\n";

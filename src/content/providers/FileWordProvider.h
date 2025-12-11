@@ -32,6 +32,9 @@ class FileWordProvider : public WordProvider {
   void ungetWord() override;
   void reset() override;
 
+  // Paragraph alignment support
+  TextAlign getParagraphAlignment() override;
+
  private:
   String scanWord(int direction);
 
@@ -47,6 +50,22 @@ class FileWordProvider : public WordProvider {
   size_t bufSize_ = 0;
   size_t bufStart_ = 0;  // file offset of buf_[0]
   size_t bufLen_ = 0;    // valid bytes in buf_
+  TextAlign currentParagraphAlignment_ = TextAlign::Left;
+
+  // Parse and skip an ESC style token starting at `pos` (forward direction).
+  // Token format: ESC [ content ] ESC
+  // Returns number of characters consumed by the token (0 if not a token).
+  size_t parseEscTokenAtPos(size_t pos);
+
+  // Find the start of an ESC token when positioned at its trailing ESC.
+  // Returns the position of the leading ESC, or SIZE_MAX if not found.
+  size_t findEscTokenStart(size_t trailingEscPos);
+
+  // Check if position is inside an ESC token (not at boundaries).
+  // If so, returns the token length; otherwise returns 0.
+  bool isEscChar(char c) {
+    return c == (char)27;
+  }
 };
 
 #endif

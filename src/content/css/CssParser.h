@@ -35,12 +35,6 @@ class CssParser {
   bool parseFile(const char* filepath);
 
   /**
-   * Parse CSS content from a string (e.g., inline <style> block)
-   * Returns true if parsing was successful
-   */
-  bool parseString(const String& cssContent);
-
-  /**
    * Get the style for a given class name
    * Returns nullptr if no style is defined for this class
    */
@@ -82,15 +76,6 @@ class CssParser {
 
   // Parse text-align value
   TextAlign parseTextAlign(const String& value);
-
-  // Skip whitespace and comments in CSS content
-  size_t skipWhitespaceAndComments(const String& css, size_t pos);
-
-  // Find the end of a selector (before '{')
-  size_t findSelectorEnd(const String& css, size_t pos);
-
-  // Find the end of a rule block (after '}')
-  size_t findRuleEnd(const String& css, size_t pos);
 
   // Extract class name from a selector (e.g., ".foo" or "p.foo" -> "foo")
   String extractClassName(const String& selector);

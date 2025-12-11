@@ -93,9 +93,9 @@ class WordProvider {
     return CssStyle();
   }
 
-  // Check if the provider supports CSS styles
-  virtual bool hasStyleSupport() {
-    return false;
+  // Current paragraph alignment - default left
+  virtual TextAlign getParagraphAlignment() {
+    return TextAlign::Left;
   }
 };
 

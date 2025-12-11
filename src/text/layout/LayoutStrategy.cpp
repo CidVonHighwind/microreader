@@ -43,25 +43,22 @@ LayoutStrategy::Line LayoutStrategy::getNextLine(WordProvider& provider, TextRen
     // Capture alignment when we see one in the paragraph
     // CSS alignment overrides the default
     if (!alignmentCaptured) {
-      if (provider.hasStyleSupport()) {
-        CssStyle style = provider.getCurrentStyle();
-        if (style.hasTextAlign) {
-          alignmentCaptured = true;
-          switch (style.textAlign) {
-            case TextAlign::Center:
-              result.alignment = ALIGN_CENTER;
-              break;
-            case TextAlign::Right:
-              result.alignment = ALIGN_RIGHT;
-              break;
-            case TextAlign::Left:
-              result.alignment = ALIGN_LEFT;
-              break;
-            default:
-              // Keep defaultAlignment for Justify or unknown
-              break;
-          }
-        }
+      // Prefer the provider's paragraph alignment if available (providers report Left by default)
+      TextAlign pAlign = provider.getParagraphAlignment();
+      alignmentCaptured = true;
+      switch (pAlign) {
+        case TextAlign::Center:
+          result.alignment = ALIGN_CENTER;
+          break;
+        case TextAlign::Right:
+          result.alignment = ALIGN_RIGHT;
+          break;
+        case TextAlign::Left:
+          result.alignment = ALIGN_LEFT;
+          break;
+        default:
+          // Keep defaultAlignment for Justify or unknown
+          break;
       }
     }
 

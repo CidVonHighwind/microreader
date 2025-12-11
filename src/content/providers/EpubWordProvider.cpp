@@ -141,6 +141,10 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
   bool lastWasNewline = false;
   bool trimNextText = false;
   std::vector<String> elementStack;
+  std::vector<String> classStack;
+  // For paragraph class support: classes associated with the current paragraph element
+  String pendingParagraphClasses = "";
+  bool paragraphClassesWritten = false;
 
   int nodeCount = 0;
   int textNodeCount = 0;
@@ -163,6 +167,9 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
     writeBuffer += "\n";
     lastWasNewline = true;
     trimNextText = true;
+    // When a paragraph ends, reset pending classes
+    pendingParagraphClasses = "";
+    paragraphClassesWritten = false;
   };
 
   // Helper lambda to flush buffer to disk
@@ -237,6 +244,7 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
 
       // Append to buffer
       if (!normalized.isEmpty()) {
+        writeParagraphStyleToken(writeBuffer, pendingParagraphClasses, paragraphClassesWritten);
         writeBuffer += normalized;
         lastWasNewline = false;
       }
@@ -250,10 +258,20 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
       elementCount++;
       String name = parser.getName();
 
+      // Read class attribute for this element
+      String classAttr = parser.getAttribute("class");
+
       // Only push non-empty elements to the stack
       // Self-closing elements (like <br/>, <meta/>, <link/>) don't need to be tracked
       if (!parser.isEmptyElement()) {
         elementStack.push_back(name);
+        classStack.push_back(classAttr);
+      }
+
+      // If this is a paragraph/block element, treat classAttr as the classes for this paragraph
+      if (isBlockElement(name)) {
+        pendingParagraphClasses = classAttr;
+        paragraphClassesWritten = false;
       }
 
       // Only add newlines for self-closing line break elements (br, hr)
@@ -276,12 +294,58 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
       // Pop element from stack
       if (!elementStack.empty()) {
         elementStack.pop_back();
+        if (!classStack.empty()) {
+          classStack.pop_back();
+        }
       }
     }
   }
 
   // Final flush
   flushBuffer();
+}
+
+void EpubWordProvider::writeParagraphStyleToken(String& writeBuffer, const String& pendingParagraphClasses,
+                                                bool& paragraphClassesWritten) {
+  // If this is the beginning of a paragraph and classes haven't been written yet,
+  // write the pending paragraph classes in front of the text line.
+  if (!pendingParagraphClasses.isEmpty() && !paragraphClassesWritten) {
+    // Emit style properties for the paragraph classes as an escaped token
+    // Format: ESC[align=center] (ESC = 0x1B) followed by a space
+    const CssParser* css = epubReader_ ? epubReader_->getCssParser() : nullptr;
+    if (css) {
+      CssStyle combined = css->getCombinedStyle(pendingParagraphClasses);
+      String styleToken = "";
+      if (combined.hasTextAlign) {
+        styleToken += (char)27;  // ESC
+        styleToken += "[";
+        styleToken += "align=";
+        switch (combined.textAlign) {
+          case TextAlign::Left:
+            styleToken += "left";
+            break;
+          case TextAlign::Right:
+            styleToken += "right";
+            break;
+          case TextAlign::Center:
+            styleToken += "center";
+            break;
+          case TextAlign::Justify:
+            styleToken += "justify";
+            break;
+          default:
+            styleToken += "left";
+            break;
+        }
+        styleToken += "]";
+      }
+      if (styleToken.length() > 0) {
+        styleToken += (char)27;  // trailing ESC
+        writeBuffer += styleToken;
+      }
+    }
+    paragraphClassesWritten = true;
+  }
 }
 
 // Context for true streaming: EPUB -> Parser -> TXT
