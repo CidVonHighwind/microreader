@@ -36,11 +36,45 @@ constexpr bool TEST_POSITION_ROUND_TRIP = false;
 constexpr int MAX_WORDS_FOR_SEEK_TEST = 500;
 constexpr int MAX_FAILURES_TO_REPORT = 10;
 
+// Helper to convert FontStyle to string
+const char* fontStyleToString(FontStyle style) {
+  switch (style) {
+    case FontStyle::REGULAR:
+      return "regular";
+    case FontStyle::BOLD:
+      return "bold";
+    case FontStyle::ITALIC:
+      return "italic";
+    case FontStyle::BOLD_ITALIC:
+      return "bold_italic";
+    default:
+      return "unknown";
+  }
+}
+
+// Helper to convert TextAlign to string
+const char* textAlignToString(TextAlign align) {
+  switch (align) {
+    case TextAlign::Left:
+      return "left";
+    case TextAlign::Right:
+      return "right";
+    case TextAlign::Center:
+      return "center";
+    case TextAlign::Justify:
+      return "justify";
+    default:
+      return "unknown";
+  }
+}
+
 // Word info structure for seek verification
 struct WordInfo {
   String word;
   int positionBefore;
   int positionAfter;
+  FontStyle style;
+  TextAlign alignment;
 };
 
 /**
@@ -60,7 +94,7 @@ void testForwardReconstruction(TestUtils::TestRunner& runner) {
     int printed = 0;
     while (p.hasNextWord() && printed < maxLines) {
       int posBefore = p.getCurrentIndex();
-      String w = p.getNextWord();
+      String w = p.getNextWord().text;
       int posAfter = p.getCurrentIndex();
       std::string s = w.c_str();
       // Show a visible placeholder for empty strings instead of leaving blank lines
@@ -78,10 +112,10 @@ void testForwardReconstruction(TestUtils::TestRunner& runner) {
   int wordCount = 0;
 
   // Debug: print first 20 words so we can spot empty / whitespace-only words quickly
-  debugPrintFirstNWords(provider, 100);
+  // debugPrintFirstNWords(provider, 10);
 
   while (provider.hasNextWord()) {
-    String word = provider.getNextWord();
+    String word = provider.getNextWord().text;
     if (word.length() == 0)
       break;
     rebuilt += word.c_str();
@@ -106,7 +140,7 @@ void testBackwardReconstruction(TestUtils::TestRunner& runner) {
 
   // First, go to end
   while (provider.hasNextWord()) {
-    String word = provider.getNextWord();
+    String word = provider.getNextWord().text;
     if (word.length() == 0)
       break;
   }
@@ -121,7 +155,7 @@ void testBackwardReconstruction(TestUtils::TestRunner& runner) {
 
   while (true) {
     int currentIndex = provider.getCurrentIndex();
-    String word = provider.getPrevWord();
+    String word = provider.getPrevWord().text;
     int newIndex = provider.getCurrentIndex();
 
     // print out the word read
@@ -180,7 +214,10 @@ void testBidirectionalWordMatch(TestUtils::TestRunner& runner) {
   while (provider.hasNextWord()) {
     WordInfo info;
     info.positionBefore = provider.getCurrentIndex();
-    info.word = provider.getNextWord();
+    info.alignment = provider.getParagraphAlignment();
+    StyledWord sw = provider.getNextWord();
+    info.word = sw.text;
+    info.style = sw.style;
     info.positionAfter = provider.getCurrentIndex();
     if (info.word.length() == 0)
       break;
@@ -197,7 +234,10 @@ void testBidirectionalWordMatch(TestUtils::TestRunner& runner) {
   while (provider.hasPrevWord()) {
     WordInfo info;
     info.positionAfter = provider.getCurrentIndex();
-    info.word = provider.getPrevWord();
+    info.alignment = provider.getParagraphAlignment();
+    StyledWord sw = provider.getPrevWord();
+    info.word = sw.text;
+    info.style = sw.style;
     info.positionBefore = provider.getCurrentIndex();
     if (info.word.length() == 0)
       break;
@@ -209,24 +249,32 @@ void testBidirectionalWordMatch(TestUtils::TestRunner& runner) {
 
   std::cout << "  Collected " << backwardWords.size() << " words backward\n";
 
-  // Write forward words to file (just the raw text)
+  // Write forward words to file (with style and alignment info)
   {
-    std::ofstream forwardFile("forward_words.txt");
+    std::ofstream forwardFile("test/output/forward_words.txt");
     if (forwardFile.is_open()) {
       for (size_t i = 0; i < forwardWords.size(); i++) {
-        forwardFile << forwardWords[i].word.c_str();
+        const WordInfo& w = forwardWords[i];
+        // Write: [index] pos:before-after style:X align:Y "word"
+        forwardFile << "[" << i << "] pos:" << w.positionBefore << "-" << w.positionAfter
+                    << " style:" << fontStyleToString(w.style) << " align:" << textAlignToString(w.alignment) << " \""
+                    << escapeForOutput(w.word) << "\"\n";
       }
       forwardFile.close();
       std::cout << "  Wrote forward words to forward_words.txt\n";
     }
   }
 
-  // Write backward words to file (just the raw text)
+  // Write backward words to file (with style and alignment info)
   {
-    std::ofstream backwardFile("backward_words.txt");
+    std::ofstream backwardFile("test/output/backward_words.txt");
     if (backwardFile.is_open()) {
       for (size_t i = 0; i < backwardWords.size(); i++) {
-        backwardFile << backwardWords[i].word.c_str();
+        const WordInfo& w = backwardWords[i];
+        // Write: [index] pos:before-after style:X align:Y "word"
+        backwardFile << "[" << i << "] pos:" << w.positionBefore << "-" << w.positionAfter
+                     << " style:" << fontStyleToString(w.style) << " align:" << textAlignToString(w.alignment) << " \""
+                     << escapeForOutput(w.word) << "\"\n";
       }
       backwardFile.close();
       std::cout << "  Wrote backward words to backward_words.txt\n";
@@ -243,6 +291,8 @@ void testBidirectionalWordMatch(TestUtils::TestRunner& runner) {
   std::string mismatchMsg;
   size_t compareCount = std::min(forwardWords.size(), backwardWords.size());
   int wordMismatches = 0;
+  int styleMismatches = 0;
+  int alignmentMismatches = 0;
   int positionMismatches = 0;
 
   // Helper to check if a word is whitespace-only
@@ -261,40 +311,55 @@ void testBidirectionalWordMatch(TestUtils::TestRunner& runner) {
 
     if (fw.word != bw.word) {
       if (wordMismatches < MAX_FAILURES_TO_REPORT) {
-        std::cout << "  *** Word mismatch at index " << i << ": forward='" << fw.word.c_str() << "' backward='"
-                  << bw.word.c_str() << "'\n";
+        std::string fwDisplay = fw.word.c_str();
+        std::string bwDisplay = bw.word.c_str();
+        // Make newlines visible
+        if (fwDisplay == "\n")
+          fwDisplay = "\\n";
+        if (bwDisplay == "\n")
+          bwDisplay = "\\n";
+        std::cout << "  *** Word mismatch at index " << i << ": forward='" << fwDisplay << "' backward='" << bwDisplay
+                  << "'\n";
       }
       wordMismatches++;
       allMatch = false;
     }
-    //  else {
-    //   // Words match, check positions (skip whitespace-only words as they have different position semantics)
-    //   if (fw.positionBefore != bw.positionBefore) {
-    //     if (positionMismatches < MAX_FAILURES_TO_REPORT) {
-    //       if (!isWhitespaceOnly(fw.word)) {
-    //         std::cout << "  *** Position before mismatch at index " << i << " (word='" << fw.word.c_str()
-    //                   << "'): forward=" << fw.positionBefore << " backward=" << bw.positionBefore << "\n";
-    //       }
-    //     }
 
-    //     positionMismatches++;
-    //     allMatch = false;
-    //   }
-    //   if (fw.positionAfter != bw.positionAfter) {
-    //     if (positionMismatches < MAX_FAILURES_TO_REPORT) {
-    //       if (!isWhitespaceOnly(fw.word)) {
-    //         std::cout << "  *** Position after mismatch at index " << i << " (word='" << fw.word.c_str()
-    //                   << "'): forward=" << fw.positionAfter << " backward=" << bw.positionAfter << "\n";
-    //       }
-    //     }
-    //     positionMismatches++;
-    //     allMatch = false;
-    //   }
-    // }
+    // Check style match (skip whitespace-only words as they may have transitional styles)
+    if (fw.style != bw.style && !isWhitespaceOnly(fw.word)) {
+      if (styleMismatches < MAX_FAILURES_TO_REPORT) {
+        std::cout << "  *** Style mismatch at index " << i << " (word='" << fw.word.c_str()
+                  << "'): forward=" << fontStyleToString(fw.style) << " backward=" << fontStyleToString(bw.style)
+                  << "\n";
+      }
+      styleMismatches++;
+      allMatch = false;
+    }
+
+    // Check alignment match (skip whitespace-only words)
+    if (fw.alignment != bw.alignment && !isWhitespaceOnly(fw.word)) {
+      if (alignmentMismatches < MAX_FAILURES_TO_REPORT) {
+        std::cout << "  *** Alignment mismatch at index " << i << " (word='" << fw.word.c_str()
+                  << "'): forward=" << textAlignToString(fw.alignment)
+                  << " backward=" << textAlignToString(bw.alignment) << "\n";
+      }
+      alignmentMismatches++;
+      allMatch = false;
+    }
   }
 
   if (wordMismatches > 0) {
     mismatchMsg = std::to_string(wordMismatches) + " word mismatches";
+  }
+  if (styleMismatches > 0) {
+    if (!mismatchMsg.empty())
+      mismatchMsg += ", ";
+    mismatchMsg += std::to_string(styleMismatches) + " style mismatches";
+  }
+  if (alignmentMismatches > 0) {
+    if (!mismatchMsg.empty())
+      mismatchMsg += ", ";
+    mismatchMsg += std::to_string(alignmentMismatches) + " alignment mismatches";
   }
   if (positionMismatches > 0) {
     if (!mismatchMsg.empty())
@@ -321,7 +386,7 @@ void testSeekConsistency(TestUtils::TestRunner& runner) {
   while (provider.hasNextWord() && (int)words.size() < MAX_WORDS_FOR_SEEK_TEST) {
     WordInfo info;
     info.positionBefore = provider.getCurrentIndex();
-    info.word = provider.getNextWord();
+    info.word = provider.getNextWord().text;
     info.positionAfter = provider.getCurrentIndex();
 
     if (info.word.length() == 0)
@@ -361,7 +426,7 @@ void testSeekConsistency(TestUtils::TestRunner& runner) {
       std::cout << "After setPosition, currentIndex " << provider.getCurrentIndex() << "\n";
     }
 
-    String wordAgain = provider.getNextWord();
+    String wordAgain = provider.getNextWord().text;
     int positionAgain = provider.getCurrentIndex();
 
     if (i == 115) {
@@ -381,7 +446,7 @@ void testSeekConsistency(TestUtils::TestRunner& runner) {
     const WordInfo& info = words[i];
 
     provider.setPosition(info.positionAfter);
-    String wordAgain = provider.getPrevWord();
+    String wordAgain = provider.getPrevWord().text;
     int positionAgain = provider.getCurrentIndex();
 
     if (wordAgain != info.word) {
@@ -416,12 +481,12 @@ void testUngetForward(TestUtils::TestRunner& runner) {
   int wordsProcessed = 0;
 
   while (provider.hasNextWord()) {
-    String word1 = provider.getNextWord();
+    String word1 = provider.getNextWord().text;
     if (word1.length() == 0)
       break;
 
     provider.ungetWord();
-    String word2 = provider.getNextWord();
+    String word2 = provider.getNextWord().text;
 
     if (word1 != word2) {
       errorMsg = "Unget failed at word " + std::to_string(wordsProcessed) + ": first='" + std::string(word1.c_str()) +
@@ -448,7 +513,7 @@ void testUngetBackward(TestUtils::TestRunner& runner) {
 
   // Go to end first
   while (provider.hasNextWord()) {
-    String word = provider.getNextWord();
+    String word = provider.getNextWord().text;
     if (word.length() == 0)
       break;
   }
@@ -461,12 +526,12 @@ void testUngetBackward(TestUtils::TestRunner& runner) {
   int wordsProcessed = 0;
 
   while (wordsProcessed < 100) {  // Limit to prevent infinite loops
-    String word1 = provider.getPrevWord();
+    String word1 = provider.getPrevWord().text;
     if (word1.length() == 0)
       break;
 
     provider.ungetWord();
-    String word2 = provider.getPrevWord();
+    String word2 = provider.getPrevWord().text;
 
     if (word1 != word2) {
       errorMsg = "Backward unget failed at word " + std::to_string(wordsProcessed) + ": first='" +
@@ -497,7 +562,7 @@ void testPositionRoundTrip(TestUtils::TestRunner& runner) {
   while (provider.hasNextWord() && (int)words.size() < 100) {
     WordInfo info;
     info.positionBefore = provider.getCurrentIndex();
-    info.word = provider.getNextWord();
+    info.word = provider.getNextWord().text;
     info.positionAfter = provider.getCurrentIndex();
 
     if (info.word.length() == 0)
@@ -513,12 +578,12 @@ void testPositionRoundTrip(TestUtils::TestRunner& runner) {
 
     // Read forward from start position
     provider.setPosition(info.positionBefore);
-    String wordForward = provider.getNextWord();
+    String wordForward = provider.getNextWord().text;
     int endPos = provider.getCurrentIndex();
 
     // Read backward from end position
     provider.setPosition(endPos);
-    String wordBackward = provider.getPrevWord();
+    String wordBackward = provider.getPrevWord().text;
 
     if (wordForward != wordBackward) {
       std::cout << "  *** Round-trip mismatch at index " << i << " positioned at " << info.positionBefore

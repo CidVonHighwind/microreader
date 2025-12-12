@@ -12,8 +12,8 @@ class StringWordProvider : public WordProvider {
   bool hasNextWord() override;
   bool hasPrevWord() override;
 
-  String getNextWord() override;
-  String getPrevWord() override;
+  StyledWord getNextWord() override;
+  StyledWord getPrevWord() override;
 
   float getPercentage() override;
   float getPercentage(int index) override;
@@ -27,7 +27,7 @@ class StringWordProvider : public WordProvider {
 
  private:
   // Unified scanner: `direction` should be +1 for forward scanning and -1 for backward scanning
-  String scanWord(int direction);
+  StyledWord scanWord(int direction);
 
   String text_;
   int index_;

@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "rendering/SimpleFont.h"  // For FontStyle
+
 // Forward declarations
 class TextRenderer;
 class WordProvider;
@@ -29,7 +31,15 @@ class LayoutStrategy {
     int16_t width;
     int16_t x;
     int16_t y;
-    bool wasSplit;  // True if this word was split (hyphenated) and must end the line
+    bool wasSplit;                         // True if this word was split (hyphenated) and must end the line
+    FontStyle style = FontStyle::REGULAR;  // Font style for this word
+
+    // Default constructor
+    Word() : text(), width(0), x(0), y(0), wasSplit(false), style(FontStyle::REGULAR) {}
+
+    // Constructor for brace initialization (needed for older C++ standards)
+    Word(const String& t, int16_t w, int16_t xPos, int16_t yPos, bool split, FontStyle s = FontStyle::REGULAR)
+        : text(t), width(w), x(xPos), y(yPos), wasSplit(split), style(s) {}
   };
 
   struct Line {

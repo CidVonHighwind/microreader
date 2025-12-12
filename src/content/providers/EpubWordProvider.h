@@ -24,8 +24,8 @@ class EpubWordProvider : public WordProvider {
 
   bool hasNextWord() override;
   bool hasPrevWord() override;
-  String getNextWord() override;
-  String getPrevWord() override;
+  StyledWord getNextWord() override;
+  StyledWord getPrevWord() override;
 
   float getPercentage() override;
   float getPercentage(int index) override;
@@ -82,6 +82,9 @@ class EpubWordProvider : public WordProvider {
   // Helper to check if an element is a header element (h1-h6)
   bool isHeaderElement(const String& name);
 
+  // Helper to check if an element is an inline style element (b, strong, i, em, span)
+  bool isInlineStyleElement(const String& name);
+
   // Convert an XHTML file to a plain-text file suitable for FileWordProvider.
   bool convertXhtmlToTxt(const String& srcPath, String& outTxtPath);
 
@@ -94,6 +97,14 @@ class EpubWordProvider : public WordProvider {
   // Emit style properties for a paragraph's classes and inline styles as an escaped token written to buffer
   void writeParagraphStyleToken(String& writeBuffer, const String& pendingParagraphClasses,
                                 const String& pendingInlineStyle, bool& paragraphClassesWritten);
+
+  // Emit inline style token (for bold/italic elements like <b>, <i>, <em>, <strong>, <span>)
+  // Returns true if a style token was emitted, false otherwise
+  bool writeInlineStyleToken(String& writeBuffer, const String& elementName, const String& classAttr,
+                             const String& styleAttr);
+
+  // Emit style reset token (to return to normal after inline style element closes)
+  void writeStyleResetToken(String& writeBuffer);
 
   // Helper to create directories recursively for a given path
   bool createDirRecursive(const String& path);

@@ -12,21 +12,21 @@ bool StringWordProvider::hasPrevWord() {
   return index_ > 0;
 }
 
-String StringWordProvider::getNextWord() {
+StyledWord StringWordProvider::getNextWord() {
   return scanWord(+1);
 }
 
-String StringWordProvider::getPrevWord() {
+StyledWord StringWordProvider::getPrevWord() {
   return scanWord(-1);
 }
 
-String StringWordProvider::scanWord(int direction) {
+StyledWord StringWordProvider::scanWord(int direction) {
   // Save prevIndex_ when scanning
   prevIndex_ = index_;
 
   int currentPos = (direction == 1) ? index_ : index_ - 1;
   if ((direction == 1 && currentPos >= text_.length()) || (direction == -1 && currentPos < 0)) {
-    return String("");
+    return StyledWord();
   }
 
   char c = text_[currentPos];
@@ -46,7 +46,7 @@ String StringWordProvider::scanWord(int direction) {
       token = text_.substring(start, index_);
       index_ = start;
     }
-    return token;
+    return StyledWord(token);
   } else if (c == '\r') {
     if (direction == 1) {
       index_++;
@@ -61,7 +61,7 @@ String StringWordProvider::scanWord(int direction) {
     } else {
       index_ = currentPos;
     }
-    return String(c);
+    return StyledWord(String(c));
   } else {
     String token;
     int start = currentPos;
@@ -77,7 +77,7 @@ String StringWordProvider::scanWord(int direction) {
       token = text_.substring(start, index_);
       index_ = start;
     }
-    return token;
+    return StyledWord(token);
   }
 }
 

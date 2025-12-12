@@ -173,6 +173,7 @@ void KnuthPlassLayoutStrategy::renderPage(const PageLayout& layout, TextRenderer
                                           const LayoutConfig& config) {
   for (const auto& line : layout.lines) {
     for (const auto& word : line.words) {
+      renderer.setFontStyle(word.style);
       renderer.setCursor(word.x, word.y);
       renderer.print(word.text);
     }

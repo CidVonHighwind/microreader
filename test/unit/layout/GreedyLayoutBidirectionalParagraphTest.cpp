@@ -107,7 +107,7 @@ void runBidirectionalParagraphTest(TestUtils::TestRunner& runner, EInkDisplay& d
   // Now print the remaining words until end
   for (int i = 0; i < 30 && provider.hasNextWord(); i++) {
     int pos = provider.getCurrentIndex();
-    String word = provider.getNextWord();
+    String word = provider.getNextWord().text;
     int posAfter = provider.getCurrentIndex();
     std::string escaped;
     for (size_t j = 0; j < word.length(); j++) {

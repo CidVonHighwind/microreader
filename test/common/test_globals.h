@@ -44,9 +44,9 @@ namespace TestGlobals {
 // #define USE_STRING_PROVIDER
 // inline const char* g_testFilePath = "data/books/bobiverse 1.txt";
 
-// --- Option 2: FileWordProvider ---
+// // --- Option 2: FileWordProvider ---
 // #define USE_FILE_PROVIDER
-// inline const char* g_testFilePath = "data/books/bobiverse 1.txt";
+// inline const char* g_testFilePath = "resources/books/test 0.txt";
 
 // --- Option 3: EpubWordProvider ---
 #define USE_EPUB_PROVIDER

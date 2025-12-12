@@ -14,6 +14,22 @@ enum class TextAlign {
 };
 
 /**
+ * Font style values (italic)
+ */
+enum class CssFontStyle {
+  Normal,  // Default normal style
+  Italic   // Italic text
+};
+
+/**
+ * Font weight values (bold)
+ */
+enum class CssFontWeight {
+  Normal,  // Default normal weight
+  Bold     // Bold text
+};
+
+/**
  * CssStyle - Represents supported CSS properties for a selector
  *
  * This structure holds the subset of CSS properties that the reader supports.
@@ -21,8 +37,10 @@ enum class TextAlign {
  * - text-align: left, right, center, justify
  *
  * Properties can be extended in the future to support:
- * - font-style (italic)
- * - font-weight (bold)
+ * - font-style: normal, italic
+ * - font-weight: normal, bold
+ *
+ * Future extensions:
  * - text-indent
  * - margin-top/bottom (for paragraph spacing)
  */
@@ -30,11 +48,25 @@ struct CssStyle {
   TextAlign textAlign = TextAlign::Left;
   bool hasTextAlign = false;  // True if text-align was explicitly set
 
+  CssFontStyle fontStyle = CssFontStyle::Normal;
+  bool hasFontStyle = false;  // True if font-style was explicitly set
+
+  CssFontWeight fontWeight = CssFontWeight::Normal;
+  bool hasFontWeight = false;  // True if font-weight was explicitly set
+
   // Merge another style into this one (other style takes precedence)
   void merge(const CssStyle& other) {
     if (other.hasTextAlign) {
       textAlign = other.textAlign;
       hasTextAlign = true;
+    }
+    if (other.hasFontStyle) {
+      fontStyle = other.fontStyle;
+      hasFontStyle = true;
+    }
+    if (other.hasFontWeight) {
+      fontWeight = other.fontWeight;
+      hasFontWeight = true;
     }
   }
 
@@ -42,6 +74,10 @@ struct CssStyle {
   void reset() {
     textAlign = TextAlign::Left;
     hasTextAlign = false;
+    fontStyle = CssFontStyle::Normal;
+    hasFontStyle = false;
+    fontWeight = CssFontWeight::Normal;
+    hasFontWeight = false;
   }
 };
 

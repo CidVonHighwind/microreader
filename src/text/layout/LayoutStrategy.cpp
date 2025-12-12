@@ -38,7 +38,8 @@ LayoutStrategy::Line LayoutStrategy::getNextLine(WordProvider& provider, TextRen
 
   while (provider.hasNextWord()) {
     int wordStartIndex = provider.getCurrentIndex();
-    String text = provider.getNextWord();
+    StyledWord styledWord = provider.getNextWord();
+    String text = styledWord.text;
 
     // Capture alignment when we see one in the paragraph
     // CSS alignment overrides the default
@@ -64,20 +65,21 @@ LayoutStrategy::Line LayoutStrategy::getNextLine(WordProvider& provider, TextRen
 
     int16_t bx = 0, by = 0;
     uint16_t bw = 0, bh = 0;
+    renderer.setFontStyle(styledWord.style);
     renderer.getTextBounds(text.c_str(), 0, 0, &bx, &by, &bw, &bh);
-    LayoutStrategy::Word word{text, static_cast<int16_t>(bw), 0, 0, false};
+    Word currentWord(text, static_cast<int16_t>(bw), 0, 0, false, styledWord.style);
 
     // Check for breaks - breaks are returned as special words
-    if (word.text == String("\n")) {
+    if (currentWord.text == String("\n")) {
       isParagraphEnd = true;
       break;
     }
-    if (word.text[0] == ' ') {
+    if (currentWord.text[0] == ' ') {
       continue;
     }
 
     // Calculate space needed for this word
-    int16_t spaceNeeded = currentWidth > 0 ? spaceWidth_ + word.width : word.width;
+    int16_t spaceNeeded = currentWidth > 0 ? spaceWidth_ + currentWord.width : currentWord.width;
 
     if (currentWidth + spaceNeeded > maxWidth) {
       // Word doesn't fit, try to split it at a hyphen
@@ -85,22 +87,24 @@ LayoutStrategy::Line LayoutStrategy::getNextLine(WordProvider& provider, TextRen
       HyphenSplit split = {-1, false, false};
 
       // if (allowHyphenation)
-      { split = findBestHyphenSplitForward(word.text, availableWidth, renderer); }
+      { split = findBestHyphenSplitForward(currentWord.text, availableWidth, renderer); }
       if (split.found) {
         // Successfully found a split position
         String firstPart;
         if (split.isAlgorithmic) {
           // Add hyphen for algorithmic split
-          firstPart = word.text.substring(0, split.position) + "-";
+          firstPart = currentWord.text.substring(0, split.position) + "-";
         } else {
           // Include existing hyphen
-          firstPart = word.text.substring(0, split.position + 1);
+          firstPart = currentWord.text.substring(0, split.position + 1);
         }
 
         int16_t bx2 = 0, by2 = 0;
         uint16_t bw2 = 0, bh2 = 0;
+        renderer.setFontStyle(styledWord.style);
         renderer.getTextBounds(firstPart.c_str(), 0, 0, &bx2, &by2, &bw2, &bh2);
-        result.words.push_back({firstPart, static_cast<int16_t>(bw2), 0, 0, true});  // wasSplit = true
+        result.words.push_back(
+            Word(firstPart, static_cast<int16_t>(bw2), 0, 0, true, currentWord.style));  // wasSplit = true
 
         // Move provider position: consume characters up to the split point
         // For existing hyphens, include the hyphen character (+1)
@@ -114,7 +118,7 @@ LayoutStrategy::Line LayoutStrategy::getNextLine(WordProvider& provider, TextRen
       }
     } else {
       // Word fits, add to line
-      result.words.push_back(word);
+      result.words.push_back(currentWord);
       currentWidth += spaceNeeded;
     }
   }
@@ -139,7 +143,8 @@ LayoutStrategy::Line LayoutStrategy::getPrevLine(WordProvider& provider, TextRen
 
   while (provider.getCurrentIndex() > 0) {
     int wordEndIndex = provider.getCurrentIndex();
-    String text = provider.getPrevWord();
+    StyledWord styledWord = provider.getPrevWord();
+    String text = styledWord.text;
     int wordStartIndex = provider.getCurrentIndex();
     bool isFirstWord = firstWord;
     firstWord = false;
@@ -147,16 +152,17 @@ LayoutStrategy::Line LayoutStrategy::getPrevLine(WordProvider& provider, TextRen
     // Measure the rendered width using the renderer
     int16_t bx = 0, by = 0;
     uint16_t bw = 0, bh = 0;
+    renderer.setFontStyle(styledWord.style);
     renderer.getTextBounds(text.c_str(), 0, 0, &bx, &by, &bw, &bh);
-    LayoutStrategy::Word word{text, static_cast<int16_t>(bw), 0, 0, false};
+    Word currentWord(text, static_cast<int16_t>(bw), 0, 0, false, styledWord.style);
 
     // Check for breaks - breaks are returned as special words
-    if (word.text == String("\n")) {
+    if (currentWord.text == String("\n")) {
       // check if we are at an empty line or at the start of a paragraph
       if (isFirstWord) {
-        String prevWord = provider.getPrevWord();
+        StyledWord prevStyledWord = provider.getPrevWord();
         provider.ungetWord();
-        if (prevWord == String("\n")) {
+        if (prevStyledWord.text == String("\n")) {
           isParagraphEnd = true;
           break;
         }
@@ -169,27 +175,29 @@ LayoutStrategy::Line LayoutStrategy::getPrevLine(WordProvider& provider, TextRen
       }
     }
 
-    if (word.text[0] == ' ') {
+    if (currentWord.text[0] == ' ') {
       continue;
     }
 
     // Try to add word to the beginning of the line
-    int16_t spaceNeeded = currentWidth > 0 ? spaceWidth_ + word.width : word.width;
+    int16_t spaceNeeded = currentWidth > 0 ? spaceWidth_ + currentWord.width : currentWord.width;
     if (currentWidth + spaceNeeded > maxWidth) {
       // Word doesn't fit, try to split it at a hyphen
       int16_t availableWidth = maxWidth - currentWidth - spaceWidth_;
       HyphenSplit split = {-1, false, false};
 
       // if (allowHyphenation)
-      { split = findBestHyphenSplitBackward(word.text, availableWidth, renderer); }
+      { split = findBestHyphenSplitBackward(currentWord.text, availableWidth, renderer); }
       if (split.found) {
         // Successfully found a split position - add second part (after the split)
         // Take text after the split point
-        String secondPart = word.text.substring(split.position, word.text.length());
+        String secondPart = currentWord.text.substring(split.position, currentWord.text.length());
         int16_t bx2 = 0, by2 = 0;
         uint16_t bw2 = 0, bh2 = 0;
+        renderer.setFontStyle(styledWord.style);
         renderer.getTextBounds(secondPart.c_str(), 0, 0, &bx2, &by2, &bw2, &bh2);
-        result.words.insert(result.words.begin(), {secondPart, static_cast<int16_t>(bw2), 0, 0, false});
+        result.words.insert(result.words.begin(),
+                            Word(secondPart, static_cast<int16_t>(bw2), 0, 0, false, currentWord.style));
 
         // Move provider position to the split point by consuming characters from word start
         provider.setPosition(wordStartIndex);
@@ -201,7 +209,7 @@ LayoutStrategy::Line LayoutStrategy::getPrevLine(WordProvider& provider, TextRen
         break;
       }
     } else {
-      result.words.insert(result.words.begin(), word);
+      result.words.insert(result.words.begin(), currentWord);
       currentWidth += spaceNeeded;
     }
   }

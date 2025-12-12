@@ -113,6 +113,11 @@ bool EpubWordProvider::isHeaderElement(const String& name) {
   return name == "h1" || name == "h2" || name == "h3" || name == "h4" || name == "h5" || name == "h6";
 }
 
+bool EpubWordProvider::isInlineStyleElement(const String& name) {
+  // Inline elements that can apply bold/italic styling to text
+  return name == "b" || name == "strong" || name == "i" || name == "em" || name == "span";
+}
+
 bool EpubWordProvider::convertXhtmlToTxt(const String& srcPath, String& outTxtPath) {
   if (srcPath.isEmpty())
     return false;
@@ -158,6 +163,7 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
 
   String buffer;                         // Output buffer
   std::vector<String> elementStack;      // Track nested elements
+  std::vector<bool> inlineStyleEmitted;  // Track which inline style elements emitted tokens
   String pendingParagraphClasses;        // CSS classes for current block
   String pendingInlineStyle;             // Inline style attribute for current block
   bool paragraphClassesWritten = false;  // Have we written style token?
@@ -191,6 +197,14 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
         paragraphClassesWritten = false;
       }
 
+      // Handle inline style elements (b, strong, i, em, span)
+      if (isInlineStyleElement(name) && !parser.isEmptyElement()) {
+        String classAttr = parser.getAttribute("class");
+        String styleAttr = parser.getAttribute("style");
+        bool emitted = writeInlineStyleToken(buffer, name, classAttr, styleAttr);
+        inlineStyleEmitted.push_back(emitted);
+      }
+
       // Handle <br/> - only add newline if line has content
       if (parser.isEmptyElement() && (name == "br" || name == "hr")) {
         if (lineHasContent) {
@@ -204,6 +218,15 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
     // ========== END ELEMENT ==========
     else if (nodeType == SimpleXmlParser::EndElement) {
       String name = parser.getName();
+
+      // Handle end of inline style elements
+      if (isInlineStyleElement(name) && !inlineStyleEmitted.empty()) {
+        bool wasEmitted = inlineStyleEmitted.back();
+        inlineStyleEmitted.pop_back();
+        if (wasEmitted) {
+          writeStyleResetToken(buffer);
+        }
+      }
 
       // Block elements: add newline if line had content OR had &nbsp;
       if (isBlockElement(name) || isHeaderElement(name)) {
@@ -394,8 +417,9 @@ void EpubWordProvider::writeParagraphStyleToken(String& writeBuffer, const Strin
   // write the style token in front of the text line.
   // We check for either class-based styles or inline styles.
   if ((!pendingParagraphClasses.isEmpty() || !pendingInlineStyle.isEmpty()) && !paragraphClassesWritten) {
-    // Emit style properties for the paragraph as an escaped token
-    // Format: ESC[align=center] (ESC = 0x1B) followed by a space
+    // Emit style properties for the paragraph using ESC + command byte format
+    // Alignment: ESC+'L'(left), ESC+'R'(right), ESC+'C'(center), ESC+'J'(justify)
+    // Style: ESC+'B'(bold), ESC+'I'(italic), ESC+'X'(bold+italic)
     const CssParser* css = epubReader_ ? epubReader_->getCssParser() : nullptr;
 
     // Start with class-based styles
@@ -412,34 +436,113 @@ void EpubWordProvider::writeParagraphStyleToken(String& writeBuffer, const Strin
 
     String styleToken = "";
     if (combined.hasTextAlign) {
-      styleToken += (char)27;  // ESC
-      styleToken += "[";
-      styleToken += "align=";
+      styleToken += (char)0x1B;  // ESC
       switch (combined.textAlign) {
         case TextAlign::Left:
-          styleToken += "left";
+          styleToken += 'L';
           break;
         case TextAlign::Right:
-          styleToken += "right";
+          styleToken += 'R';
           break;
         case TextAlign::Center:
-          styleToken += "center";
+          styleToken += 'C';
           break;
         case TextAlign::Justify:
-          styleToken += "justify";
+          styleToken += 'J';
           break;
         default:
-          styleToken += "left";
+          styleToken += 'L';
           break;
       }
-      styleToken += "]";
     }
+
+    // Add bold/italic style tokens
+    if (combined.hasFontWeight && combined.fontWeight == CssFontWeight::Bold) {
+      if (combined.hasFontStyle && combined.fontStyle == CssFontStyle::Italic) {
+        // Bold + Italic
+        styleToken += (char)0x1B;  // ESC
+        styleToken += 'X';
+      } else {
+        // Bold only
+        styleToken += (char)0x1B;  // ESC
+        styleToken += 'B';
+      }
+    } else if (combined.hasFontStyle && combined.fontStyle == CssFontStyle::Italic) {
+      // Italic only
+      styleToken += (char)0x1B;  // ESC
+      styleToken += 'I';
+    }
+
     if (styleToken.length() > 0) {
-      styleToken += (char)27;  // trailing ESC
       writeBuffer += styleToken;
     }
     paragraphClassesWritten = true;
   }
+}
+
+bool EpubWordProvider::writeInlineStyleToken(String& writeBuffer, const String& elementName, const String& classAttr,
+                                             const String& styleAttr) {
+  // Determine style from element name and/or CSS classes
+  bool isBold = false;
+  bool isItalic = false;
+
+  // Check element name for implicit styling
+  if (elementName == "b" || elementName == "strong") {
+    isBold = true;
+  } else if (elementName == "i" || elementName == "em") {
+    isItalic = true;
+  }
+
+  // Check CSS classes and inline styles for additional styling
+  const CssParser* css = epubReader_ ? epubReader_->getCssParser() : nullptr;
+  if (css) {
+    CssStyle combined;
+
+    // Get class-based styles
+    if (!classAttr.isEmpty()) {
+      combined = css->getCombinedStyle(classAttr);
+    }
+
+    // Merge inline styles
+    if (!styleAttr.isEmpty()) {
+      CssStyle inlineStyle = css->parseInlineStyle(styleAttr);
+      combined.merge(inlineStyle);
+    }
+
+    // Apply CSS-defined styles
+    if (combined.hasFontWeight && combined.fontWeight == CssFontWeight::Bold) {
+      isBold = true;
+    }
+    if (combined.hasFontStyle && combined.fontStyle == CssFontStyle::Italic) {
+      isItalic = true;
+    }
+  }
+
+  // Only emit token if there's a style to apply
+  // Format: ESC + 'B'(bold), 'I'(italic), 'X'(bold+italic)
+  if (isBold || isItalic) {
+    writeBuffer += (char)0x1B;  // ESC
+
+    if (isBold && isItalic) {
+      writeBuffer += 'X';
+    } else if (isBold) {
+      writeBuffer += 'B';
+    } else {
+      writeBuffer += 'I';
+    }
+
+    return true;  // Style token was emitted
+  }
+
+  return false;  // No style token emitted
+}
+
+void EpubWordProvider::writeStyleResetToken(String& writeBuffer) {
+  // Emit a token to reset back to normal style
+  // Format: ESC + 'b'(end bold), 'i'(end italic), 'x'(end bold+italic)
+  // We use 'x' as a universal reset since we don't track which style was active
+  writeBuffer += (char)0x1B;  // ESC
+  writeBuffer += 'x';         // Reset all styles
 }
 
 // Context for true streaming: EPUB -> Parser -> TXT
@@ -649,15 +752,15 @@ bool EpubWordProvider::hasPrevWord() {
   return false;
 }
 
-String EpubWordProvider::getNextWord() {
+StyledWord EpubWordProvider::getNextWord() {
   if (!fileProvider_)
-    return String("");
+    return StyledWord();
   return fileProvider_->getNextWord();
 }
 
-String EpubWordProvider::getPrevWord() {
+StyledWord EpubWordProvider::getPrevWord() {
   if (!fileProvider_)
-    return String("");
+    return StyledWord();
   return fileProvider_->getPrevWord();
 }
 

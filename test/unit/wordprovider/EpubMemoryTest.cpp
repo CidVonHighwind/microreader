@@ -247,7 +247,7 @@ void testWordReadingMemory(TestUtils::TestRunner& runner) {
 
   // Read words in chunks, sampling memory periodically
   while (provider.hasNextWord() && totalWordsRead < WORDS_TO_READ_PER_CYCLE * 10) {
-    String word = provider.getNextWord();
+    String word = provider.getNextWord().text;
     if (word.length() == 0)
       break;
 
@@ -362,7 +362,7 @@ void testFullChapterReadMemory(TestUtils::TestRunner& runner) {
 
     int chapterWords = 0;
     while (provider.hasNextWord()) {
-      String word = provider.getNextWord();
+      String word = provider.getNextWord().text;
       if (word.length() == 0)
         break;
       chapterWords++;

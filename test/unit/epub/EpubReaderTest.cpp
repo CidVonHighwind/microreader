@@ -34,8 +34,8 @@
 #define TEST_TOC_CONTENT false
 #define TEST_CHAPTER_NAME_FOR_SPINE false
 #define TEST_SPINE_SIZES false
-#define TEST_CSS_PARSING false
-#define TEST_STREAM_CONVERTER true
+#define TEST_CSS_PARSING true
+#define TEST_STREAM_CONVERTER false
 #define TEST_STREAM_RAW_BYTES false
 
 // Test configuration
@@ -565,6 +565,34 @@ void testCssStringParsing(TestUtils::TestRunner& runner) {
     .multi, .selector {
       text-align: center;
     }
+    .bold {
+      font-weight: bold;
+    }
+    .italic {
+      font-style: italic;
+    }
+    .bold-italic {
+      font-weight: bold;
+      font-style: italic;
+    }
+    .oblique {
+      font-style: oblique;
+    }
+    .bolder {
+      font-weight: bolder;
+    }
+    .weight-700 {
+      font-weight: 700;
+    }
+    .weight-900 {
+      font-weight: 900;
+    }
+    .normal-weight {
+      font-weight: normal;
+    }
+    .normal-style {
+      font-style: normal;
+    }
   )";
 
   // Create a temporary CSS file in the mocked SD filesystem and parse it
@@ -635,6 +663,95 @@ void testCssStringParsing(TestUtils::TestRunner& runner) {
     runner.expectTrue(multiStyle->textAlign == TextAlign::Center, "multi should be Center");
     runner.expectTrue(selectorStyle->textAlign == TextAlign::Center, "selector should be Center");
   }
+
+  // Test bold
+  std::cout << "  Testing font-weight: bold...\n";
+  const CssStyle* boldStyle = parser.getStyleForClass("bold");
+  runner.expectTrue(boldStyle != nullptr, "bold class should exist");
+  if (boldStyle) {
+    runner.expectTrue(boldStyle->hasFontWeight, "bold should have fontWeight");
+    runner.expectTrue(boldStyle->fontWeight == CssFontWeight::Bold, "bold should be Bold");
+  }
+
+  // Test italic
+  std::cout << "  Testing font-style: italic...\n";
+  const CssStyle* italicStyle = parser.getStyleForClass("italic");
+  runner.expectTrue(italicStyle != nullptr, "italic class should exist");
+  if (italicStyle) {
+    runner.expectTrue(italicStyle->hasFontStyle, "italic should have fontStyle");
+    runner.expectTrue(italicStyle->fontStyle == CssFontStyle::Italic, "italic should be Italic");
+  }
+
+  // Test bold-italic (combined)
+  std::cout << "  Testing font-weight: bold + font-style: italic...\n";
+  const CssStyle* boldItalicStyle = parser.getStyleForClass("bold-italic");
+  runner.expectTrue(boldItalicStyle != nullptr, "bold-italic class should exist");
+  if (boldItalicStyle) {
+    runner.expectTrue(boldItalicStyle->hasFontWeight, "bold-italic should have fontWeight");
+    runner.expectTrue(boldItalicStyle->fontWeight == CssFontWeight::Bold, "bold-italic should be Bold");
+    runner.expectTrue(boldItalicStyle->hasFontStyle, "bold-italic should have fontStyle");
+    runner.expectTrue(boldItalicStyle->fontStyle == CssFontStyle::Italic, "bold-italic should be Italic");
+  }
+
+  // Test oblique (should be treated as italic)
+  std::cout << "  Testing font-style: oblique...\n";
+  const CssStyle* obliqueStyle = parser.getStyleForClass("oblique");
+  runner.expectTrue(obliqueStyle != nullptr, "oblique class should exist");
+  if (obliqueStyle) {
+    runner.expectTrue(obliqueStyle->fontStyle == CssFontStyle::Italic, "oblique should be Italic");
+  }
+
+  // Test bolder (should be treated as bold)
+  std::cout << "  Testing font-weight: bolder...\n";
+  const CssStyle* bolderStyle = parser.getStyleForClass("bolder");
+  runner.expectTrue(bolderStyle != nullptr, "bolder class should exist");
+  if (bolderStyle) {
+    runner.expectTrue(bolderStyle->fontWeight == CssFontWeight::Bold, "bolder should be Bold");
+  }
+
+  // Test font-weight: 700
+  std::cout << "  Testing font-weight: 700...\n";
+  const CssStyle* weight700Style = parser.getStyleForClass("weight-700");
+  runner.expectTrue(weight700Style != nullptr, "weight-700 class should exist");
+  if (weight700Style) {
+    runner.expectTrue(weight700Style->fontWeight == CssFontWeight::Bold, "weight-700 should be Bold");
+  }
+
+  // Test font-weight: 900
+  std::cout << "  Testing font-weight: 900...\n";
+  const CssStyle* weight900Style = parser.getStyleForClass("weight-900");
+  runner.expectTrue(weight900Style != nullptr, "weight-900 class should exist");
+  if (weight900Style) {
+    runner.expectTrue(weight900Style->fontWeight == CssFontWeight::Bold, "weight-900 should be Bold");
+  }
+
+  // Test font-weight: normal
+  std::cout << "  Testing font-weight: normal...\n";
+  const CssStyle* normalWeightStyle = parser.getStyleForClass("normal-weight");
+  runner.expectTrue(normalWeightStyle != nullptr, "normal-weight class should exist");
+  if (normalWeightStyle) {
+    runner.expectTrue(normalWeightStyle->hasFontWeight, "normal-weight should have fontWeight");
+    runner.expectTrue(normalWeightStyle->fontWeight == CssFontWeight::Normal, "normal-weight should be Normal");
+  }
+
+  // Test font-style: normal
+  std::cout << "  Testing font-style: normal...\n";
+  const CssStyle* normalStyleStyle = parser.getStyleForClass("normal-style");
+  runner.expectTrue(normalStyleStyle != nullptr, "normal-style class should exist");
+  if (normalStyleStyle) {
+    runner.expectTrue(normalStyleStyle->hasFontStyle, "normal-style should have fontStyle");
+    runner.expectTrue(normalStyleStyle->fontStyle == CssFontStyle::Normal, "normal-style should be Normal");
+  }
+
+  // Test inline style parsing
+  std::cout << "  Testing inline style parsing...\n";
+  CssStyle inlineStyle = parser.parseInlineStyle("font-weight: bold; font-style: italic; text-align: center;");
+  runner.expectTrue(inlineStyle.hasFontWeight, "inline style should have fontWeight");
+  runner.expectTrue(inlineStyle.fontWeight == CssFontWeight::Bold, "inline fontWeight should be Bold");
+  runner.expectTrue(inlineStyle.hasFontStyle, "inline style should have fontStyle");
+  runner.expectTrue(inlineStyle.fontStyle == CssFontStyle::Italic, "inline fontStyle should be Italic");
+  runner.expectTrue(inlineStyle.hasTextAlign, "inline style should have textAlign");
+  runner.expectTrue(inlineStyle.textAlign == TextAlign::Center, "inline textAlign should be Center");
 
   std::cout << "  CSS string parsing test passed\n";
 }

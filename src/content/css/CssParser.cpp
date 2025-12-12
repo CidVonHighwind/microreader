@@ -258,7 +258,7 @@ void CssParser::parseRule(const String& selector, const String& properties) {
         }
 
         // Store style if it has any supported properties
-        if (style.hasTextAlign) {
+        if (style.hasTextAlign || style.hasFontStyle || style.hasFontWeight) {
           // Merge with existing style if present
           auto it = styleMap_.find(className);
           if (it != styleMap_.end()) {
@@ -278,10 +278,14 @@ void CssParser::parseProperty(const String& name, const String& value, CssStyle&
   if (name == "text-align") {
     style.textAlign = parseTextAlign(value);
     style.hasTextAlign = true;
+  } else if (name == "font-style") {
+    style.fontStyle = parseFontStyle(value);
+    style.hasFontStyle = true;
+  } else if (name == "font-weight") {
+    style.fontWeight = parseFontWeight(value);
+    style.hasFontWeight = true;
   }
-  // Add more property parsing here as needed:
-  // else if (name == "font-style") { ... }
-  // else if (name == "font-weight") { ... }
+  // Add more property parsing here as needed
 }
 
 TextAlign CssParser::parseTextAlign(const String& value) {
@@ -301,6 +305,32 @@ TextAlign CssParser::parseTextAlign(const String& value) {
 
   // Default to left
   return TextAlign::Left;
+}
+
+CssFontStyle CssParser::parseFontStyle(const String& value) {
+  String v = value;
+  v.toLowerCase();
+  v.trim();
+
+  if (v == "italic" || v == "oblique") {
+    return CssFontStyle::Italic;
+  }
+
+  // Default to normal
+  return CssFontStyle::Normal;
+}
+
+CssFontWeight CssParser::parseFontWeight(const String& value) {
+  String v = value;
+  v.toLowerCase();
+  v.trim();
+
+  if (v == "bold" || v == "bolder" || v == "700" || v == "800" || v == "900") {
+    return CssFontWeight::Bold;
+  }
+
+  // Default to normal
+  return CssFontWeight::Normal;
 }
 
 // skipWhitespaceAndComments removed (used by parseString which was removed)
@@ -389,6 +419,28 @@ CssStyle CssParser::parseInlineStyle(const String& styleAttr) const {
             style.textAlign = TextAlign::Left;
           }
           style.hasTextAlign = true;
+        } else if (propName == "font-style") {
+          String v = propValue;
+          v.toLowerCase();
+          v.trim();
+
+          if (v == "italic" || v == "oblique") {
+            style.fontStyle = CssFontStyle::Italic;
+          } else {
+            style.fontStyle = CssFontStyle::Normal;
+          }
+          style.hasFontStyle = true;
+        } else if (propName == "font-weight") {
+          String v = propValue;
+          v.toLowerCase();
+          v.trim();
+
+          if (v == "bold" || v == "bolder" || v == "700" || v == "800" || v == "900") {
+            style.fontWeight = CssFontWeight::Bold;
+          } else {
+            style.fontWeight = CssFontWeight::Normal;
+          }
+          style.hasFontWeight = true;
         }
         // Add more property parsing here as needed
       }

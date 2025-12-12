@@ -4,6 +4,13 @@
 
 #include "WString.h"
 
+// ESC-based format constants:
+// Format: ESC + command byte (2 bytes total, fixed length)
+// Alignment commands (start of line): ESC + 'L'(left), 'R'(right), 'C'(center), 'J'(justify)
+// Style commands (inline): ESC + 'B'(bold on), 'b'(bold off), 'I'(italic on), 'i'(italic off),
+//                          'X'(bold+italic on), 'x'(bold+italic off)
+static constexpr char ESC_CHAR = '\x1B';
+
 FileWordProvider::FileWordProvider(const char* path, size_t bufSize) : bufSize_(bufSize) {
   file_ = SD.open(path);
   if (!file_) {
@@ -17,6 +24,13 @@ FileWordProvider::FileWordProvider(const char* path, size_t bufSize) : bufSize_(
   buf_ = (uint8_t*)malloc(bufSize_);
   bufStart_ = 0;
   bufLen_ = 0;
+
+  // Skip UTF-8 BOM if present
+  if (fileSize_ >= 3) {
+    if (ensureBufferForPos(0) && buf_[0] == 0xEF && buf_[1] == 0xBB && buf_[2] == 0xBF) {
+      index_ = 3;  // Skip the 3-byte BOM
+    }
+  }
 }
 
 FileWordProvider::~FileWordProvider() {
@@ -67,191 +81,358 @@ bool FileWordProvider::ensureBufferForPos(size_t pos) {
   return true;
 }
 
-String FileWordProvider::scanWord(int direction) {
+// Check if position has an ESC token (ESC + command byte = 2 bytes)
+// Returns 2 if valid ESC token, 0 otherwise
+// If processStyle is false, only checks validity without modifying state.
+size_t FileWordProvider::parseEscTokenAtPos(size_t pos, TextAlign* outAlignment, bool processStyle) {
+  if (pos + 1 >= fileSize_)
+    return 0;
+
+  char c = charAt(pos);
+  if (c != ESC_CHAR)
+    return 0;
+
+  char cmd = charAt(pos + 1);
+
+  // Alignment commands
+  switch (cmd) {
+    case 'L':
+      if (outAlignment)
+        *outAlignment = TextAlign::Left;
+      else if (processStyle)
+        cachedParagraphAlignment_ = TextAlign::Left;
+      return 2;
+    case 'R':
+      if (outAlignment)
+        *outAlignment = TextAlign::Right;
+      else if (processStyle)
+        cachedParagraphAlignment_ = TextAlign::Right;
+      return 2;
+    case 'C':
+      if (outAlignment)
+        *outAlignment = TextAlign::Center;
+      else if (processStyle)
+        cachedParagraphAlignment_ = TextAlign::Center;
+      return 2;
+    case 'J':
+      if (outAlignment)
+        *outAlignment = TextAlign::Justify;
+      else if (processStyle)
+        cachedParagraphAlignment_ = TextAlign::Justify;
+      return 2;
+
+    // Style commands
+    case 'B':
+      if (processStyle)
+        currentInlineStyle_ = FontStyle::BOLD;
+      return 2;
+    case 'b':
+      if (processStyle)
+        currentInlineStyle_ = FontStyle::REGULAR;
+      return 2;
+    case 'I':
+      if (processStyle)
+        currentInlineStyle_ = FontStyle::ITALIC;
+      return 2;
+    case 'i':
+      if (processStyle)
+        currentInlineStyle_ = FontStyle::REGULAR;
+      return 2;
+    case 'X':
+      if (processStyle)
+        currentInlineStyle_ = FontStyle::BOLD_ITALIC;
+      return 2;
+    case 'x':
+      if (processStyle)
+        currentInlineStyle_ = FontStyle::REGULAR;
+      return 2;
+  }
+
+  return 0;  // Unknown command
+}
+
+// Check if there's a valid ESC token at pos (without modifying state)
+size_t FileWordProvider::checkEscTokenAtPos(size_t pos) {
+  return parseEscTokenAtPos(pos, nullptr, false);
+}
+
+// Parse ESC token when reading BACKWARD - style meanings are inverted
+// When going backward through "ESC+B text ESC+b", we encounter ESC+b first (entering bold region)
+// and ESC+B second (exiting bold region), so meanings must be swapped
+void FileWordProvider::parseEscTokenBackward(size_t pos) {
+  if (pos + 1 >= fileSize_)
+    return;
+
+  char c = charAt(pos);
+  if (c != ESC_CHAR)
+    return;
+
+  char cmd = charAt(pos + 1);
+
+  // Alignment commands - same meaning regardless of direction
+  switch (cmd) {
+    case 'L':
+      cachedParagraphAlignment_ = TextAlign::Left;
+      return;
+    case 'R':
+      cachedParagraphAlignment_ = TextAlign::Right;
+      return;
+    case 'C':
+      cachedParagraphAlignment_ = TextAlign::Center;
+      return;
+    case 'J':
+      cachedParagraphAlignment_ = TextAlign::Justify;
+      return;
+
+    // Style commands - INVERTED for backward reading
+    // 'B' (start bold forward) = end bold backward
+    case 'B':
+      currentInlineStyle_ = FontStyle::REGULAR;
+      return;
+    // 'b' (end bold forward) = start bold backward
+    case 'b':
+      currentInlineStyle_ = FontStyle::BOLD;
+      return;
+    case 'I':
+      currentInlineStyle_ = FontStyle::REGULAR;
+      return;
+    case 'i':
+      currentInlineStyle_ = FontStyle::ITALIC;
+      return;
+    case 'X':
+      currentInlineStyle_ = FontStyle::REGULAR;
+      return;
+    case 'x':
+      currentInlineStyle_ = FontStyle::BOLD_ITALIC;
+      return;
+  }
+}
+
+// Check if we're at the end of an ESC token (at the command byte position)
+// Returns true and sets tokenStart if found
+bool FileWordProvider::isAtEscTokenEnd(size_t pos, size_t& tokenStart) {
+  if (pos == 0)
+    return false;
+
+  // Check if previous char is ESC
+  char prevChar = charAt(pos - 1);
+  if (prevChar != ESC_CHAR)
+    return false;
+
+  // Verify this is a valid command byte
+  char cmd = charAt(pos);
+  if (cmd == 'L' || cmd == 'R' || cmd == 'C' || cmd == 'J' || cmd == 'B' || cmd == 'b' || cmd == 'I' || cmd == 'i' ||
+      cmd == 'X' || cmd == 'x') {
+    tokenStart = pos - 1;
+    return true;
+  }
+
+  return false;
+}
+
+StyledWord FileWordProvider::getNextWord() {
   prevIndex_ = index_;
 
-  if ((direction == 1 && index_ >= fileSize_) || (direction == -1 && index_ == 0)) {
-    return String("");
+  if (index_ >= fileSize_) {
+    return StyledWord();
   }
 
-  // Helper: skip any ESC token at current position (forward)
-  auto skipTokenForward = [this](long& pos) {
-    while (pos < (long)fileSize_) {
-      size_t tokenLen = parseEscTokenAtPos((size_t)pos);
-      if (tokenLen == 0)
-        break;
-      pos += (long)tokenLen;
-    }
-  };
+  // Skip any ESC tokens at current position first
+  while (index_ < fileSize_) {
+    size_t tokenLen = parseEscTokenAtPos(index_);
+    if (tokenLen == 0)
+      break;
+    index_ += tokenLen;
+  }
 
-  // Helper: skip any ESC token ending at current position (backward)
-  // When scanning backward, if we see a trailing ESC, find the token start
-  auto skipTokenBackward = [this](long& pos) {
-    while (pos > 0) {
-      char c = charAt((size_t)(pos - 1));
-      if (!isEscChar(c))
+  if (index_ >= fileSize_) {
+    return StyledWord();
+  }
+
+  // Skip carriage returns
+  while (index_ < fileSize_ && charAt(index_) == '\r') {
+    index_++;
+  }
+
+  if (index_ >= fileSize_) {
+    return StyledWord();
+  }
+
+  // Capture style BEFORE reading the word content
+  // This ensures the word gets the style that was active at its start,
+  // not any style that might be set by ESC tokens encountered during word building
+  FontStyle styleForWord = currentInlineStyle_;
+
+  char c = charAt(index_);
+  String token;
+
+  // Case 1: Space - read just the space and stop
+  if (c == ' ') {
+    token += c;
+    index_++;
+  }
+  // Case 2: Single character tokens (newline, tab) - read just that character
+  else if (c == '\n' || c == '\t') {
+    token += c;
+    index_++;
+  }
+  // Case 3: Regular character - continue until boundary
+  else {
+    while (index_ < fileSize_) {
+      // Check for ESC token - use checkEscTokenAtPos to detect without modifying state
+      size_t tokenLen = checkEscTokenAtPos(index_);
+      if (tokenLen > 0) {
+        // ESC token marks word boundary - stop here without processing the token
+        // The token will be processed on the next getNextWord() call
         break;
-      // Could be trailing ESC - look for ] before it
-      if (pos >= 2 && charAt((size_t)(pos - 2)) == ']') {
-        size_t tokenStart = findEscTokenStart((size_t)(pos - 1));
-        if (tokenStart != SIZE_MAX) {
-          // Parse the token to update alignment state
-          parseEscTokenAtPos(tokenStart);
-          pos = (long)tokenStart;
-          continue;
+      }
+
+      char cc = charAt(index_);
+      // Skip carriage returns
+      if (cc == '\r') {
+        index_++;
+        continue;
+      }
+      // Stop at space or whitespace boundaries
+      if (cc == ' ' || cc == '\n' || cc == '\t') {
+        break;
+      }
+      token += cc;
+      index_++;
+    }
+  }
+
+  return StyledWord(token, styleForWord);
+}
+
+StyledWord FileWordProvider::getPrevWord() {
+  prevIndex_ = index_;
+
+  if (index_ == 0) {
+    return StyledWord();
+  }
+
+  // Move to just before current position
+  index_--;
+
+  // Skip backward over ESC tokens (fixed 2-byte format makes this simple)
+  // Don't try to invert token meanings - just skip over them
+  while (true) {
+    // Check if we're at command byte of an ESC token
+    if (index_ > 0) {
+      size_t tokenStart;
+      if (isAtEscTokenEnd(index_, tokenStart)) {
+        // We're at command byte, skip back over the whole token
+        if (tokenStart == 0) {
+          // ESC token starts at position 0, nothing before it
+          index_ = 0;
+          return StyledWord();
+        }
+        index_ = tokenStart - 1;
+        continue;
+      }
+    }
+
+    // Check if we landed on ESC char itself (start of a token)
+    if (charAt(index_) == ESC_CHAR) {
+      // Check if valid token without modifying state
+      size_t tokenLen = checkEscTokenAtPos(index_);
+      if (tokenLen > 0) {
+        if (index_ == 0) {
+          // At start of file, nothing before this token
+          return StyledWord();
+        }
+        index_--;
+        continue;
+      }
+    }
+
+    break;
+  }
+
+  // Skip backward over carriage returns
+  while (index_ > 0 && charAt(index_) == '\r') {
+    index_--;
+  }
+
+  // If we ended up at position 0 with an ESC char, we're at start of file with only tokens
+  if (charAt(index_) == ESC_CHAR) {
+    size_t tokenLen = checkEscTokenAtPos(index_);
+    if (tokenLen > 0) {
+      // Process the token backward before returning
+      parseEscTokenBackward(index_);
+      index_ = 0;
+      return StyledWord();
+    }
+  }
+
+  if (index_ >= fileSize_) {
+    index_ = 0;
+    return StyledWord();
+  }
+
+  char c = charAt(index_);
+  String token;
+  size_t tokenStart = index_;
+
+  // Case 1: Space
+  if (c == ' ') {
+    token += c;
+  }
+  // Case 2: Single character tokens
+  else if (c == '\n' || c == '\t') {
+    token += c;
+  }
+  // Case 3: Regular word - find start
+  else {
+    // Find word start by scanning backward
+    while (tokenStart > 0) {
+      char prevChar = charAt(tokenStart - 1);
+      // Stop at whitespace
+      if (prevChar == ' ' || prevChar == '\n' || prevChar == '\t' || prevChar == '\r') {
+        break;
+      }
+      // Stop at ESC token boundary - check if prev char is a command byte with ESC before it
+      if (tokenStart >= 2) {
+        size_t possibleTokenStart;
+        if (isAtEscTokenEnd(tokenStart - 1, possibleTokenStart)) {
+          break;
         }
       }
-      // Could be leading ESC - check if this starts a valid token
-      size_t tokenLen = parseEscTokenAtPos((size_t)(pos - 1));
-      if (tokenLen > 0) {
-        pos = pos - 1;
-        continue;
+      // Stop if prev char is ESC (we're right after an ESC token)
+      if (prevChar == ESC_CHAR) {
+        break;
       }
-      break;
+      tokenStart--;
     }
-  };
 
-  // Helper: check if char is a word boundary
-  auto isWordBoundary = [](char c) { return c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == '\0'; };
+    // Build word from start to current position
+    for (size_t i = tokenStart; i <= index_; i++) {
+      char cc = charAt(i);
+      if (cc != '\r') {
+        token += cc;
+      }
+    }
 
-  long currentPos = (direction == 1) ? (long)index_ : (long)index_ - 1;
+    index_ = tokenStart;
+  }
 
-  // Skip any tokens at starting position
+  // Use restoreStyleContext to correctly compute the style at the word's START position
+  // This handles complex style transitions (e.g., B->X->I) correctly by scanning
+  // forward from paragraph start to index_ (which is now the word start)
+  restoreStyleContext();
+  FontStyle styleForWord = currentInlineStyle_;
+
+  return StyledWord(token, styleForWord);
+}
+
+StyledWord FileWordProvider::scanWord(int direction) {
+  // Legacy function - redirect to new implementations
   if (direction == 1) {
-    skipTokenForward(currentPos);
-    if (currentPos >= (long)fileSize_)
-      return String("");
+    return getNextWord();
   } else {
-    // For backward, adjust position first then skip tokens
-    currentPos = (long)index_;
-    skipTokenBackward(currentPos);
-    if (currentPos <= 0)
-      return String("");
-    currentPos--;  // Look at char before position
+    return getPrevWord();
   }
-
-  char c = charAt((size_t)currentPos);
-
-  if (c == ' ') {
-    // Space token
-    long start = currentPos;
-    long end = currentPos;
-
-    if (direction == 1) {
-      // Scan forward through spaces
-      while (end < (long)fileSize_) {
-        skipTokenForward(end);
-        if (end >= (long)fileSize_)
-          break;
-        if (charAt((size_t)end) == ' ')
-          end++;
-        else
-          break;
-      }
-      index_ = (size_t)end;
-    } else {
-      // Scan backward through spaces
-      start = currentPos + 1;  // start after the space we're at
-      while (start > 0) {
-        skipTokenBackward(start);
-        if (start <= 0)
-          break;
-        if (charAt((size_t)(start - 1)) == ' ')
-          start--;
-        else
-          break;
-      }
-      index_ = (size_t)start;
-      // Rebuild token from start to original position + 1
-      end = currentPos + 1;
-    }
-
-    // Build the space token (just spaces, no ESC content)
-    String token;
-    for (long i = (direction == 1 ? currentPos : start); i < (direction == 1 ? end : currentPos + 1);) {
-      size_t escLen = parseEscTokenAtPos((size_t)i);
-      if (escLen > 0) {
-        i += (long)escLen;
-        continue;
-      }
-      token += charAt((size_t)i);
-      i++;
-    }
-    return token;
-
-  } else if (c == '\r') {
-    // Skip carriage return
-    if (direction == 1) {
-      index_ = (size_t)(currentPos + 1);
-    } else {
-      index_ = (size_t)currentPos;
-    }
-    return scanWord(direction);
-
-  } else if (c == '\n' || c == '\t') {
-    // Single newline or tab
-    if (direction == 1) {
-      index_ = (size_t)(currentPos + 1);
-    } else {
-      index_ = (size_t)currentPos;
-    }
-    String s;
-    s += c;
-    return s;
-
-  } else {
-    // Word token
-    long start = currentPos;
-    long end = currentPos;
-
-    if (direction == 1) {
-      // Scan forward to find word end
-      while (end < (long)fileSize_) {
-        skipTokenForward(end);
-        if (end >= (long)fileSize_)
-          break;
-        char cc = charAt((size_t)end);
-        if (isWordBoundary(cc))
-          break;
-        end++;
-      }
-      index_ = (size_t)end;
-    } else {
-      // Scan backward to find word start
-      start = currentPos + 1;
-      while (start > 0) {
-        skipTokenBackward(start);
-        if (start <= 0)
-          break;
-        char cc = charAt((size_t)(start - 1));
-        if (isWordBoundary(cc))
-          break;
-        start--;
-      }
-      index_ = (size_t)start;
-      end = currentPos + 1;
-    }
-
-    // Build the word (skip ESC tokens)
-    String token;
-    for (long i = (direction == 1 ? currentPos : start); i < (direction == 1 ? end : currentPos + 1);) {
-      size_t escLen = parseEscTokenAtPos((size_t)i);
-      if (escLen > 0) {
-        i += (long)escLen;
-        continue;
-      }
-      token += charAt((size_t)i);
-      i++;
-    }
-    return token;
-  }
-}
-
-String FileWordProvider::getNextWord() {
-  return scanWord(+1);
-}
-String FileWordProvider::getPrevWord() {
-  return scanWord(-1);
 }
 
 float FileWordProvider::getPercentage() {
@@ -295,6 +476,11 @@ int FileWordProvider::consumeChars(int n) {
   return consumed;
 }
 
+// Helper method to determine if a character is a word boundary
+bool FileWordProvider::isWordBoundary(char c) {
+  return (c == ' ' || c == '\n' || c == '\t' || c == '\r' || c == ESC_CHAR);
+}
+
 bool FileWordProvider::isInsideWord() {
   if (index_ <= 0 || index_ >= fileSize_) {
     return false;
@@ -322,6 +508,8 @@ void FileWordProvider::setPosition(int index) {
     index = (int)fileSize_;
   index_ = (size_t)index;
   prevIndex_ = index_;
+  // Restore style context for the new position
+  restoreStyleContext();
   // Don't invalidate cache here - getParagraphAlignment will check if we're still in range
 }
 
@@ -379,105 +567,89 @@ void FileWordProvider::updateParagraphAlignmentCache() {
   // Default alignment
   cachedParagraphAlignment_ = TextAlign::Left;
 
-  // Look for ESC token at start of paragraph
-  if (paraStart < fileSize_) {
-    size_t tokenLen = parseEscTokenAtPos(paraStart, &cachedParagraphAlignment_);
-    (void)tokenLen;  // We just need the alignment to be set
+  // Scan through all ESC tokens at start of paragraph to find alignment token
+  // There may be style tokens (like ESC+b from previous paragraph) before the alignment token
+  size_t scanPos = paraStart;
+  while (scanPos < paraEnd) {
+    if (charAt(scanPos) != ESC_CHAR) {
+      break;  // No more ESC tokens
+    }
+    // Try to parse as alignment token
+    TextAlign foundAlign;
+    size_t tokenLen = parseEscTokenAtPos(scanPos, &foundAlign, false);  // Don't process style
+    if (tokenLen == 0) {
+      break;  // Not a valid ESC token
+    }
+    // Check if it was an alignment token (L, R, C, J)
+    char cmd = charAt(scanPos + 1);
+    if (cmd == 'L' || cmd == 'R' || cmd == 'C' || cmd == 'J') {
+      cachedParagraphAlignment_ = foundAlign;
+      break;  // Found alignment, stop scanning
+    }
+    // Skip this style token and continue looking for alignment
+    scanPos += tokenLen;
   }
 }
 
-size_t FileWordProvider::findEscTokenStart(size_t trailingEscPos) {
-  // Token format: ESC [ content ] ESC
-  // We're at the trailing ESC, need to find the leading ESC
-  // The character before trailing ESC should be ']'
-  if (trailingEscPos < 3)
-    return SIZE_MAX;  // Minimum token: ESC [ ] ESC = 4 chars
-  if (charAt(trailingEscPos - 1) != ']')
+size_t FileWordProvider::findEscTokenStart(size_t trailingPos) {
+  // For ESC format, token is always 2 bytes: ESC + command
+  // If trailingPos is at command byte, start is trailingPos - 1
+  if (trailingPos == 0)
     return SIZE_MAX;
 
-  // Search backwards for ESC [
-  const size_t MAX_SEARCH = 256;
-  size_t minPos = (trailingEscPos > MAX_SEARCH) ? (trailingEscPos - MAX_SEARCH) : 0;
-
-  for (size_t i = trailingEscPos - 2; i >= minPos; i--) {
-    if (charAt(i) == '[' && i > 0 && isEscChar(charAt(i - 1))) {
-      return i - 1;  // Return position of leading ESC
-    }
-    // Stop if we hit another ] (nested tokens not supported)
-    if (charAt(i) == ']')
-      return SIZE_MAX;
-    if (i == 0)
-      break;
+  if (charAt(trailingPos - 1) == ESC_CHAR) {
+    return trailingPos - 1;
   }
   return SIZE_MAX;
 }
 
-size_t FileWordProvider::parseEscTokenAtPos(size_t pos, TextAlign* outAlignment) {
-  if (pos >= fileSize_)
-    return 0;
-  if (charAt(pos) != (char)27)  // ESC
-    return 0;
-  // '[' must follow
-  if (charAt(pos + 1) != '[')
-    return 0;
+void FileWordProvider::restoreStyleContext() {
+  // Reset style to default first
+  currentInlineStyle_ = FontStyle::REGULAR;
 
-  // Find closing bracket
-  size_t i = pos + 2;
-  const size_t ESC_TOKEN_MAX_LEN = 256;
-  size_t last = (pos + ESC_TOKEN_MAX_LEN < fileSize_) ? (pos + ESC_TOKEN_MAX_LEN) : fileSize_;
-  size_t closePos = SIZE_MAX;
-  for (; i < last; ++i) {
-    if (charAt(i) == ']') {
-      closePos = i;
+  if (index_ == 0 || fileSize_ == 0)
+    return;
+
+  // Find paragraph start (newline boundary)
+  size_t paraStart = 0;
+  for (size_t i = index_; i > 0; --i) {
+    if (charAt(i - 1) == '\n') {
+      paraStart = i;
       break;
     }
   }
-  if (closePos == SIZE_MAX)
-    return 0;
-  // The token must be followed by a trailing ESC character to mark end of token
-  if (closePos + 1 >= fileSize_)
-    return 0;
-  if (charAt(closePos + 1) != (char)27)
-    return 0;
 
-  // Extract content between '[' and ']' (exclusive)
-  String content;
-  for (size_t j = pos + 2; j < closePos; ++j) {
-    char c = charAt(j);
-    if (c == '\0')
-      return 0;  // incomplete token
-    content += c;
+  // Scan forward from paragraph start to current position, processing style tokens
+  // This gives us the correct style state at the current position
+  size_t scanPos = paraStart;
+  while (scanPos < index_) {
+    // Check for ESC token
+    if (charAt(scanPos) == ESC_CHAR && scanPos + 1 < fileSize_) {
+      char cmd = charAt(scanPos + 1);
+      // Only process style tokens (not alignment which is paragraph-level)
+      switch (cmd) {
+        case 'B':
+          currentInlineStyle_ = FontStyle::BOLD;
+          break;
+        case 'b':
+          currentInlineStyle_ = FontStyle::REGULAR;
+          break;
+        case 'I':
+          currentInlineStyle_ = FontStyle::ITALIC;
+          break;
+        case 'i':
+          currentInlineStyle_ = FontStyle::REGULAR;
+          break;
+        case 'X':
+          currentInlineStyle_ = FontStyle::BOLD_ITALIC;
+          break;
+        case 'x':
+          currentInlineStyle_ = FontStyle::REGULAR;
+          break;
+      }
+      scanPos += 2;  // Skip ESC token
+    } else {
+      scanPos++;
+    }
   }
-
-  // Only support align=... tokens currently
-  const String prefix = String("align=");
-  if (content.indexOf(prefix.c_str(), 0) != 0)
-    return 0;
-  String val = content.substring((int)prefix.length());
-  // Normalize to lower-case
-  val.toLowerCase();
-  TextAlign parsedAlignment = TextAlign::Left;
-  if (val == "left")
-    parsedAlignment = TextAlign::Left;
-  else if (val == "right")
-    parsedAlignment = TextAlign::Right;
-  else if (val == "center")
-    parsedAlignment = TextAlign::Center;
-  else if (val == "justify")
-    parsedAlignment = TextAlign::Justify;
-
-  // Store result in provided pointer or default member
-  if (outAlignment)
-    *outAlignment = parsedAlignment;
-  else
-    cachedParagraphAlignment_ = parsedAlignment;
-
-  // Consume token + optional following space
-  size_t consumed = (closePos - pos + 1);
-  // we just validated closing ESC exists at closePos+1; include it
-  consumed += 1;  // trailing ESC
-  // Optional single space after token
-  if (closePos + 2 < fileSize_ && charAt(closePos + 2) == ' ')
-    consumed++;
-  return consumed;
 }

@@ -19,8 +19,8 @@ class FileWordProvider : public WordProvider {
 
   bool hasNextWord() override;
   bool hasPrevWord() override;
-  String getNextWord() override;
-  String getPrevWord() override;
+  StyledWord getNextWord() override;
+  StyledWord getPrevWord() override;
 
   float getPercentage() override;
   float getPercentage(int index) override;
@@ -36,7 +36,7 @@ class FileWordProvider : public WordProvider {
   TextAlign getParagraphAlignment() override;
 
  private:
-  String scanWord(int direction);
+  StyledWord scanWord(int direction);
 
   bool ensureBufferForPos(size_t pos);
   char charAt(size_t pos);
@@ -56,26 +56,47 @@ class FileWordProvider : public WordProvider {
   size_t cachedParagraphStart_ = SIZE_MAX;  // SIZE_MAX = invalid/not cached
   size_t cachedParagraphEnd_ = SIZE_MAX;
 
+  // Current inline font style (updated when parsing [style=...] tokens)
+  FontStyle currentInlineStyle_ = FontStyle::REGULAR;
+
   // Find paragraph boundaries containing the given position
   void findParagraphBoundaries(size_t pos, size_t& outStart, size_t& outEnd);
   // Update the paragraph alignment cache for current position
   void updateParagraphAlignmentCache();
 
-  // Parse and skip an ESC style token starting at `pos` (forward direction).
-  // Token format: ESC [ content ] ESC
-  // Returns number of characters consumed by the token (0 if not a token).
-  // If outAlignment is provided, writes the parsed alignment there instead of currentParagraphAlignment_
-  size_t parseEscTokenAtPos(size_t pos, TextAlign* outAlignment = nullptr);
+  // Parse and skip an ESC token starting at `pos` (forward direction).
+  // ESC format: ESC + command byte (2 bytes total, fixed length)
+  // Alignment: ESC+'L'(left), ESC+'R'(right), ESC+'C'(center), ESC+'J'(justify)
+  // Style: ESC+'B'(bold), ESC+'b'(end bold), ESC+'I'(italic), ESC+'i'(end italic),
+  //        ESC+'X'(bold+italic), ESC+'x'(end bold+italic)
+  // Returns 2 if valid ESC token found, 0 otherwise.
+  // If outAlignment is provided, writes the parsed alignment there.
+  // If processStyle is false, only checks validity without modifying state.
+  size_t parseEscTokenAtPos(size_t pos, TextAlign* outAlignment = nullptr, bool processStyle = true);
 
-  // Find the start of an ESC token when positioned at its trailing ESC.
-  // Returns the position of the leading ESC, or SIZE_MAX if not found.
-  size_t findEscTokenStart(size_t trailingEscPos);
+  // Check if there's a valid ESC token at pos (without modifying state)
+  size_t checkEscTokenAtPos(size_t pos);
 
-  // Check if position is inside an ESC token (not at boundaries).
-  // If so, returns the token length; otherwise returns 0.
-  bool isEscChar(char c) {
-    return c == (char)27;
-  }
+  // Parse ESC token when reading BACKWARD - style meanings are inverted
+  // When going backward through "ESC+B text ESC+b", we encounter ESC+b first
+  // (entering bold region) and ESC+B second (exiting bold region)
+  void parseEscTokenBackward(size_t pos);
+
+  // Restore style context after seeking to an arbitrary position.
+  // Scans backward from current position to find the most recent style token.
+  // Stops at paragraph boundary (newline) which resets style to REGULAR.
+  void restoreStyleContext();
+
+  // Find the start of an ESC token when positioned at its command byte.
+  // Returns the position of the ESC character, or SIZE_MAX if not found.
+  size_t findEscTokenStart(size_t commandBytePos);
+
+  // Check if we're at the end of an ESC token (at command byte position).
+  // Returns true and sets tokenStart if found.
+  bool isAtEscTokenEnd(size_t pos, size_t& tokenStart);
+
+  // Helper method to determine if a character is a word boundary
+  bool isWordBoundary(char c);
 };
 
 #endif

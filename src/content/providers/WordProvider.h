@@ -1,10 +1,30 @@
 #ifndef WORD_PROVIDER_H
 #define WORD_PROVIDER_H
 
-#include "../css/CssStyle.h"  // For TextAlign and CssStyle
-#include "WString.h"          // For Arduino `String`
+#include "../css/CssStyle.h"       // For TextAlign and CssStyle
+#include "WString.h"               // For Arduino `String`
+#include "rendering/SimpleFont.h"  // For FontStyle
 
 class TextRenderer;  // Forward declaration
+
+/**
+ * StyledWord - A word with its associated font style
+ *
+ * This struct is returned by getNextWord/getPrevWord to provide
+ * both the text and the style to use for rendering.
+ */
+struct StyledWord {
+  String text;
+  FontStyle style = FontStyle::REGULAR;
+
+  StyledWord() = default;
+  StyledWord(const String& t, FontStyle s = FontStyle::REGULAR) : text(t), style(s) {}
+
+  // Convenience: check if empty
+  bool isEmpty() const {
+    return text.isEmpty();
+  }
+};
 
 class WordProvider {
  public:
@@ -16,11 +36,11 @@ class WordProvider {
   // Returns true if there are more words to read backward
   virtual bool hasPrevWord() = 0;
 
-  // Returns the next word as an Arduino `String`, measuring its width using the renderer
-  virtual String getNextWord() = 0;
+  // Returns the next word as a StyledWord, containing text and font style
+  virtual StyledWord getNextWord() = 0;
 
-  // Gets the previous word as an Arduino `String` and moves index backwards
-  virtual String getPrevWord() = 0;
+  // Gets the previous word as a StyledWord and moves index backwards
+  virtual StyledWord getPrevWord() = 0;
 
   // Returns the current reading progress as a percentage (0.0 to 1.0)
   virtual float getPercentage() = 0;

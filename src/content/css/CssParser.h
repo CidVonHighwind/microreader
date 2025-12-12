@@ -83,6 +83,12 @@ class CssParser {
   // Parse text-align value
   TextAlign parseTextAlign(const String& value);
 
+  // Parse font-style value
+  CssFontStyle parseFontStyle(const String& value);
+
+  // Parse font-weight value
+  CssFontWeight parseFontWeight(const String& value);
+
   // Extract class name from a selector (e.g., ".foo" or "p.foo" -> "foo")
   String extractClassName(const String& selector);
 
