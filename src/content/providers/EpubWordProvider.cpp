@@ -185,6 +185,8 @@ void EpubWordProvider::writeParagraphStyleToken(String& writeBuffer, const Strin
       combined.merge(inlineStyle);
     }
 
+    // Only emit alignment tokens for paragraphs - NOT bold/italic
+    // Bold/italic come from inline elements like <b>, <i>, <span>
     String styleToken = "";
     if (combined.hasTextAlign) {
       char tok = 'L';
@@ -208,26 +210,6 @@ void EpubWordProvider::writeParagraphStyleToken(String& writeBuffer, const Strin
       styleToken += (char)0x1B;  // ESC
       styleToken += tok;
       paragraphStyleEmitted.push_back(tok);
-    }
-
-    // Add bold/italic style tokens
-    if (combined.hasFontWeight && combined.fontWeight == CssFontWeight::Bold) {
-      if (combined.hasFontStyle && combined.fontStyle == CssFontStyle::Italic) {
-        // Bold + Italic
-        styleToken += (char)0x1B;  // ESC
-        styleToken += 'X';
-        paragraphStyleEmitted.push_back('X');
-      } else {
-        // Bold only
-        styleToken += (char)0x1B;  // ESC
-        styleToken += 'B';
-        paragraphStyleEmitted.push_back('B');
-      }
-    } else if (combined.hasFontStyle && combined.fontStyle == CssFontStyle::Italic) {
-      // Italic only
-      styleToken += (char)0x1B;  // ESC
-      styleToken += 'I';
-      paragraphStyleEmitted.push_back('I');
     }
 
     if (styleToken.length() > 0) {
@@ -278,22 +260,8 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
         paragraphClassesWritten = false;
       }
 
-      // Handle inline style elements (b, strong, i, em, span)
+      // Handle inline style elements (b, strong, i, em, span) - just track them, don't emit yet
       if (isInlineStyleElement(name) && !parser.isEmptyElement()) {
-        // Close any existing inline styles before starting a new one
-        std::vector<char> tempStack = inlineStyleEmitted;  // Copy to close in reverse order
-        while (!tempStack.empty()) {
-          char emitted = tempStack.back();
-          tempStack.pop_back();
-          if (emitted != '\0') {
-            writeStyleResetToken(buffer, emitted);
-          }
-        }
-        // Clear the stack since we closed them
-        while (!inlineStyleEmitted.empty()) {
-          inlineStyleEmitted.pop_back();
-        }
-
         String classAttr = parser.getAttribute("class");
         String styleAttr = parser.getAttribute("style");
         char emitted = writeInlineStyleToken(buffer, name, classAttr, styleAttr);
@@ -303,9 +271,23 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
       // Handle <br/> - only add newline if line has content
       if (parser.isEmptyElement() && (name == "br" || name == "hr")) {
         if (lineHasContent) {
+          // Close alignment token before newline if one was opened
+          if (paragraphClassesWritten && !paragraphStyleEmitted.empty()) {
+            for (auto it = paragraphStyleEmitted.rbegin(); it != paragraphStyleEmitted.rend(); ++it) {
+              char startCmd = *it;
+              char endCmd = startCmd;
+              if (startCmd >= 'A' && startCmd <= 'Z') {
+                endCmd = (char)tolower(startCmd);
+              }
+              buffer += (char)0x1B;
+              buffer += endCmd;
+            }
+          }
           buffer += "\n";
           lineHasContent = false;
           lineHasNbsp = false;
+          // Keep paragraphClassesWritten as false so alignment reopens on next line
+          paragraphClassesWritten = false;
         }
       }
     }
@@ -560,7 +542,7 @@ String EpubWordProvider::trimLeadingSpaces(const String& text) {
   return text.substring(start);
 }
 char EpubWordProvider::writeInlineStyleToken(String& writeBuffer, const String& elementName, const String& classAttr,
-                                               const String& styleAttr) {
+                                             const String& styleAttr) {
   // Determine style from element name and/or CSS classes
   bool isBold = false;
   bool isItalic = false;
@@ -615,9 +597,9 @@ char EpubWordProvider::writeInlineStyleToken(String& writeBuffer, const String& 
   }
 
   return '\0';  // No style token emitted
-  }
+}
 
-  void EpubWordProvider::writeStyleResetToken(String & writeBuffer, char startCmd) {
+void EpubWordProvider::writeStyleResetToken(String& writeBuffer, char startCmd) {
   // Emit a token to reset back to normal style
   // Map startCmd (uppercase) to corresponding lowercase end token
   if (startCmd == '\0')
@@ -628,15 +610,15 @@ char EpubWordProvider::writeInlineStyleToken(String& writeBuffer, const String& 
   }
   writeBuffer += (char)0x1B;  // ESC
   writeBuffer += endCmd;      // Reset token corresponding to startCmd
-  }
+}
 
-  // Context for true streaming: EPUB -> Parser -> TXT
-  struct TrueStreamingContext {
+// Context for true streaming: EPUB -> Parser -> TXT
+struct TrueStreamingContext {
   epub_stream_context* epubStream;
-  };
+};
 
-  // Callback for SimpleXmlParser to pull data from EPUB stream
-  static int parser_stream_callback(char* buffer, size_t maxSize, void* userData) {
+// Callback for SimpleXmlParser to pull data from EPUB stream
+static int parser_stream_callback(char* buffer, size_t maxSize, void* userData) {
   TrueStreamingContext* ctx = (TrueStreamingContext*)userData;
   if (!ctx || !ctx->epubStream) {
     return -1;
@@ -645,9 +627,9 @@ char EpubWordProvider::writeInlineStyleToken(String& writeBuffer, const String& 
   // Pull next chunk from EPUB decompressor
   int bytesRead = epub_read_chunk(ctx->epubStream, buffer, maxSize);
   return bytesRead;
-  }
+}
 
-  bool EpubWordProvider::convertXhtmlStreamToTxt(const char* epubFilename, String& outTxtPath) {
+bool EpubWordProvider::convertXhtmlStreamToTxt(const char* epubFilename, String& outTxtPath) {
   if (!epubReader_) {
     return false;
   }
@@ -714,9 +696,9 @@ char EpubWordProvider::writeInlineStyleToken(String& writeBuffer, const String& 
   Serial.printf("Converted XHTML to TXT (streamed): %s — %lu ms\n", dest.c_str(), elapsedMs);
   outTxtPath = dest;
   return true;
-  }
+}
 
-  bool EpubWordProvider::openChapter(int chapterIndex) {
+bool EpubWordProvider::openChapter(int chapterIndex) {
   if (!epubReader_) {
     return false;
   }
@@ -797,20 +779,20 @@ char EpubWordProvider::writeInlineStyleToken(String& writeBuffer, const String& 
   currentIndex_ = 0;
 
   return true;
-  }
+}
 
-  int EpubWordProvider::getChapterCount() {
+int EpubWordProvider::getChapterCount() {
   if (!epubReader_) {
     return 1;  // Single XHTML file = 1 chapter
   }
   return epubReader_->getSpineCount();
-  }
+}
 
-  int EpubWordProvider::getCurrentChapter() {
+int EpubWordProvider::getCurrentChapter() {
   return currentChapter_;
-  }
+}
 
-  bool EpubWordProvider::setChapter(int chapterIndex) {
+bool EpubWordProvider::setChapter(int chapterIndex) {
   if (!isEpub_) {
     // Direct XHTML file - only chapter 0 is valid
     return chapterIndex == 0;
@@ -823,33 +805,33 @@ char EpubWordProvider::writeInlineStyleToken(String& writeBuffer, const String& 
   }
 
   return openChapter(chapterIndex);
-  }
+}
 
-  bool EpubWordProvider::hasNextWord() {
+bool EpubWordProvider::hasNextWord() {
   if (fileProvider_)
     return fileProvider_->hasNextWord();
   return false;
-  }
+}
 
-  bool EpubWordProvider::hasPrevWord() {
+bool EpubWordProvider::hasPrevWord() {
   if (fileProvider_)
     return fileProvider_->hasPrevWord();
   return false;
-  }
+}
 
-  StyledWord EpubWordProvider::getNextWord() {
+StyledWord EpubWordProvider::getNextWord() {
   if (!fileProvider_)
     return StyledWord();
   return fileProvider_->getNextWord();
-  }
+}
 
-  StyledWord EpubWordProvider::getPrevWord() {
+StyledWord EpubWordProvider::getPrevWord() {
   if (!fileProvider_)
     return StyledWord();
   return fileProvider_->getPrevWord();
-  }
+}
 
-  float EpubWordProvider::getPercentage() {
+float EpubWordProvider::getPercentage() {
   if (!fileProvider_)
     return 1.0f;
   // For EPUBs, calculate book-wide percentage using chapter offset
@@ -864,9 +846,9 @@ char EpubWordProvider::writeInlineStyleToken(String& writeBuffer, const String& 
   }
   // Non-EPUB: delegate to file provider percentage
   return fileProvider_->getPercentage();
-  }
+}
 
-  float EpubWordProvider::getPercentage(int index) {
+float EpubWordProvider::getPercentage(int index) {
   if (!fileProvider_)
     return 1.0f;
   if (isEpub_ && epubReader_) {
@@ -878,57 +860,57 @@ char EpubWordProvider::writeInlineStyleToken(String& writeBuffer, const String& 
     return static_cast<float>(absolutePosition) / static_cast<float>(totalSize);
   }
   return fileProvider_->getPercentage(index);
-  }
+}
 
-  float EpubWordProvider::getChapterPercentage() {
+float EpubWordProvider::getChapterPercentage() {
   if (!fileProvider_)
     return 1.0f;
   return fileProvider_->getPercentage();
-  }
+}
 
-  float EpubWordProvider::getChapterPercentage(int index) {
+float EpubWordProvider::getChapterPercentage(int index) {
   if (!fileProvider_)
     return 1.0f;
   return fileProvider_->getPercentage(index);
-  }
+}
 
-  int EpubWordProvider::getCurrentIndex() {
+int EpubWordProvider::getCurrentIndex() {
   if (!fileProvider_)
     return 0;
   return fileProvider_->getCurrentIndex();
-  }
+}
 
-  char EpubWordProvider::peekChar(int offset) {
+char EpubWordProvider::peekChar(int offset) {
   if (!fileProvider_)
     return '\0';
   return fileProvider_->peekChar(offset);
-  }
+}
 
-  int EpubWordProvider::consumeChars(int n) {
+int EpubWordProvider::consumeChars(int n) {
   if (!fileProvider_)
     return 0;
   return fileProvider_->consumeChars(n);
-  }
+}
 
-  bool EpubWordProvider::isInsideWord() {
+bool EpubWordProvider::isInsideWord() {
   if (!fileProvider_)
     return false;
   return fileProvider_->isInsideWord();
-  }
+}
 
-  void EpubWordProvider::ungetWord() {
+void EpubWordProvider::ungetWord() {
   if (!fileProvider_)
     return;
   fileProvider_->ungetWord();
-  }
+}
 
-  void EpubWordProvider::setPosition(int index) {
+void EpubWordProvider::setPosition(int index) {
   if (!fileProvider_)
     return;
   fileProvider_->setPosition(index);
-  }
+}
 
-  void EpubWordProvider::reset() {
+void EpubWordProvider::reset() {
   if (fileProvider_)
     fileProvider_->reset();
-  }
+}
