@@ -13,7 +13,7 @@
 
 #include "core/EInkDisplay.h"
 #include "rendering/TextRenderer.h"
-#include "resources/fonts/NotoSans26.h"
+#include "resources/fonts/FontDefinitions.h"
 #include "test_config.h"
 #include "test_globals.h"
 #include "test_utils.h"

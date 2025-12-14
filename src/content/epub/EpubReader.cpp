@@ -1,5 +1,7 @@
 #include "EpubReader.h"
 
+#include <vector>
+
 #include "../xml/SimpleXmlParser.h"
 
 // Helper function for case-insensitive string comparison
@@ -42,14 +44,22 @@ static int extract_to_file_callback(const void* data, size_t size, void* user_da
   return (written == size) ? 1 : 0;  // Return 1 for success, 0 for failure
 }
 
+// Callback to append extracted data into a String in memory
+static int append_to_string_callback(const void* data, size_t size, void* user_data) {
+  if (!user_data)
+    return 0;
+  String* dest = (String*)user_data;
+  // Append binary-safe using existing String interface available in unit tests
+  dest->reserve(dest->length() + (int)size);
+  const char* bytes = (const char*)data;
+  for (size_t i = 0; i < size; ++i) {
+    *dest += bytes[i];
+  }
+  return 1;
+}
+
 EpubReader::EpubReader(const char* epubPath)
-    : epubPath_(epubPath),
-      valid_(false),
-      reader_(nullptr),
-      spine_(nullptr),
-      spineCount_(0),
-      toc_(nullptr),
-      tocCount_(0) {
+    : epubPath_(epubPath), valid_(false), reader_(nullptr), spine_(nullptr), spineCount_(0) {
   Serial.printf("\n=== EpubReader: Opening %s ===\n", epubPath);
 
   // Verify file exists
@@ -135,10 +145,7 @@ EpubReader::~EpubReader() {
     delete[] spineOffsets_;
     spineOffsets_ = nullptr;
   }
-  if (toc_) {
-    delete[] toc_;
-    toc_ = nullptr;
-  }
+  // TOC stored in std::vector now - automatic cleanup
   if (cssParser_) {
     delete cssParser_;
     cssParser_ = nullptr;
@@ -350,7 +357,7 @@ String EpubReader::getChapterNameForSpine(int spineIndex) const {
 
   // Search TOC for matching href
   // The spine href and TOC href should match (both are relative to content.opf)
-  for (int i = 0; i < tocCount_; i++) {
+  for (size_t i = 0; i < toc_.size(); i++) {
     if (toc_[i].href == spineItem->href) {
       return toc_[i].title;
     }
@@ -361,6 +368,9 @@ String EpubReader::getChapterNameForSpine(int spineIndex) const {
 }
 
 bool EpubReader::parseContainer() {
+  // measure time taken
+  unsigned long startTime = millis();
+
   // Get container.xml (will extract if needed)
   // Check if file is already extracted
   const char* filename = "META-INF/container.xml";
@@ -407,35 +417,34 @@ bool EpubReader::parseContainer() {
   }
 
   Serial.printf("Found content.opf: %s\n", contentOpfPath_.c_str());
+  unsigned long endTime = millis();
+  Serial.printf("Container parsing took %lu ms\n", endTime - startTime);
+
   return true;
 }
 
 bool EpubReader::parseContentOpf() {
-  // Get content.opf file
-  const char* filename = contentOpfPath_.c_str();
-  String opfPath;
+  unsigned long startTime = millis();
 
+  // Step 1: Locate and extract content.opf
+  String opfPath;
+  const char* filename = contentOpfPath_.c_str();
   if (isFileExtracted(filename)) {
     opfPath = getExtractedPath(filename);
   } else {
-    // Need to extract it
     if (!extractFile(filename)) {
       Serial.println("ERROR: Failed to extract content.opf");
       return false;
     }
     opfPath = getExtractedPath(filename);
   }
-
   if (opfPath.isEmpty()) {
     Serial.println("ERROR: Failed to get content.opf path");
     return false;
   }
-
   Serial.printf("Parsing content.opf: %s\n", opfPath.c_str());
 
-  // Memory-efficient parsing: only store XHTML manifest items (not images/fonts/css)
-  // Spine only references XHTML files, so we don't need the rest
-
+  // Open parser once for the entire parsing
   SimpleXmlParser* parser = new SimpleXmlParser();
   if (!parser->open(opfPath.c_str())) {
     Serial.println("ERROR: Failed to open content.opf for parsing");
@@ -443,164 +452,87 @@ bool EpubReader::parseContentOpf() {
     return false;
   }
 
-  // Step 1: Find <spine> element and get toc attribute
   String tocId = "";
-  if (findNextElement(parser, "spine")) {
-    tocId = parser->getAttribute("toc");
-  }
-  parser->close();
+  std::vector<ManifestItem> manifest;
+  std::vector<String> spineIdrefs;
 
-  // Step 2: If we have a toc id, find its href in manifest
-  if (!tocId.isEmpty()) {
-    if (!parser->open(opfPath.c_str())) {
-      delete parser;
-      return false;
+  while (parser->read()) {
+    SimpleXmlParser::NodeType nodeType = parser->getNodeType();
+    String name = parser->getName();
+
+    if (nodeType == SimpleXmlParser::Element) {
+      if (strcasecmp_helper(name, "spine")) {
+        tocId = parser->getAttribute("toc");
+      } else if (strcasecmp_helper(name, "item")) {
+        ManifestItem item;
+        item.id = parser->getAttribute("id");
+        item.href = parser->getAttribute("href");
+        item.mediaType = parser->getAttribute("media-type");
+        // Only collect xhtml/html and ncx items
+        if (item.mediaType.indexOf("xhtml") >= 0 || item.mediaType.indexOf("html") >= 0 ||
+            item.mediaType.indexOf("ncx") >= 0) {
+          manifest.push_back(item);
+        }
+        if (item.mediaType.indexOf("css") >= 0) {
+          String href = parser->getAttribute("href");
+          if (!href.isEmpty()) {
+            cssFiles_.push_back(href);
+            Serial.printf("Found CSS file: %s\n", href.c_str());
+          }
+        }
+      } else if (strcasecmp_helper(name, "itemref")) {
+        String idref = parser->getAttribute("idref");
+        if (!idref.isEmpty()) {
+          spineIdrefs.push_back(idref);
+        }
+      }
     }
-    while (findNextElement(parser, "item")) {
-      String id = parser->getAttribute("id");
-      if (id == tocId) {
-        tocNcxPath_ = parser->getAttribute("href");
+  }
+
+  parser->close();
+  delete parser;
+
+  // Process tocId to find tocNcxPath_
+  if (!tocId.isEmpty()) {
+    for (auto& item : manifest) {
+      if (item.id == tocId) {
+        tocNcxPath_ = item.href;
         Serial.printf("Found toc.ncx reference: %s\n", tocNcxPath_.c_str());
         break;
       }
     }
-    parser->close();
   }
 
-  // Step 3: Build manifest lookup - only for XHTML items (what spine references)
-  // This is much smaller than the full manifest
-  struct ManifestItem {
-    String id;
-    String href;
-  };
-
-  // Count XHTML and CSS items first
-  if (!parser->open(opfPath.c_str())) {
-    delete parser;
-    return false;
-  }
-
-  int xhtmlCount = 0;
-  int cssCount = 0;
-  while (findNextElement(parser, "item")) {
-    String mediaType = parser->getAttribute("media-type");
-    if (mediaType.indexOf("xhtml") >= 0 || mediaType.indexOf("html") >= 0) {
-      xhtmlCount++;
-    } else if (mediaType.indexOf("css") >= 0) {
-      cssCount++;
-    }
-  }
-  parser->close();
-
-  Serial.printf("Found %d XHTML manifest items, %d CSS files\\n", xhtmlCount, cssCount);
-
-  // Allocate and collect XHTML manifest items and CSS files
-  ManifestItem* manifest = new ManifestItem[xhtmlCount];
-  int manifestCount = 0;
-  cssFiles_.reserve(cssCount);
-
-  if (!parser->open(opfPath.c_str())) {
-    delete parser;
-    delete[] manifest;
-    return false;
-  }
-
-  while (findNextElement(parser, "item")) {
-    String mediaType = parser->getAttribute("media-type");
-    if (mediaType.indexOf("xhtml") >= 0 || mediaType.indexOf("html") >= 0) {
-      if (manifestCount < xhtmlCount) {
-        manifest[manifestCount].id = parser->getAttribute("id");
-        manifest[manifestCount].href = parser->getAttribute("href");
-        manifestCount++;
-      }
-    } else if (mediaType.indexOf("css") >= 0) {
-      String href = parser->getAttribute("href");
-      if (!href.isEmpty()) {
-        cssFiles_.push_back(href);
-        Serial.printf("Found CSS file: %s\\n", href.c_str());
+  // Build spine
+  spineCount_ = spineIdrefs.size();
+  spine_ = new SpineItem[spineCount_];
+  for (int i = 0; i < spineCount_; i++) {
+    spine_[i].idref = spineIdrefs[i];
+    spine_[i].href = "";
+    for (auto& item : manifest) {
+      if (item.id == spine_[i].idref) {
+        spine_[i].href = item.href;
+        break;
       }
     }
-  }
-  parser->close();
-
-  // Step 4: Count spine items
-  if (!parser->open(opfPath.c_str())) {
-    delete parser;
-    delete[] manifest;
-    return false;
-  }
-
-  int spineItemCount = 0;
-  while (findNextElement(parser, "itemref")) {
-    String idref = parser->getAttribute("idref");
-    if (!idref.isEmpty()) {
-      spineItemCount++;
+    if (spine_[i].href.isEmpty()) {
+      Serial.printf("WARNING: No manifest entry for idref: %s\n", spine_[i].idref.c_str());
     }
   }
-  parser->close();
 
-  Serial.printf("Found %d spine itemrefs\n", spineItemCount);
-
-  // Allocate spine array
-  spine_ = new SpineItem[spineItemCount];
-  spineCount_ = 0;
-
-  // Step 5: Collect spine items and resolve hrefs using manifest lookup
-  if (!parser->open(opfPath.c_str())) {
-    delete parser;
-    delete[] manifest;
-    delete[] spine_;
-    spine_ = nullptr;
-    return false;
-  }
-
-  while (findNextElement(parser, "itemref") && spineCount_ < spineItemCount) {
-    String idref = parser->getAttribute("idref");
-    if (!idref.isEmpty()) {
-      spine_[spineCount_].idref = idref;
-      spine_[spineCount_].href = "";
-
-      // Look up href in manifest
-      for (int j = 0; j < manifestCount; j++) {
-        if (manifest[j].id == idref) {
-          spine_[spineCount_].href = manifest[j].href;
-          break;
-        }
-      }
-
-      if (spine_[spineCount_].href.isEmpty()) {
-        Serial.printf("WARNING: No manifest entry for idref: %s\n", idref.c_str());
-      }
-      spineCount_++;
-    }
-  }
-  parser->close();
-
-  // Done with manifest lookup
-  delete[] manifest;
-  delete parser;
-
-  // Calculate spine item sizes for book-wide percentage calculation
+  // Calculate spine item sizes
   spineSizes_ = new size_t[spineCount_];
   spineOffsets_ = new size_t[spineCount_];
   totalBookSize_ = 0;
-
-  // We need the EPUB open to get file sizes
   if (openEpub()) {
-    // Get the base directory for content.opf (hrefs are relative to this)
     String baseDir = "";
     int lastSlash = contentOpfPath_.lastIndexOf('/');
     if (lastSlash >= 0) {
       baseDir = contentOpfPath_.substring(0, lastSlash + 1);
     }
-
     for (int i = 0; i < spineCount_; i++) {
       spineOffsets_[i] = totalBookSize_;
-
-      // Build full path for this spine item
       String fullPath = baseDir + spine_[i].href;
-
-      // Find the file in the EPUB and get its uncompressed size
       uint32_t fileIndex;
       epub_error err = epub_locate_file(reader_, fullPath.c_str(), &fileIndex);
       if (err == EPUB_OK) {
@@ -621,11 +553,15 @@ bool EpubReader::parseContentOpf() {
     closeEpub();
   }
 
+  unsigned long endTime = millis();
   Serial.printf("\nSpine parsed successfully: %d items, total size: %u bytes\n", spineCount_, totalBookSize_);
+  Serial.printf("Content.opf parsing took %lu ms\n", endTime - startTime);
   return true;
 }
 
 bool EpubReader::parseTocNcx() {
+  unsigned long startTime = millis();
+
   // The toc.ncx path is relative to the content.opf location
   // We need to combine the content.opf directory with the toc.ncx path
   String tocPath = tocNcxPath_;
@@ -656,6 +592,8 @@ bool EpubReader::parseTocNcx() {
   Serial.printf("Parsing toc.ncx: %s\n", extractedTocPath.c_str());
 
   SimpleXmlParser* parser = new SimpleXmlParser();
+
+  // Open toc.ncx from SD card to conserve RAM (avoid loading entire file into memory)
   if (!parser->open(extractedTocPath.c_str())) {
     Serial.println("ERROR: Failed to open toc.ncx for parsing");
     delete parser;
@@ -663,10 +601,9 @@ bool EpubReader::parseTocNcx() {
   }
 
   // Use a temporary list to collect TOC items
-  const int INITIAL_CAPACITY = 50;
-  int capacity = INITIAL_CAPACITY;
-  TocItem* tempToc = new TocItem[capacity];
-  tocCount_ = 0;
+  const int INITIAL_CAPACITY = 100;
+  std::vector<TocItem> tempToc;
+  tempToc.reserve(INITIAL_CAPACITY);
 
   // Parse <navPoint> elements using a simpler approach:
   // For each navPoint, find its direct navLabel/text and content elements
@@ -680,39 +617,28 @@ bool EpubReader::parseTocNcx() {
 
   while (parser->read()) {
     SimpleXmlParser::NodeType nodeType = parser->getNodeType();
-    String name = parser->getName();
 
     if (nodeType == SimpleXmlParser::Element) {
+      String name = parser->getName();
       if (strcasecmp_helper(name, "navPoint")) {
-        // Starting a new navPoint - save previous one if we have data
-        if (!currentTitle.isEmpty() && !currentSrc.isEmpty()) {
-          // Grow array if needed
-          if (tocCount_ >= capacity) {
-            capacity *= 2;
-            TocItem* newToc = new TocItem[capacity];
-            for (int i = 0; i < tocCount_; i++) {
-              newToc[i].title = tempToc[i].title;
-              newToc[i].href = tempToc[i].href;
-              newToc[i].anchor = tempToc[i].anchor;
-            }
-            delete[] tempToc;
-            tempToc = newToc;
-          }
-
-          // Parse src into href and anchor
+        // Starting a new navPoint - if we were already inside one, commit it
+        // This handles parent navPoints that contain nested navPoints
+        if (inNavPoint && !currentTitle.isEmpty() && !currentSrc.isEmpty()) {
+          TocItem item;
           int hashPos = currentSrc.indexOf('#');
           if (hashPos >= 0) {
-            tempToc[tocCount_].href = currentSrc.substring(0, hashPos);
-            tempToc[tocCount_].anchor = currentSrc.substring(hashPos + 1);
+            item.href = currentSrc.substring(0, hashPos);
+            item.anchor = currentSrc.substring(hashPos + 1);
           } else {
-            tempToc[tocCount_].href = currentSrc;
-            tempToc[tocCount_].anchor = "";
+            item.href = currentSrc;
+            item.anchor = "";
           }
-          tempToc[tocCount_].title = currentTitle;
-          tocCount_++;
+          currentTitle.trim();
+          item.title = currentTitle;
+          tempToc.push_back(item);
         }
 
-        // Reset for new navPoint
+        // Reset state for new entry
         currentTitle = "";
         currentSrc = "";
         inNavPoint = true;
@@ -739,72 +665,64 @@ bool EpubReader::parseTocNcx() {
       }
       expectingText = false;
     } else if (nodeType == SimpleXmlParser::EndElement) {
+      String name = parser->getName();
       if (strcasecmp_helper(name, "navLabel")) {
         inNavLabel = false;
       } else if (strcasecmp_helper(name, "text")) {
+        expectingText = false;
+      } else if (strcasecmp_helper(name, "navPoint")) {
+        // End of navPoint - commit the collected entry
+        if (!currentTitle.isEmpty() && !currentSrc.isEmpty()) {
+          TocItem item;
+          int hashPos = currentSrc.indexOf('#');
+          if (hashPos >= 0) {
+            item.href = currentSrc.substring(0, hashPos);
+            item.anchor = currentSrc.substring(hashPos + 1);
+          } else {
+            item.href = currentSrc;
+            item.anchor = "";
+          }
+          currentTitle.trim();
+          item.title = currentTitle;
+          tempToc.push_back(item);
+        }
+        inNavPoint = false;
+
+        // Reset state to be ready for possible siblings
+        currentTitle = "";
+        currentSrc = "";
+        inNavLabel = false;
         expectingText = false;
       }
     }
   }
 
-  // Don't forget the last navPoint
-  if (!currentTitle.isEmpty() && !currentSrc.isEmpty()) {
-    if (tocCount_ >= capacity) {
-      capacity *= 2;
-      TocItem* newToc = new TocItem[capacity];
-      for (int i = 0; i < tocCount_; i++) {
-        newToc[i].title = tempToc[i].title;
-        newToc[i].href = tempToc[i].href;
-        newToc[i].anchor = tempToc[i].anchor;
-      }
-      delete[] tempToc;
-      tempToc = newToc;
-    }
-
-    int hashPos = currentSrc.indexOf('#');
-    if (hashPos >= 0) {
-      tempToc[tocCount_].href = currentSrc.substring(0, hashPos);
-      tempToc[tocCount_].anchor = currentSrc.substring(hashPos + 1);
-    } else {
-      tempToc[tocCount_].href = currentSrc;
-      tempToc[tocCount_].anchor = "";
-    }
-    tempToc[tocCount_].title = currentTitle;
-    tocCount_++;
-  }
-
-  // Allocate final TOC array with exact size
-  if (tocCount_ > 0) {
-    toc_ = new TocItem[tocCount_];
-    for (int i = 0; i < tocCount_; i++) {
-      toc_[i].title = tempToc[i].title;
-      toc_[i].href = tempToc[i].href;
-      toc_[i].anchor = tempToc[i].anchor;
-    }
-  }
-  delete[] tempToc;
+  // Move temporary vector into member TOC
+  toc_ = std::move(tempToc);
 
   parser->close();
   delete parser;
 
-  Serial.printf("TOC parsed successfully: %d chapters/sections\n", tocCount_);
+  Serial.printf("TOC parsed successfully: %d chapters/sections\n", (int)toc_.size());
 
-  // Print TOC summary
-  for (int i = 0; i < tocCount_ && i < 10; i++) {
-    Serial.printf("  [%d] %s -> %s", i, toc_[i].title.c_str(), toc_[i].href.c_str());
-    if (!toc_[i].anchor.isEmpty()) {
-      Serial.printf("#%s", toc_[i].anchor.c_str());
-    }
-    Serial.println();
-  }
-  if (tocCount_ > 10) {
-    Serial.printf("  ... and %d more entries\n", tocCount_ - 10);
-  }
+  // // Print all TOC elements
+  // for (int i = 0; i < (int)toc_.size(); i++) {
+  //   Serial.printf("  [%d] %s -> %s", i, toc_[i].title.c_str(), toc_[i].href.c_str());
+  //   if (!toc_[i].anchor.isEmpty()) {
+  //     Serial.printf("#%s", toc_[i].anchor.c_str());
+  //   }
+  //   Serial.println();
+  // }
+
+  unsigned long endTime = millis();
+  Serial.printf("TOC parsing took %lu ms\n", endTime - startTime);
 
   return true;
 }
 
 bool EpubReader::parseCssFiles() {
+  unsigned long startTime = millis();
+
   if (cssFiles_.empty()) {
     return true;  // Nothing to parse
   }
@@ -844,6 +762,9 @@ bool EpubReader::parseCssFiles() {
 
   Serial.printf("CSS parsing complete: %d/%d files parsed, %d rules loaded\n", successCount, cssFiles_.size(),
                 cssParser_->getStyleCount());
+
+  unsigned long endTime = millis();
+  Serial.printf("CSS parsing took %lu ms\n", endTime - startTime);
 
   return successCount > 0;
 }

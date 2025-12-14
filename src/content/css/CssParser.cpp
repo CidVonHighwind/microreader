@@ -442,7 +442,6 @@ CssStyle CssParser::parseInlineStyle(const String& styleAttr) const {
           }
           style.hasFontWeight = true;
         }
-        // Add more property parsing here as needed
       }
     }
 

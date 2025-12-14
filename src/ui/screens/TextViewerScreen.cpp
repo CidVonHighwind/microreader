@@ -443,6 +443,9 @@ void TextViewerScreen::loadTextFromString(const String& content) {
 }
 
 void TextViewerScreen::openFile(const String& sdPath) {
+  // measure time taken to open file
+  unsigned long startTime = millis();
+
   if (!sdManager.ready()) {
     Serial.println("TextViewerScreen: SD not ready; cannot open file.");
     return;
@@ -452,6 +455,9 @@ void TextViewerScreen::openFile(const String& sdPath) {
   delete provider;
   provider = nullptr;
   currentFilePath = sdPath;
+
+  // Load the saved position from SD if present
+  loadPositionFromFile();
 
   // Check if this is an EPUB file
   bool isEpub = false;
@@ -485,11 +491,18 @@ void TextViewerScreen::openFile(const String& sdPath) {
     provider = fp;
   }
 
-  pageStartIndex = 0;
-  pageEndIndex = 0;
-  // Load a saved position from SD if present
-  loadPositionFromFile();
+  // Set chapter first (if provider supports it), then position within chapter
+  if (provider->hasChapters() && currentChapter > 0) {
+    provider->setChapter(currentChapter);
+  }
   provider->setPosition(pageStartIndex);
+
+  unsigned long endTime = millis();
+  Serial.print("Opened file ");
+  Serial.print(sdPath.c_str());
+  Serial.print(" in ");
+  Serial.print(endTime - startTime);
+  Serial.println(" ms");
 }
 
 void TextViewerScreen::savePositionToFile() {
@@ -507,11 +520,13 @@ void TextViewerScreen::savePositionToFile() {
 }
 
 void TextViewerScreen::loadPositionFromFile() {
-  if (currentFilePath.length() == 0 || !provider)
+  if (currentFilePath.length() == 0)
     return;
+
   String posPath = currentFilePath + String(".pos");
   char buf[64];
   size_t r = sdManager.readFileToBuffer(posPath.c_str(), buf, sizeof(buf));
+
   if (r > 0) {
     buf[sizeof(buf) - 1] = '\0';
     // Parse format: chapter,position (or just position for backwards compatibility)
@@ -532,14 +547,13 @@ void TextViewerScreen::loadPositionFromFile() {
     if (position < 0)
       position = 0;
 
-    // Set chapter first (if provider supports it), then position within chapter
-    if (provider->hasChapters() && chapter > 0) {
-      provider->setChapter(chapter);
-    }
-    provider->setPosition(position);
+    currentChapter = chapter;
     pageStartIndex = position;
+    pageEndIndex = 0;
   } else {
+    currentChapter = 0;
     pageStartIndex = 0;
+    pageEndIndex = 0;
   }
 }
 

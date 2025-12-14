@@ -35,6 +35,7 @@ class TextViewerScreen : public Screen {
   // Called when device is powering down; save document position
   void shutdown() override;
 
+  int currentChapter = 0;
   int pageStartIndex = 0;
   int pageEndIndex = 0;
 

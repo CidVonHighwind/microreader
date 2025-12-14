@@ -55,17 +55,22 @@ EpubWordProvider::EpubWordProvider(const char* path, size_t bufSize)
     if (!epubReader_->isValid()) {
       delete epubReader_;
       epubReader_ = nullptr;
+      Serial.printf("ERROR: Failed to open EPUB file: %s\n", path);
       return;
     }
 
-    // Open the first chapter (index 0)
-    if (!openChapter(0)) {
-      delete epubReader_;
-      epubReader_ = nullptr;
-      return;
-    }
+    currentIndex_ = 0;
+    currentChapter_ = -1;
+
+    // // Open the first chapter (index 0)
+    // if (!openChapter(0)) {
+    //   delete epubReader_;
+    //   epubReader_ = nullptr;
+    //   return;
+    // }
 
     valid_ = true;
+    Serial.printf("Opened EPUB file: %s with %d chapters\n", path, epubReader_->getSpineCount());
   }
 }
 
@@ -705,11 +710,13 @@ bool EpubWordProvider::openChapter(int chapterIndex) {
 
   int spineCount = epubReader_->getSpineCount();
   if (chapterIndex < 0 || chapterIndex >= spineCount) {
+    Serial.printf("ERROR: Chapter index %d out of range (0 to %d)\n", chapterIndex, spineCount - 1);
     return false;
   }
 
   const SpineItem* spineItem = epubReader_->getSpineItem(chapterIndex);
   if (!spineItem) {
+    Serial.printf("ERROR: Failed to get spine item for chapter index %d\n", chapterIndex);
     return false;
   }
 
@@ -777,6 +784,8 @@ bool EpubWordProvider::openChapter(int chapterIndex) {
 
   // Initialize index to start of chapter; do not parse nodes yet
   currentIndex_ = 0;
+
+  Serial.printf("Opened chapter %d: %s\n", chapterIndex, currentChapterName_.c_str());
 
   return true;
 }

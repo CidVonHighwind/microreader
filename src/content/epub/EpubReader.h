@@ -56,10 +56,10 @@ class EpubReader {
     return nullptr;
   }
   int getTocCount() const {
-    return tocCount_;
+    return (int)toc_.size();
   }
   const TocItem* getTocItem(int index) const {
-    if (index >= 0 && index < tocCount_) {
+    if (index >= 0 && index < (int)toc_.size()) {
       return &toc_[index];
     }
     return nullptr;
@@ -152,6 +152,12 @@ class EpubReader {
   bool parseTocNcx();
   bool parseCssFiles();
 
+  struct ManifestItem {
+    String id;
+    String href;
+    String mediaType;
+  };
+
   String epubPath_;
   String extractDir_;
   String contentOpfPath_;
@@ -166,8 +172,7 @@ class EpubReader {
   size_t* spineOffsets_ = nullptr;  // Cumulative offset for each spine item
   size_t totalBookSize_ = 0;        // Total size of all spine items
 
-  TocItem* toc_;
-  int tocCount_ = 0;
+  std::vector<TocItem> toc_;
 
   CssParser* cssParser_ = nullptr;
   std::vector<String> cssFiles_;  // List of CSS file paths (relative to content.opf)
