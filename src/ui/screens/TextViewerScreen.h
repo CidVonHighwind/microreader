@@ -63,6 +63,10 @@ class TextViewerScreen : public Screen {
   // Persist/load viewer settings (last opened file path + layout config)
   void saveSettingsToFile();
   void loadSettingsFromFile();
+  // Cycle through hyphenation languages
+  void cycleLanguage();
+  // Track if we already cycled language this button hold
+  bool languageCycled = false;
 };
 
 #endif

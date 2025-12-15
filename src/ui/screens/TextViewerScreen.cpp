@@ -84,9 +84,9 @@ void TextViewerScreen::loadSettingsFromFile() {
     strncpy(tmp, secondLine, sizeof(tmp) - 1);
     tmp[sizeof(tmp) - 1] = '\0';
     char* tok = strtok(tmp, ",");
-    int values[9];
+    int values[10];
     int idx = 0;
-    while (tok && idx < 9) {
+    while (tok && idx < 10) {
       values[idx++] = atoi(tok);
       tok = strtok(nullptr, ",");
     }
@@ -94,20 +94,12 @@ void TextViewerScreen::loadSettingsFromFile() {
       layoutConfig.alignment = static_cast<LayoutStrategy::TextAlignment>(values[0]);
     // if (idx >= 2)
     //   layoutConfig.marginLeft = values[1];
-    // if (idx >= 3)
-    //   layoutConfig.marginRight = values[2];
-    // if (idx >= 4)
-    //   layoutConfig.marginTop = values[3];
-    // if (idx >= 5)
-    //   layoutConfig.marginBottom = values[4];
-    // if (idx >= 6)
-    //   layoutConfig.lineHeight = values[5];
-    // if (idx >= 7)
-    //   layoutConfig.minSpaceWidth = values[6];
-    // if (idx >= 8)
-    //   layoutConfig.pageWidth = values[7];
-    // if (idx >= 9)
-    //   layoutConfig.pageHeight = values[8];
+    // ... (other layout values commented out)
+    if (idx >= 10) {
+      // Load language setting (10th value)
+      layoutConfig.language = static_cast<Language>(values[9]);
+      layoutStrategy->setLanguage(layoutConfig.language);
+    }
   }
 
   // If a saved path exists, record it for lazy opening when the screen is
@@ -125,12 +117,12 @@ void TextViewerScreen::saveSettingsToFile() {
   // First line: current file path (may be empty)
   String content = currentFilePath + "\n";
 
-  // Second line: comma-separated layout config values
+  // Second line: comma-separated layout config values (10 values)
   content += String(static_cast<int>(layoutConfig.alignment)) + "," + String(layoutConfig.marginLeft) + "," +
              String(layoutConfig.marginRight) + "," + String(layoutConfig.marginTop) + "," +
              String(layoutConfig.marginBottom) + "," + String(layoutConfig.lineHeight) + "," +
              String(layoutConfig.minSpaceWidth) + "," + String(layoutConfig.pageWidth) + "," +
-             String(layoutConfig.pageHeight);
+             String(layoutConfig.pageHeight) + "," + String(static_cast<int>(layoutConfig.language));
 
   if (!sdManager.writeFile("/microreader/textviewer_state.txt", content)) {
     Serial.println("TextViewerScreen: Failed to write textviewer_state.txt");
@@ -152,13 +144,26 @@ void TextViewerScreen::activate() {
 void TextViewerScreen::handleButtons(Buttons& buttons) {
   // Long press threshold in milliseconds
   const unsigned long LONG_PRESS_MS = 500;
+  const unsigned long SETTINGS_PRESS_MS = 1500;  // Extra long for settings
 
-  if (buttons.isPressed(Buttons::BACK)) {
-    // Save current position for the opened book (if any) before leaving
-    savePositionToFile();
-    saveSettingsToFile();
-    uiManager.showScreen(UIManager::ScreenId::FileBrowser);
-  } else if (buttons.isDown(Buttons::LEFT) || buttons.isDown(Buttons::VOLUME_UP)) {
+  if (buttons.isDown(Buttons::BACK)) {
+    if (buttons.getHoldDuration(Buttons::BACK) >= SETTINGS_PRESS_MS && !languageCycled) {
+      // Extra long press - cycle hyphenation language (only once per hold)
+      languageCycled = true;
+      cycleLanguage();
+    }
+  } else {
+    // Reset the flag when button is released
+    languageCycled = false;
+    if (buttons.isPressed(Buttons::BACK)) {
+      // Short press - go back to file browser
+      savePositionToFile();
+      saveSettingsToFile();
+      uiManager.showScreen(UIManager::ScreenId::FileBrowser);
+    }
+  }
+
+  if (buttons.isDown(Buttons::LEFT) || buttons.isDown(Buttons::VOLUME_UP)) {
     uint8_t btn = buttons.isDown(Buttons::LEFT) ? Buttons::LEFT : Buttons::VOLUME_UP;
     if (buttons.getHoldDuration(btn) >= LONG_PRESS_MS) {
       // Long press - jump to next chapter (or end if last chapter)
@@ -565,4 +570,53 @@ void TextViewerScreen::shutdown() {
   // Persist the current position for the opened file (if any)
   savePositionToFile();
   saveSettingsToFile();
+}
+
+void TextViewerScreen::cycleLanguage() {
+  // Cycle through: GERMAN -> ENGLISH -> NONE -> GERMAN
+  const char* langName = nullptr;
+  switch (layoutConfig.language) {
+    case Language::GERMAN:
+      layoutConfig.language = Language::ENGLISH;
+      langName = "English";
+      break;
+    case Language::ENGLISH:
+      layoutConfig.language = Language::NONE;
+      langName = "None";
+      break;
+    case Language::NONE:
+    default:
+      layoutConfig.language = Language::GERMAN;
+      langName = "German";
+      break;
+  }
+
+  // Update the layout strategy with new language
+  layoutStrategy->setLanguage(layoutConfig.language);
+
+  // Show brief overlay with new language setting
+  display.clearScreen(0xFF);
+  textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
+  textRenderer.setFontFamily(&bookerlyFamily);
+  textRenderer.setFontStyle(FontStyle::REGULAR);
+
+  String msg = String("Hyphenation: ") + langName;
+  int16_t x1, y1;
+  uint16_t w, h;
+  textRenderer.getTextBounds(msg.c_str(), 0, 0, &x1, &y1, &w, &h);
+  int16_t centerX = (480 - w) / 2;
+  int16_t centerY = (800 - h) / 2;
+  textRenderer.setCursor(centerX, centerY);
+  textRenderer.print(msg);
+
+  display.displayBuffer(EInkDisplay::FAST_REFRESH);
+
+  // Save settings
+  saveSettingsToFile();
+
+  // Brief delay to show message
+  delay(1000);
+
+  // Re-render the page with new hyphenation
+  showPage();
 }
