@@ -9,6 +9,7 @@
 #include "../../content/providers/EpubWordProvider.h"
 #include "../../content/providers/FileWordProvider.h"
 #include "../../content/providers/StringWordProvider.h"
+#include "../../core/BatteryMonitor.h"
 #include "../../core/Buttons.h"
 #include "../../core/SDCardManager.h"
 #include "../../text/hyphenation/HyphenationStrategy.h"
@@ -281,6 +282,24 @@ void TextViewerScreen::showPage() {
     int16_t centerX = (480 - w) / 2;
     textRenderer.setCursor(centerX, 790);
     textRenderer.print(indicator);
+  }
+
+  // Low battery warning
+  {
+    int batteryPct = g_battery.readPercentage();
+    if (batteryPct <= 10) {
+      textRenderer.setFrameBuffer(display.getFrameBuffer());
+      textRenderer.setBitmapType(TextRenderer::BITMAP_BW);
+      textRenderer.setFont(&Font14);
+
+      const char* warning = batteryPct <= 5 ? "!! BATTERY CRITICAL !!" : "LOW BATTERY";
+      int16_t x1, y1;
+      uint16_t w, h;
+      textRenderer.getTextBounds(warning, 0, 0, &x1, &y1, &w, &h);
+      int16_t centerX = (480 - w) / 2;
+      textRenderer.setCursor(centerX, 20);
+      textRenderer.print(warning);
+    }
   }
 
   // display bw parts

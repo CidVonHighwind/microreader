@@ -131,6 +131,17 @@ void FileBrowserScreen::renderSdBrowser() {
     int16_t by = 790;
     textRenderer.setCursor(bx, by);
     textRenderer.print(pctStr);
+
+    // Low battery warning at top of screen
+    if (pct <= 10) {
+      const char* warning = pct <= 5 ? "!! BATTERY CRITICAL !!" : "LOW BATTERY";
+      int16_t wx1, wy1;
+      uint16_t ww, wh;
+      textRenderer.getTextBounds(warning, 0, 0, &wx1, &wy1, &ww, &wh);
+      int16_t wx = (480 - (int)ww) / 2;
+      textRenderer.setCursor(wx, 20);
+      textRenderer.print(warning);
+    }
   }
 }
 
