@@ -144,6 +144,28 @@ bool EpubWordProvider::convertXhtmlToTxt(const String& srcPath, String& outTxtPa
   }
   dest += ".txt";
 
+  // If the TXT file already exists and is non-empty, reuse it and skip conversion
+  if (SD.exists(dest.c_str())) {
+    File chk = SD.open(dest.c_str());
+    if (chk) {
+      size_t sz = chk.size();
+      chk.close();
+      if (sz > 0) {
+        if (timings) {
+          timings->total = 0;
+          timings->parserOpen = 0;
+          timings->outOpen = 0;
+          timings->conversion = 0;
+          timings->parserClose = 0;
+          timings->closeOut = 0;
+          timings->bytes = sz;
+        }
+        Serial.printf("  Reusing existing TXT: %s  —  %u bytes\n", dest.c_str(), (unsigned)sz);
+        outTxtPath = dest;
+        return true;
+      }
+    }
+  }
   // Create directories if needed
   int lastSlash = dest.lastIndexOf('/');
   if (lastSlash > 0) {
@@ -174,7 +196,8 @@ bool EpubWordProvider::convertXhtmlToTxt(const String& srcPath, String& outTxtPa
 
   // Perform the conversion using common logic
   t0 = millis();
-  performXhtmlToTxtConversion(parser, out);
+  size_t bytesWritten = 0;
+  performXhtmlToTxtConversion(parser, out, &bytesWritten);
   unsigned long conversionMs = millis() - t0;
   if (timings)
     timings->conversion = conversionMs;
@@ -193,7 +216,7 @@ bool EpubWordProvider::convertXhtmlToTxt(const String& srcPath, String& outTxtPa
   unsigned long totalMs = millis() - totalStartMs;
   if (timings) {
     timings->total = totalMs;
-    timings->bytes = out.size();
+    timings->bytes = (unsigned int)bytesWritten;
   }
   Serial.printf(
       "Converted XHTML to TXT: %s  —  total = %lu ms  ( parserOpen = %lu, outOpen = %lu, conversion = %lu, parserClose "
@@ -262,8 +285,10 @@ void EpubWordProvider::writeParagraphStyleToken(String& writeBuffer, const Strin
   }
 }
 
-void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File& out) {
+void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File& out, size_t* outBytes) {
   const size_t FLUSH_THRESHOLD = 2048;
+  if (outBytes)
+    *outBytes = 0;
 
   String buffer;                     // Output buffer
   std::vector<String> elementStack;  // Track nested elements
@@ -436,11 +461,18 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
       lineHasContent = true;
     }
 
-    // Periodic flush removed to avoid splitting lines
-    // if (buffer.length() > FLUSH_THRESHOLD) {
-    //   out.print(buffer);
-    //   buffer = "";
-    // }
+    // Periodic flush to avoid excessive memory use and ensure data hits SD
+    if (buffer.length() > FLUSH_THRESHOLD) {
+      size_t toWrite = buffer.length();
+      size_t written = out.write((const uint8_t*)buffer.c_str(), toWrite);
+      if (outBytes)
+        *outBytes += written;
+      if (written != toWrite) {
+        Serial.printf("WARNING: partial write during conversion: attempted=%u wrote=%u\n", (unsigned)toWrite,
+                      (unsigned)written);
+      }
+      buffer = "";
+    }
   }
 
   // Close any remaining open styles before final flush
@@ -467,14 +499,21 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
     }
   }
 
-  // Final flush
+  // Periodic flush and final flush using write() to verify bytes written
+  if (outBytes)
+    *outBytes = 0;
+
   if (buffer.length() > 0) {
-    out.print(buffer);
+    size_t toWrite = buffer.length();
+    size_t written = out.write((const uint8_t*)buffer.c_str(), toWrite);
+    if (outBytes)
+      *outBytes += written;
+    if (written != toWrite) {
+      Serial.printf("WARNING: partial write: attempted=%u wrote=%u\n", (unsigned)toWrite, (unsigned)written);
+    }
+    buffer = "";
   }
 }
-
-// Helper functions removed - now inlined in performXhtmlToTxtConversion
-// processStartElement, processEndElement, processTextNode are no longer used
 
 bool EpubWordProvider::isInsideSkippedElement(const std::vector<String>& elementStack) {
   for (const String& elem : elementStack) {
@@ -658,6 +697,7 @@ void EpubWordProvider::writeStyleResetToken(String& writeBuffer, char startCmd) 
 // Context for true streaming: EPUB -> Parser -> TXT
 struct TrueStreamingContext {
   epub_stream_context* epubStream;
+  size_t bytesPulled = 0;
 };
 
 // Callback for SimpleXmlParser to pull data from EPUB stream
@@ -669,6 +709,9 @@ static int parser_stream_callback(char* buffer, size_t maxSize, void* userData) 
 
   // Pull next chunk from EPUB decompressor
   int bytesRead = epub_read_chunk(ctx->epubStream, buffer, maxSize);
+  if (bytesRead > 0) {
+    ctx->bytesPulled += (size_t)bytesRead;
+  }
   return bytesRead;
 }
 
@@ -696,6 +739,31 @@ bool EpubWordProvider::convertXhtmlStreamToTxt(const char* epubFilename, String&
   // Start pull-based streaming from EPUB
   unsigned long totalStartMs = millis();
   unsigned long t0 = millis();
+  // If the TXT file already exists and is non-empty, reuse it and skip conversion
+  if (SD.exists(dest.c_str())) {
+    File chk = SD.open(dest.c_str());
+    if (chk) {
+      size_t sz = chk.size();
+      chk.close();
+      if (sz > 0) {
+        if (timings) {
+          timings->total = 0;
+          timings->startStream = 0;
+          timings->parserOpen = 0;
+          timings->outOpen = 0;
+          timings->conversion = 0;
+          timings->parserClose = 0;
+          timings->endStream = 0;
+          timings->closeOut = 0;
+          timings->bytes = sz;
+        }
+        Serial.printf("  Reusing existing streamed TXT: %s  —  %u bytes\n", dest.c_str(), (unsigned)sz);
+        outTxtPath = dest;
+        return true;
+      }
+    }
+  }
+
   epub_stream_context* epubStream = epubReader_->startStreaming(epubFilename, 8192);
   unsigned long startStreamingMs = millis() - t0;
   if (timings)
@@ -753,13 +821,11 @@ bool EpubWordProvider::convertXhtmlStreamToTxt(const char* epubFilename, String&
 
   // Perform the conversion using common logic (timed)
   t0 = millis();
-  performXhtmlToTxtConversion(parser, out);
+  size_t bytesWritten = 0;
+  performXhtmlToTxtConversion(parser, out, &bytesWritten);
   unsigned long conversionMs = millis() - t0;
   if (timings)
     timings->conversion = conversionMs;
-
-  // Check how much was written
-  size_t bytesWritten = out.size();
 
   // Close parser and streaming in separate timed steps
   t0 = millis();
@@ -779,6 +845,17 @@ bool EpubWordProvider::convertXhtmlStreamToTxt(const char* epubFilename, String&
   unsigned long closeOutMs = millis() - t0;
   if (timings)
     timings->closeOut = closeOutMs;
+
+  // Re-open the output file to get final size (some SD implementations report size=0 until closed)
+  File check = SD.open(dest.c_str());
+  size_t checkSize = 0;
+  if (check) {
+    checkSize = check.size();
+    check.close();
+  }
+  Serial.printf("  [STREAM] bytesPulled=%u, bytesWrittenReported=%u\n", (unsigned)streamCtx.bytesPulled,
+                (unsigned)checkSize);
+  bytesWritten = checkSize;
 
   unsigned long totalMs = millis() - totalStartMs;
   if (timings) {

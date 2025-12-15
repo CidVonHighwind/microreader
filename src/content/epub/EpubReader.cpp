@@ -46,6 +46,11 @@ static void log_memory(const char* where) {
 // File handle for extraction callback
 static File g_extract_file;
 
+// Metadata filename and current extract version. Update `CURRENT_EXTRACT_VERSION`
+// whenever conversion/extraction format changes to force a cache reset.
+static const char* EXTRACT_META_FILENAME = "epub_meta.txt";
+static const char* CURRENT_EXTRACT_VERSION = "1";
+
 // Callback to write extracted data to SD card file
 static int extract_to_file_callback(const void* data, size_t size, void* user_data) {
   if (!g_extract_file) {
@@ -127,6 +132,11 @@ EpubReader::EpubReader(const char* epubPath, bool cleanCacheOnStart)
     return;
   }
   log_memory("constructor: after ensureExtractDirExists");
+
+  // Check extract metadata and clear cache if needed (moved from ensureExtractDirExists)
+  if (!checkAndUpdateExtractMeta()) {
+    Serial.println("WARNING: Failed to check/update extract metadata");
+  }
 
   // // Extract entire EPUB into extractDir_ and close the zip afterwards
   // Serial.println("  Extracting entire EPUB to cache (this may take a while)...");
@@ -230,6 +240,82 @@ bool EpubReader::ensureExtractDirExists() {
     }
     Serial.printf("Created directory: %s\n", extractDir_.c_str());
   }
+  return true;
+}
+
+bool EpubReader::checkAndUpdateExtractMeta() {
+  String metaPath = getExtractedPath(EXTRACT_META_FILENAME);
+
+  // If meta exists, read version and compare
+  if (SD.exists(metaPath.c_str())) {
+    File f = SD.open(metaPath.c_str());
+    if (f) {
+      String contents = "";
+      while (f.available()) {
+        contents += (char)f.read();
+      }
+      f.close();
+
+      int pos = contents.indexOf("version=");
+      if (pos >= 0) {
+        int eol = contents.indexOf('\n', pos);
+        String ver;
+        if (eol >= 0)
+          ver = contents.substring(pos + 8, eol);
+        else
+          ver = contents.substring(pos + 8);
+        ver.trim();
+        if (ver == CURRENT_EXTRACT_VERSION) {
+          // Meta matches; nothing to do
+          return true;
+        }
+        Serial.printf("  Extract meta version mismatch: found=%s expected=%s - clearing cache\n", ver.c_str(),
+                      CURRENT_EXTRACT_VERSION);
+        // Remove entire extract dir to ensure clean state
+        cleanExtractDir();
+        // Recreate directory
+        if (!SD.mkdir(extractDir_.c_str())) {
+          Serial.printf("ERROR: Failed to recreate extract directory %s after cleaning\n", extractDir_.c_str());
+          return false;
+        }
+      } else {
+        Serial.println("  Extract meta missing 'version' entry - clearing cache");
+        cleanExtractDir();
+        if (!SD.mkdir(extractDir_.c_str())) {
+          Serial.printf("ERROR: Failed to recreate extract directory %s after cleaning\n", extractDir_.c_str());
+          return false;
+        }
+      }
+    } else {
+      Serial.printf("  WARNING: Could not open meta file %s for reading - clearing cache\n", metaPath.c_str());
+      // If we couldn't open the meta file, treat as missing and clear cache
+      cleanExtractDir();
+      if (!SD.mkdir(extractDir_.c_str())) {
+        Serial.printf("ERROR: Failed to recreate extract directory %s after cleaning\n", extractDir_.c_str());
+        return false;
+      }
+    }
+  } else {
+    // Meta file missing - clear cache to start fresh
+    Serial.printf("  Extract meta file not found (%s) - clearing cache\n", metaPath.c_str());
+    cleanExtractDir();
+    if (!SD.mkdir(extractDir_.c_str())) {
+      Serial.printf("ERROR: Failed to recreate extract directory %s after cleaning\n", extractDir_.c_str());
+      return false;
+    }
+  }
+
+  // Write meta file with current version
+  File out = SD.open(metaPath.c_str(), FILE_WRITE);
+  if (!out) {
+    Serial.printf("ERROR: Failed to write extract meta file %s\n", metaPath.c_str());
+    return false;
+  }
+  out.print("version=");
+  out.print(CURRENT_EXTRACT_VERSION);
+  out.print("\n");
+  out.close();
+  Serial.printf("  Wrote extract metadata: %s\n", metaPath.c_str());
   return true;
 }
 

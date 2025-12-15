@@ -139,6 +139,7 @@ class EpubReader {
   bool openEpub();
   void closeEpub();
   bool ensureExtractDirExists();
+  bool checkAndUpdateExtractMeta();
   bool isFileExtracted(const char* filename);
   bool extractFile(const char* filename);
   bool parseContainer();

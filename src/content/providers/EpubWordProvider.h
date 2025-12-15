@@ -103,7 +103,8 @@ class EpubWordProvider : public WordProvider {
   bool convertXhtmlStreamToTxt(const char* epubFilename, String& outTxtPath, ConversionTimings* timings = nullptr);
 
   // Common conversion logic used by both convertXhtmlToTxt and convertXhtmlStreamToTxt
-  void performXhtmlToTxtConversion(SimpleXmlParser& parser, File& out);
+  // If outBytes is provided, it will be set to the number of bytes written to `out`.
+  void performXhtmlToTxtConversion(SimpleXmlParser& parser, File& out, size_t* outBytes = nullptr);
 
   // Emit style properties for a paragraph's classes and inline styles as an escaped token written to buffer
   void writeParagraphStyleToken(String& writeBuffer, const String& pendingParagraphClasses,
