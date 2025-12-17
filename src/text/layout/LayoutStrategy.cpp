@@ -74,20 +74,20 @@ LayoutStrategy::Line LayoutStrategy::getNextLine(WordProvider& provider, TextRen
       isParagraphEnd = true;
       break;
     }
-    if (currentWord.text[0] == ' ') {
-      continue;
-    }
-
-    // Calculate space needed for this word
-    int16_t spaceNeeded = currentWidth > 0 ? spaceWidth_ + currentWord.width : currentWord.width;
+    // NOTE: spaces are now returned as separate words by providers and must be
+    // preserved in the line output. Treat every token's width as-is (spaces are
+    // measured separately), so we don't add implicit space widths here.
+    // Calculate space needed for this token
+    int16_t spaceNeeded = currentWord.width;
 
     if (currentWidth + spaceNeeded > maxWidth) {
-      // Word doesn't fit, try to split it at a hyphen
+      // Token doesn't fit. If it's a textual word (not a leading space), try
+      // to split it at a hyphen. We do not attempt hyphenation for space
+      // tokens.
       int16_t availableWidth = maxWidth - currentWidth - spaceWidth_;
       HyphenSplit split = {-1, false, false};
-
-      // if (allowHyphenation)
-      { split = findBestHyphenSplitForward(currentWord, availableWidth, renderer); }
+      if (currentWord.text.length() > 0 && currentWord.text[0] != ' ')
+        split = findBestHyphenSplitForward(currentWord, availableWidth, renderer);
       if (split.found) {
         // Successfully found a split position
         String firstPart;
@@ -168,19 +168,15 @@ LayoutStrategy::Line LayoutStrategy::getPrevLine(WordProvider& provider, TextRen
       }
     }
 
-    if (currentWord.text[0] == ' ') {
-      continue;
-    }
-
-    // Try to add word to the beginning of the line
-    int16_t spaceNeeded = currentWidth > 0 ? spaceWidth_ + currentWord.width : currentWord.width;
+    // Spaces are now explicit tokens and should be kept. Treat token width
+    // directly when computing whether it fits on the line.
+    int16_t spaceNeeded = currentWord.width;
     if (currentWidth + spaceNeeded > maxWidth) {
-      // Word doesn't fit, try to split it at a hyphen
+      // Token doesn't fit. Only attempt hyphenation for non-space tokens.
       int16_t availableWidth = maxWidth - currentWidth - spaceWidth_;
       HyphenSplit split = {-1, false, false};
-
-      // if (allowHyphenation)
-      { split = findBestHyphenSplitBackward(currentWord, availableWidth, renderer); }
+      if (currentWord.text.length() > 0 && currentWord.text[0] != ' ')
+        split = findBestHyphenSplitBackward(currentWord, availableWidth, renderer);
       if (split.found) {
         // Successfully found a split position - add second part (after the split)
         // Take text after the split point

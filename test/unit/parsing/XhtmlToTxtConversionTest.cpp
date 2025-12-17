@@ -388,6 +388,72 @@ int main() {
   };
   testInlineCssBaseAndOverrides(runner);
 
+  // New test: text-indent -> spaces mapping
+  auto testTextIndentMapping = [&](TestUtils::TestRunner& r) {
+    std::cout << "\n=== Test: text-indent to spaces mapping ===\n";
+    const char* indentHtmlPath = "C:/Users/Patrick/Desktop/microreader/resources/books/text_indent_test.html";
+
+    std::string html =
+        "<html><head><title>IndentTest</title></head><body>"
+        "<p style=\"text-indent:20px\">PxIndent</p>"   // 20px -> round(20/8)=3
+        "<p style=\"text-indent:1.5em\">EmIndent</p>"  // 1.5em -> 24px -> 3
+        "<p style=\"text-indent:4px\">TinyIndent</p>"  // 4px -> round(4/8)=0 -> no indent
+        "</body></html>";
+
+    // Write file
+    {
+      std::ofstream out(indentHtmlPath);
+      if (!out.is_open()) {
+        std::cout << "ERROR: Failed to write test HTML: " << indentHtmlPath << "\n";
+        r.expectTrue(false, "Should be able to write test HTML");
+        return;
+      }
+      out << html;
+    }
+
+    EpubWordProvider provider(indentHtmlPath);
+    r.expectTrue(provider.isValid(), "Provider should be valid for text-indent test");
+
+    std::string expectedTxtPath = indentHtmlPath;
+    size_t dotPos = expectedTxtPath.rfind('.');
+    if (dotPos != std::string::npos) {
+      expectedTxtPath = expectedTxtPath.substr(0, dotPos) + ".txt";
+    }
+    std::string output = readFileContents(expectedTxtPath);
+    r.expectTrue(!output.empty(), "Output should not be empty for text-indent test");
+
+    printWithMarkers(output);
+
+    auto countLeadingSpacesBefore = [&](const std::string& needle) {
+      size_t pos = output.find(needle);
+      if (pos == std::string::npos)
+        return -1;
+      int spaces = 0;
+      for (int i = (int)pos - 1; i >= 0; --i) {
+        if (output[i] == '\n')
+          break;
+        if (output[i] == ' ')
+          spaces++;
+        else
+          spaces = 0;
+      }
+      return spaces;
+    };
+
+    int sPx = countLeadingSpacesBefore("PxIndent");
+    int sEm = countLeadingSpacesBefore("EmIndent");
+    int sTiny = countLeadingSpacesBefore("TinyIndent");
+
+    std::cout << "Spaces before PxIndent: " << sPx << "\n";
+    std::cout << "Spaces before EmIndent: " << sEm << "\n";
+    std::cout << "Spaces before TinyIndent: " << sTiny << "\n";
+
+    r.expectTrue(sPx >= 3, "20px indent should map to >=3 spaces (round(px/8))");
+    r.expectTrue(sEm >= 3, "1.5em indent should map to >=3 spaces");
+    r.expectTrue(sTiny == 0, "4px indent should map to 0 spaces (ignored)");
+  };
+  testTextIndentMapping(runner);
+
   std::cout << "\n========================================\n";
   runner.printSummary();
   std::cout << "========================================\n";

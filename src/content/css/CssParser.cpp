@@ -284,6 +284,30 @@ void CssParser::parseProperty(const String& name, const String& value, CssStyle&
   } else if (name == "font-weight") {
     style.fontWeight = parseFontWeight(value);
     style.hasFontWeight = true;
+  } else if (name == "text-indent") {
+    // Parse text-indent values like '20px', '1.5em', or plain numbers.
+    String v = value;
+    v.trim();
+    v.toLowerCase();
+
+    // Default unit: pixels. For 'em' convert to px assuming 16px per em.
+    float factor = 1.0f;
+    // endsWith / toFloat may not be available on all String implementations
+    if (v.length() >= 2 && v.substring(v.length() - 2) == String("em")) {
+      factor = 16.0f;
+      v = v.substring(0, v.length() - 2);
+    } else if (v.length() >= 2 && v.substring(v.length() - 2) == String("px")) {
+      v = v.substring(0, v.length() - 2);
+    }
+
+    v.trim();
+    // Attempt to parse float value using C's atof on the c_str
+    float indentVal = 0.0f;
+    if (v.length() > 0) {
+      indentVal = static_cast<float>(atof(v.c_str())) * factor;
+    }
+    style.textIndent = indentVal;
+    style.hasTextIndent = (indentVal > 0.0f);
   }
   // Add more property parsing here as needed
 }
@@ -441,6 +465,25 @@ CssStyle CssParser::parseInlineStyle(const String& styleAttr) const {
             style.fontWeight = CssFontWeight::Normal;
           }
           style.hasFontWeight = true;
+        } else if (propName == "text-indent") {
+          String v = propValue;
+          v.trim();
+          v.toLowerCase();
+
+          float factor = 1.0f;
+          if (v.length() >= 2 && v.substring(v.length() - 2) == String("em")) {
+            factor = 16.0f;
+            v = v.substring(0, v.length() - 2);
+          } else if (v.length() >= 2 && v.substring(v.length() - 2) == String("px")) {
+            v = v.substring(0, v.length() - 2);
+          }
+          v.trim();
+          float indentVal = 0.0f;
+          if (v.length() > 0) {
+            indentVal = static_cast<float>(atof(v.c_str())) * factor;
+          }
+          style.textIndent = indentVal;
+          style.hasTextIndent = (indentVal > 0.0f);
         }
       }
     }

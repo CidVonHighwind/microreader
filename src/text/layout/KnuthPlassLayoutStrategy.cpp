@@ -73,7 +73,6 @@ LayoutStrategy::PageLayout KnuthPlassLayoutStrategy::layoutText(WordProvider& pr
       }
 
       // Convert breaks into lines and calculate positions
-      const int16_t x = config.marginLeft;
       int16_t currentY = yStart;
 
       size_t lineStart = 0;
@@ -87,26 +86,49 @@ LayoutStrategy::PageLayout KnuthPlassLayoutStrategy::layoutText(WordProvider& pr
           lineWords.push_back(words[i]);
         }
 
+        // Calculate indentation from leading spaces for first line
+        int16_t indent = 0;
+        if (breakIdx == 0) {
+          for (const auto& w : lineWords) {
+            if (w.text == " ") {
+              indent += w.width;
+            } else {
+              break;
+            }
+          }
+        }
+        const int16_t x = config.marginLeft + indent;
+        int16_t effectiveMaxWidth = maxWidth - indent;
+
+        // Trim leading and trailing spaces
+        while (!lineWords.empty() && lineWords.front().text == " ") {
+          lineWords.erase(lineWords.begin());
+        }
+        while (!lineWords.empty() && lineWords.back().text == " ") {
+          lineWords.erase(lineWords.end() - 1);
+        }
+
         // Calculate positions for words in this line
         bool isLastLine = (breakIdx == breaks.size()) && isParagraphEnd;
         size_t numWords = lineWords.size();
-        size_t numSpaces = (numWords > 1) ? numWords - 1 : 0;
+        size_t numSpaceWords = 0;
+        for (const auto& w : lineWords) {
+          if (w.text == " ")
+            numSpaceWords++;
+        }
 
-        if (isLastLine || numSpaces == 0) {
+        if (isLastLine || numSpaceWords == 0) {
           // Last line: use alignment, no justification
           int16_t lineWidth = 0;
           for (size_t i = 0; i < lineWords.size(); i++) {
             lineWidth += lineWords[i].width;
-            if (i < lineWords.size() - 1) {
-              lineWidth += spaceWidth_;
-            }
           }
 
           int16_t xPos = x;
           if (paragraphAlignment == ALIGN_CENTER) {
-            xPos = x + (maxWidth - lineWidth) / 2;
+            xPos = x + (effectiveMaxWidth - lineWidth) / 2;
           } else if (paragraphAlignment == ALIGN_RIGHT) {
-            xPos = x + maxWidth - lineWidth;
+            xPos = x + effectiveMaxWidth - lineWidth;
           }
 
           int16_t currentX = xPos;
@@ -114,40 +136,40 @@ LayoutStrategy::PageLayout KnuthPlassLayoutStrategy::layoutText(WordProvider& pr
             lineWords[i].x = currentX;
             lineWords[i].y = currentY;
             currentX += lineWords[i].width;
-            if (i < lineWords.size() - 1) {
-              currentX += spaceWidth_;
-            }
           }
         } else {
-          // Non-last line: justify by distributing space evenly
+          // Non-last line: justify by distributing space evenly among space words
           int16_t totalWordWidth = 0;
           for (size_t i = 0; i < lineWords.size(); i++) {
             totalWordWidth += lineWords[i].width;
           }
 
-          // Calculate space to distribute between words
+          // Calculate space to distribute among space words
           int16_t totalSpaceWidth = maxWidth - totalWordWidth;
-          float spacePerGap = (float)totalSpaceWidth / (float)numSpaces;
+          float extraPerSpace = (float)totalSpaceWidth / (float)numSpaceWords;
 
-          if (spacePerGap > 16 * spaceWidth_) {
+          if (extraPerSpace > 16 * spaceWidth_) {
             // Limit maximum space stretch to avoid extreme gaps
-            spacePerGap = std::max(spacePerGap * 0.25f, (float)spaceWidth_);
+            extraPerSpace = std::max(extraPerSpace * 0.25f, (float)spaceWidth_);
           }
 
-          int16_t currentX = x;
-          float accumulatedSpace = 0.0f;
+          // Increase widths of space words
+          float accumulatedExtra = 0.0f;
+          for (auto& w : lineWords) {
+            if (w.text == " ") {
+              accumulatedExtra += extraPerSpace;
+              int16_t extra = (int16_t)accumulatedExtra;
+              w.width += extra;
+              accumulatedExtra -= extra;
+            }
+          }
 
+          // Now place words
+          int16_t currentX = x;
           for (size_t i = 0; i < lineWords.size(); i++) {
             lineWords[i].x = currentX;
             lineWords[i].y = currentY;
             currentX += lineWords[i].width;
-
-            if (i < lineWords.size() - 1) {
-              accumulatedSpace += spacePerGap;
-              int16_t spaceToAdd = (int16_t)accumulatedSpace;
-              currentX += spaceToAdd;
-              accumulatedSpace -= spaceToAdd;
-            }
           }
         }
 
@@ -206,10 +228,6 @@ std::vector<size_t> KnuthPlassLayoutStrategy::calculateBreaks(const std::vector<
     // Try to fit words [i, j) on one line
     int16_t lineWidth = 0;
     for (size_t j = i; j < n; j++) {
-      // Add word width
-      if (j > i) {
-        lineWidth += spaceWidth_;  // Add space before word (except first word)
-      }
       lineWidth += words[j].width;
 
       // Check if line is too wide

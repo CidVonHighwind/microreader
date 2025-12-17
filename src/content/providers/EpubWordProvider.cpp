@@ -4,6 +4,7 @@
 #include <SD.h>
 #include <ctype.h>
 
+#include <cmath>  // for std::round
 #include <vector>
 
 // #define EPUB_DEBUG_CLEAN_CACHE
@@ -282,6 +283,21 @@ void EpubWordProvider::writeParagraphStyleToken(String& writeBuffer, const Strin
       writeBuffer += styleToken;
     }
     paragraphClassesWritten = true;
+
+    // If the combined paragraph style specifies a positive text-indent value,
+    // convert it to a number of spaces using a simple heuristic: spaces = round(px / 4),
+    // clamped to [0, 12]. This maps typical indents to visible space counts while
+    // avoiding huge or tiny counts.
+    if (combined.hasTextIndent && combined.textIndent > 0.0f) {
+      int spaces = (int)std::round(combined.textIndent / 4.0f);
+      if (spaces < 0)
+        spaces = 0;
+      if (spaces > 12)
+        spaces = 12;
+      for (int i = 0; i < spaces; ++i)
+        writeBuffer += ' ';
+    }
+
     // Paragraph-level CSS may also include font-weight/font-style which we
     // treat as the base inline styling for this paragraph. Record the base
     // inline style so later inline elements can override it.

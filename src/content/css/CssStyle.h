@@ -55,6 +55,10 @@ struct CssStyle {
   CssFontWeight fontWeight = CssFontWeight::Normal;
   bool hasFontWeight = false;  // True if font-weight was explicitly set
 
+  // Text-indent support (in CSS units, stored here as pixels approximation)
+  float textIndent = 0.0f;
+  bool hasTextIndent = false;
+
   // Merge another style into this one (other style takes precedence)
   void merge(const CssStyle& other) {
     if (other.hasTextAlign) {
@@ -68,6 +72,10 @@ struct CssStyle {
     if (other.hasFontWeight) {
       fontWeight = other.fontWeight;
       hasFontWeight = true;
+    }
+    if (other.hasTextIndent) {
+      textIndent = other.textIndent;
+      hasTextIndent = true;
     }
   }
 
