@@ -1,8 +1,6 @@
 
 #include "FileBrowserScreen.h"
-
-#include <resources/fonts/Font14.h>
-#include <resources/fonts/Font27.h>
+#include <resources/fonts/FontManager.h>
 
 #include <algorithm>
 #include <cstring>
@@ -43,7 +41,7 @@ void FileBrowserScreen::show() {
 void FileBrowserScreen::renderSdBrowser() {
   display.clearScreen(0xFF);
   textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
-  textRenderer.setFont(&Font27);
+  textRenderer.setFont(getTitleFont());
 
   // Set framebuffer to BW buffer for rendering
   textRenderer.setFrameBuffer(display.getFrameBuffer());
@@ -60,10 +58,10 @@ void FileBrowserScreen::renderSdBrowser() {
     textRenderer.print(title);
   }
 
-  textRenderer.setFont(&Font14);
+  textRenderer.setFont(getMainFont());
 
   // Render file list centered both horizontally and vertically.
-  textRenderer.setFont(&Font14);
+  textRenderer.setFont(getMainFont());
   const int lineHeight = 28;
   int lines = SD_LINES_PER_SCREEN;
 
@@ -118,7 +116,7 @@ void FileBrowserScreen::renderSdBrowser() {
 
   // Draw battery percentage at bottom-right of the screen
   {
-    textRenderer.setFont(&Font14);
+    textRenderer.setFont(getMainFont());
     int pct = g_battery.readPercentage();
     String pctStr = String(pct) + "%";
     int16_t bx1, by1;

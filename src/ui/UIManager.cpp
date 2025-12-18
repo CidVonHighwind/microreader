@@ -1,7 +1,6 @@
 #include "UIManager.h"
 
-#include <resources/fonts/Font14.h>
-#include <resources/fonts/Font27.h>
+#include <resources/fonts/FontManager.h>
 
 #include "core/Settings.h"
 #include "resources/images/bebop_image.h"
@@ -81,7 +80,7 @@ void UIManager::showSleepScreen() {
     textRenderer.setFrameBuffer(display.getFrameBuffer());
     textRenderer.setBitmapType(TextRenderer::BITMAP_BW);
     textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
-    textRenderer.setFont(&Font14);
+    textRenderer.setFont(getMainFont());
 
     const char* sleepText = "Sleeping...";
     int16_t x1, y1;
