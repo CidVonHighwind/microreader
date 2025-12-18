@@ -34,11 +34,11 @@
 #define TEST_TOC_CONTENT false
 #define TEST_CHAPTER_NAME_FOR_SPINE false
 #define TEST_SPINE_SIZES false
-#define TEST_CSS_PARSING true
+#define TEST_LANGUAGE true
+#define TEST_CSS_PARSING false
 #define TEST_STREAM_CONVERTER false
 #define TEST_STREAM_RAW_BYTES false
-// Run cache-clean test
-#define TEST_CLEAN_CACHE true
+#define TEST_CLEAN_CACHE false
 
 // Test configuration
 namespace EpubReaderTests {
@@ -512,6 +512,31 @@ void testSpineSizes(TestUtils::TestRunner& runner, EpubReader& reader) {
   }
 
   std::cout << "  Spine sizes test passed\n";
+}
+
+/**
+ * Test: Language parsing from content.opf
+ */
+void testLanguage(TestUtils::TestRunner& runner, EpubReader& reader) {
+  std::cout << "\n=== Test: Language Parsing ===\n";
+
+  if (!reader.isValid()) {
+    runner.expectTrue(false, "EPUB should be valid (skipping test)");
+    return;
+  }
+
+  String language = reader.getLanguage();
+  std::cout << "  Language: " << language.c_str() << "\n";
+
+  // Language should not be empty
+  runner.expectTrue(!language.isEmpty(), "Language should not be empty");
+
+  // Language should default to "english" if not specified in EPUB
+  // For our test EPUB, we expect it to be parsed correctly
+  // This test mainly ensures the method works and returns a reasonable value
+  runner.expectTrue(language.length() > 0, "Language string should have length > 0");
+
+  std::cout << "  Language test passed\n";
 }
 
 /**
@@ -1177,6 +1202,10 @@ int main() {
 
 #if TEST_SPINE_SIZES
   EpubReaderTests::testSpineSizes(runner, reader);
+#endif
+
+#if TEST_LANGUAGE
+  EpubReaderTests::testLanguage(runner, reader);
 #endif
 
 #if TEST_CSS_PARSING

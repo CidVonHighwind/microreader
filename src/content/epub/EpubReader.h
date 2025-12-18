@@ -129,6 +129,13 @@ class EpubReader {
   }
 
   /**
+   * Get the language of the EPUB
+   */
+  String getLanguage() const {
+    return language_;
+  }
+
+  /**
    * Get the underlying epub_reader handle (for debugging/testing)
    */
   epub_reader* getReader() const {
@@ -144,6 +151,7 @@ class EpubReader {
   bool extractFile(const char* filename);
   bool parseContainer();
   bool parseContentOpf();
+  bool parseMetadata();
   bool parseTocNcx();
   bool parseCssFiles();
   bool cleanExtractDir();
@@ -174,6 +182,7 @@ class EpubReader {
   CssParser* cssParser_ = nullptr;
   std::vector<String> cssFiles_;  // List of CSS file paths (relative to content.opf)
   bool cleanCacheOnStart_ = false;
+  String language_;  // Language of the EPUB
 };
 
 #endif

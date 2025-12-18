@@ -11,6 +11,7 @@
 #include "FileWordProvider.h"
 #include "StringWordProvider.h"
 #include "WordProvider.h"
+#include "../../text/hyphenation/HyphenationStrategy.h"
 
 class EpubWordProvider : public WordProvider {
  public:
@@ -49,6 +50,9 @@ class EpubWordProvider : public WordProvider {
   String getCurrentChapterName() override {
     return currentChapterName_;
   }
+
+  // Get the language of the EPUB for hyphenation
+  Language getLanguage() const;
 
   // Style support
   CssStyle getCurrentStyle() override {

@@ -9,6 +9,21 @@
 
 // #define EPUB_DEBUG_CLEAN_CACHE
 
+// Helper function to map language string to Language enum
+static Language stringToLanguage(const String& langStr) {
+  String lang = langStr;
+  lang.toLowerCase();
+
+  if ((lang.length() >= 2 && lang.substring(0, 2) == "en")) {
+    return Language::ENGLISH;
+  } else if ((lang.length() >= 2 && lang.substring(0, 2) == "de")) {
+    return Language::GERMAN;
+  } else {
+    // Default to english if unknown
+    return Language::ENGLISH;
+  }
+}
+
 EpubWordProvider::EpubWordProvider(const char* path, size_t bufSize)
     : bufSize_(bufSize), fileSize_(0), currentChapter_(0) {
   epubPath_ = String(path);
@@ -1187,4 +1202,12 @@ void EpubWordProvider::setPosition(int index) {
 void EpubWordProvider::reset() {
   if (fileProvider_)
     fileProvider_->reset();
+}
+
+Language EpubWordProvider::getLanguage() const {
+  if (!isEpub_ || !epubReader_) {
+    return Language::BASIC;  // Default for non-EPUB files
+  }
+  String langStr = epubReader_->getLanguage();
+  return stringToLanguage(langStr);
 }

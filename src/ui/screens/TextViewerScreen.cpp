@@ -3,7 +3,6 @@
 #include <Arduino.h>
 #include <resources/fonts/FontDefinitions.h>
 #include <resources/fonts/FontManager.h>
-#include "../../core/Settings.h"
 
 #include <cstring>
 
@@ -12,6 +11,7 @@
 #include "../../content/providers/StringWordProvider.h"
 #include "../../core/Buttons.h"
 #include "../../core/SDCardManager.h"
+#include "../../core/Settings.h"
 #include "../../text/hyphenation/HyphenationStrategy.h"
 #include "../../text/layout/GreedyLayoutStrategy.h"
 #include "../../text/layout/KnuthPlassLayoutStrategy.h"
@@ -34,7 +34,7 @@ TextViewerScreen::TextViewerScreen(EInkDisplay& display, TextRenderer& renderer,
   layoutConfig.pageWidth = 480;
   layoutConfig.pageHeight = 800;
   layoutConfig.alignment = LayoutStrategy::ALIGN_LEFT;
-  layoutConfig.language = Language::GERMAN;  // Default to German hyphenation
+  layoutConfig.language = Language::ENGLISH;  // Default to english hyphenation
 
   // Set the language on the layout strategy
   layoutStrategy->setLanguage(layoutConfig.language);
@@ -442,6 +442,7 @@ void TextViewerScreen::openFile(const String& sdPath) {
       return;
     }
     provider = ep;
+
   } else {
     // Use regular file word provider for text files
     FileWordProvider* fp = new FileWordProvider(sdPath.c_str());
@@ -452,6 +453,18 @@ void TextViewerScreen::openFile(const String& sdPath) {
       return;
     }
     provider = fp;
+  }
+
+  // Set the hyphenation language based on the file type
+  if (isEpub) {
+    // For EPUB files, get language from the EPUB metadata
+    EpubWordProvider* epubProvider = static_cast<EpubWordProvider*>(provider);
+    Language epubLanguage = epubProvider->getLanguage();
+    layoutStrategy->setLanguage(epubLanguage);
+    Serial.printf("Set hyphenation language to %d for EPUB\n", static_cast<int>(epubLanguage));
+  } else {
+    // For non-EPUB files, use default English hyphenation
+    layoutStrategy->setLanguage(Language::ENGLISH);
   }
 
   // Set chapter first (if provider supports it), then position within chapter

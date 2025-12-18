@@ -49,7 +49,7 @@ static File g_extract_file;
 // Metadata filename and current extract version. Update `CURRENT_EXTRACT_VERSION`
 // whenever conversion/extraction format changes to force a cache reset.
 static const char* EXTRACT_META_FILENAME = "epub_meta.txt";
-static const char* CURRENT_EXTRACT_VERSION = "4";
+static const char* CURRENT_EXTRACT_VERSION = "5";
 
 // Callback to write extracted data to SD card file
 static int extract_to_file_callback(const void* data, size_t size, void* user_data) {
@@ -81,7 +81,8 @@ EpubReader::EpubReader(const char* epubPath, bool cleanCacheOnStart)
       reader_(nullptr),
       spine_(nullptr),
       spineCount_(0),
-      cleanCacheOnStart_(cleanCacheOnStart) {
+      cleanCacheOnStart_(cleanCacheOnStart),
+      language_("en") {
   Serial.printf("\n=== EpubReader: Opening %s ===\n", epubPath);
 
   // measure start time
@@ -603,6 +604,7 @@ bool EpubReader::parseContentOpf() {
   const size_t MAX_MANIFEST_ENTRIES = 100;  // Safety cap to limit RAM usage when manifest is huge
   std::vector<String> spineIdrefs;
   const size_t MAX_SPINE_ENTRIES = 100;  // Safety cap on spine idrefs too
+  bool capMessagePrinted = false;
 
   while (parser->read()) {
     SimpleXmlParser::NodeType nodeType = parser->getNodeType();
@@ -614,8 +616,11 @@ bool EpubReader::parseContentOpf() {
         String idref = parser->getAttribute("idref");
         if (!idref.isEmpty()) {
           if (spineIdrefs.size() >= MAX_SPINE_ENTRIES) {
-            Serial.printf("  [MEM] spineIdrefs reached cap (%u entries), skipping additional idrefs\n",
-                          (unsigned)MAX_SPINE_ENTRIES);
+            if (!capMessagePrinted) {
+              Serial.printf("  [MEM] spineIdrefs reached cap (%u entries), skipping additional idrefs\n",
+                            (unsigned)MAX_SPINE_ENTRIES);
+              capMessagePrinted = true;
+            }
           } else {
             spineIdrefs.push_back(idref);
           }
@@ -778,6 +783,12 @@ bool EpubReader::parseContentOpf() {
   int32_t deltaTotal = (int32_t)heapEnd - (int32_t)heapStart;
   Serial.printf("  [MEM] parseContentOpf end: Free=%u (delta: %d)\n", heapEnd, deltaTotal);
   Serial.printf("  Content.opf parsing took  %lu ms\n", endTime - startTime);
+
+  // Parse metadata for language and other info
+  if (!parseMetadata()) {
+    Serial.println("WARNING: Failed to parse metadata");
+  }
+
   return true;
 }
 
@@ -855,6 +866,63 @@ bool EpubReader::extractAll() {
       // keep going with other files
     }
   }
+
+  return true;
+}
+
+bool EpubReader::parseMetadata() {
+  unsigned long startTime = millis();
+
+  // Re-open content.opf for metadata parsing
+  String opfPath = getExtractedPath(contentOpfPath_.c_str());
+  if (opfPath.isEmpty()) {
+    Serial.println("ERROR: Failed to get content.opf path for metadata parsing");
+    return false;
+  }
+
+  SimpleXmlParser* parser = new SimpleXmlParser();
+  if (!parser->open(opfPath.c_str())) {
+    Serial.println("ERROR: Failed to open content.opf for metadata parsing");
+    delete parser;
+    return false;
+  }
+
+  bool inMetadata = false;
+  while (parser->read()) {
+    SimpleXmlParser::NodeType nodeType = parser->getNodeType();
+    String name = parser->getName();
+
+    if (nodeType == SimpleXmlParser::Element) {
+      if (strcasecmp_helper(name, "metadata")) {
+        inMetadata = true;
+      } else if (inMetadata && (name.indexOf("language") >= 0)) {
+        // Found language element, read the text content
+        if (parser->read() && parser->getNodeType() == SimpleXmlParser::Text) {
+          String lang = "";
+          while (parser->hasMoreTextChars()) {
+            char c = parser->readTextNodeCharForward();
+            if (c != '\0') {
+              lang += c;
+            }
+          }
+          lang.trim();
+          if (!lang.isEmpty()) {
+            language_ = lang;
+            Serial.printf("    Found language: %s\n", language_.c_str());
+          }
+        }
+        break;  // Found language, can stop
+      }
+    } else if (nodeType == SimpleXmlParser::EndElement && strcasecmp_helper(name, "metadata")) {
+      inMetadata = false;
+    }
+  }
+
+  parser->close();
+  delete parser;
+
+  unsigned long endTime = millis();
+  Serial.printf("    Metadata parsing took %lu ms\n", endTime - startTime);
 
   return true;
 }
