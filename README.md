@@ -12,11 +12,11 @@ A minimal EPUB/TXT reader for ESP32-C3 e-ink devices.
 ## Features
 
 - [x] Antialiased font rendering
-- [x] TXT file reader with advanced text layout
-- [x] File browser for SD card navigation
-- [x] Bold/Italic font support (`*bold*`, `_italic_` in TXT, CSS styles in EPUB)
-- [x] Simple English/German hyphenation
+- [x] TXT reader
 - [x] EPUB reader
+- [x] File browser for SD card navigation
+- [x] Bold/Italic font support
+- [x] Simple English/German hyphenation
 
 ---
 
