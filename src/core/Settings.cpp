@@ -1,4 +1,5 @@
 #include "Settings.h"
+#include <cstring>
 
 #include <Arduino.h>
 

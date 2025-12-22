@@ -199,6 +199,19 @@ void printResults(const std::string& language, const std::vector<TestCase>& test
               << "  FN: " << result.falseNegatives << std::endl;
     std::cout << std::endl;
   }
+
+  // Additional compact list of the worst ~100 words to aid iteration
+  int compactCount = std::min(100, static_cast<int>(worstCases.size()));
+  if (compactCount > 0) {
+    std::cout << "--- Compact Worst Cases (" << compactCount << ") ---" << std::endl;
+    for (int i = 0; i < compactCount; i++) {
+      const auto& testCase = worstCases[i].first;
+      std::vector<size_t> actualPositions = hyphenateFunc(testCase.word);
+      std::string actualHyphenated = positionsToHyphenated(testCase.word, actualPositions);
+      std::cout << testCase.word << " | exp:" << testCase.hyphenated << " | got:" << actualHyphenated << std::endl;
+    }
+    std::cout << std::endl;
+  }
 }
 
 int main(int argc, char* argv[]) {

@@ -38,6 +38,14 @@ bool isVowelInContext(char32_t c, size_t pos, const std::u32string& word) {
     return true;
 
   char32_t lower = toLowerEnglish(c);
+  if (lower == U'u' && pos > 0) {
+    char32_t prev = toLowerEnglish(word[pos - 1]);
+    // Treat "qu" as an inseparable consonant cluster
+    if (prev == U'q') {
+      return false;
+    }
+  }
+
   if (lower == U'y' && pos > 0) {
     // Y acts as vowel if preceded by consonant
     char32_t prev = toLowerEnglish(word[pos - 1]);
@@ -87,7 +95,7 @@ std::u32string toLower(const std::u32string& input) {
 // Extend inseparable consonant pairs
 bool isInseparablePair(const std::u32string& pair) {
   static const std::vector<std::u32string> pairs = {U"ch", U"ck", U"gh", U"gn", U"kn", U"ph", U"sh", U"th",
-                                                    U"wh", U"wr", U"rd", U"ld", U"lt", U"nd", U"nt", U"st"};
+                                                    U"wh", U"wr", U"rd", U"ld", U"lt", U"nd", U"nt", U"st", U"ng"};
   for (const auto& p : pairs) {
     if (pair == p) {
       return true;
@@ -119,7 +127,8 @@ size_t findCommonPrefixLength(const std::u32string& word) {
 }
 
 bool isCommonSuffix(const std::u32string& word, size_t pos) {
-  static const std::vector<std::u32string> suffixes = {U"ing", U"ed", U"er", U"ly", U"tion", U"ment", U"able", U"ate"};
+  static const std::vector<std::u32string> suffixes = {U"ing", U"ed",   U"er",   U"ly",  U"tion",
+                                                       U"ment", U"able", U"ate", U"age"};
   for (const auto& suffix : suffixes) {
     if (pos + suffix.size() == word.size() && word.substr(pos) == suffix) {
       return true;
@@ -144,8 +153,22 @@ std::vector<size_t> hyphenate(const std::string& word) {
   std::vector<size_t> positions;
   std::vector<size_t> vowelIndices;
 
+  if (wide.size() < 6) {
+    return positions;
+  }
+
   // Find vowel positions (including Y when it acts as vowel)
   for (size_t i = 0; i < lower.size(); ++i) {
+    if (lower[i] == U'e' && i == lower.size() - 1) {
+      bool previousIsVowel = (i > 0) && isVowelInContext(lower[i - 1], i - 1, lower);
+      bool consonantLeEnding = (i > 0 && lower[i - 1] == U'l' &&
+                                (i < 2 || !isVowelInContext(lower[i - 2], i - 2, lower)));
+      // Skip common silent terminal 'e' unless part of a consonant+'le' ending or a vowel sequence
+      if (!previousIsVowel && !consonantLeEnding) {
+        continue;
+      }
+    }
+
     if (isVowelInContext(lower[i], i, lower)) {
       vowelIndices.push_back(i);
     }
@@ -172,15 +195,18 @@ std::vector<size_t> hyphenate(const std::string& word) {
     size_t boundary = 0;
 
     std::u32string cluster(lower.begin() + clusterStart, lower.begin() + clusterEnd);
+    std::u32string suffix = lower.substr(clusterEnd);
 
     // Check for common prefixes and suffixes
     size_t prefixLen = findCommonPrefixLength(lower);
-    if (prefixLen > 0 && clusterStart <= prefixLen) {
+    if (prefixLen > 0 && clusterStart < prefixLen) {
       // If the computed split would fall inside a known prefix, push the boundary
       // to the end of the prefix rather than splitting the prefix itself.
       boundary = prefixLen;
     } else if (isCommonSuffix(lower, clusterEnd)) {
-      boundary = clusterEnd;
+      if (consonantCount == 1 || (lower.size() - clusterEnd) >= 3) {
+        boundary = clusterEnd;
+      }
     }
 
     // Avoid splitting within prefixes or suffixes
@@ -188,22 +214,70 @@ std::vector<size_t> hyphenate(const std::string& word) {
       continue;
     }
 
+    // Avoid very early splits on short openers (re-, pre-, su-, etc.)
+    if (boundary == 0 && leftVowel <= 1 && consonantCount == 1) {
+      continue;
+    }
+
+    // Avoid dubious splits before -age endings
+    if (boundary == 0 && suffix == U"age" && consonantCount == 1) {
+      continue;
+    }
+
+    // Keep very short suffixes together when preceded by inseparable pairs near the start (counter, broken)
+    if (boundary == 0 && consonantCount == 2 && isInseparablePair(cluster) && suffix.size() <= 2 && clusterStart <= 3) {
+      continue;
+    }
+
+    // Morphological suffixes: keep the suffix together when present
+    if (boundary == 0 &&
+        (suffix == U"es" || suffix == U"ing" || suffix == U"ers" || suffix == U"er" || suffix == U"ly" ||
+         suffix == U"ed")) {
+      if (suffix == U"es" && wide.size() <= 6) {
+        continue;
+      }
+      if ((suffix == U"ed" || suffix == U"er" || suffix == U"ers") && wide.size() <= 7 && vowelIndices.size() <= 2) {
+        continue;
+      }
+      if (suffix == U"ed" && wide.size() <= 6 && vowelIndices.size() <= 3) {
+        continue;
+      }
+      if (suffix == U"ing" && consonantCount == 2 && cluster[0] == cluster[1]) {
+        boundary = clusterStart + 1;  // double consonant + ing -> cut=ting, let=ting
+      } else if (suffix == U"es") {
+        boundary = clusterEnd;  // prefer keeping -es together (watches, pirates)
+      } else if (consonantCount == 1 || suffix == U"ed") {
+        boundary = clusterEnd;
+      }
+    }
+
     // Special handling for consonant clusters
     if (boundary == 0) {
       if (consonantCount == 1) {
-        boundary = clusterStart;
+        boundary = clusterStart;  // Prefer keeping the single consonant with the following vowel (side=walk, pri=vate)
+        if (boundary == 1 && wide.size() > 3) {
+          boundary = 2;
+        }
       } else if (consonantCount == 2) {
         // If both consonants are the same (e.g., 'tt'), split between them: rotting -> rot-ting
         if (cluster[0] == cluster[1]) {
           boundary = clusterStart + 1;
         } else if (isInseparablePair(cluster)) {
-          // Keep inseparable pairs (ch, sh, th, ck, etc.) attached to following syllable
-          boundary = clusterStart;
+          // Keep inseparable pairs (ch, sh, th, ck, etc.) attached to the side that keeps balance
+          if (cluster == U"ck") {
+            boundary = clusterEnd;
+          } else if (clusterStart <= 2) {
+            boundary = clusterStart + 1;
+          } else if (suffix == U"es" || suffix == U"ed") {
+            boundary = clusterEnd;
+          } else {
+            boundary = clusterStart;
+          }
         } else {
           // Prefer treating the two-letter cluster as an onset of the following syllable
           // when it's a valid onset (st, tr, pl, etc.). Otherwise split between them.
           if (isAllowedOnset(cluster)) {
-            boundary = clusterStart;
+            boundary = (clusterStart <= 2) ? clusterStart + 1 : clusterStart;
           } else {
             boundary = clusterStart + 1;
           }
@@ -235,6 +309,30 @@ std::vector<size_t> hyphenate(const std::string& word) {
     // Avoid producing a one-letter leading syllable (boundary == 1)
     if (boundary == 1 && wide.size() > 2) {
       boundary = 2;
+    }
+
+    // Avoid hyphenating before common adverbial suffix
+    if (boundary > 0 && suffix == U"ly" && consonantCount >= 2) {
+      continue;
+    }
+
+    // Avoid splitting common heads (forehead, spearhead)
+    if (boundary > 0 && suffix == U"ead") {
+      continue;
+    }
+
+    // For short two-vowel words with a single bridging consonant, prefer no split
+    if (boundary == 0 && vowelIndices.size() == 2 && consonantCount == 1 && wide.size() <= 6) {
+      continue;
+    }
+
+    if (boundary <= 2 && wide.size() <= 7) {
+      continue;
+    }
+
+    // Suppress dubious past-tense splits on short double consonant stems
+    if (boundary > 0 && suffix == U"ed" && consonantCount == 2 && cluster[0] == cluster[1]) {
+      continue;
     }
 
     if (boundary > 0 && boundary < wide.size()) {
