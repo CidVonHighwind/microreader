@@ -64,7 +64,7 @@ void TextViewerScreen::loadSettingsFromFile() {
     strncpy(tmp, layoutCsv.c_str(), sizeof(tmp) - 1);
     tmp[sizeof(tmp) - 1] = '\0';
     char* tok = strtok(tmp, ",");
-    int values[9];
+    int values[9] = {0};
     int idx = 0;
     while (tok && idx < 9) {
       values[idx++] = atoi(tok);
