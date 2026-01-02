@@ -296,7 +296,7 @@ LayoutStrategy::HyphenSplit LayoutStrategy::findBestHyphenSplitForward(const Wor
   std::vector<int> hyphenPositions;
   if (hyphenationStrategy_) {
     std::string stdWord = word.text.c_str();
-    hyphenPositions = hyphenationStrategy_->findHyphenPositions(stdWord, 6, 3);
+    hyphenPositions = hyphenationStrategy_->findHyphenPositions(stdWord);
   }
   HyphenSplit result = {-1, false, false};
 
@@ -336,7 +336,7 @@ LayoutStrategy::HyphenSplit LayoutStrategy::findBestHyphenSplitBackward(const Wo
   std::vector<int> hyphenPositions;
   if (hyphenationStrategy_) {
     std::string stdWord = word.text.c_str();
-    hyphenPositions = hyphenationStrategy_->findHyphenPositions(stdWord, 6, 3);
+    hyphenPositions = hyphenationStrategy_->findHyphenPositions(stdWord);
   }
   HyphenSplit result = {-1, false, false};
 

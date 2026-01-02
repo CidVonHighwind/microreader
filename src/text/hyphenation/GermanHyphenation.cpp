@@ -3,16 +3,21 @@
 #include "Liang/hyph-de.h"
 #include "Liang/hyphenation.h"
 
-std::vector<size_t> GermanHyphenation::hyphenate(const std::string& word, size_t minWordLength,
-                                                 size_t minFragmentLength) {
+std::vector<size_t> GermanHyphenation::hyphenate(const std::string& word, size_t minWordLength, size_t minLeft,
+                                                 size_t minRight) {
   const int MAX_POSITIONS = 32;
-  int out_positions[MAX_POSITIONS];
+  size_t out_positions[MAX_POSITIONS];
 
-  int count = liang_hyphenate(word.c_str(), 2, 2, '.', out_positions, MAX_POSITIONS, de_patterns);
+  // Do not hyphenate words shorter than the minimum word length
+  if (word.length() < minWordLength) {
+    return std::vector<size_t>();
+  }
+
+  int count = liang_hyphenate(word.c_str(), minLeft, minRight, '.', out_positions, MAX_POSITIONS, de_patterns);
 
   std::vector<size_t> positions;
-  for (int i = 0; i < count; ++i) {
-    positions.push_back(static_cast<size_t>(out_positions[i]));
+  if (count > 0) {
+    positions.assign(out_positions, out_positions + count);
   }
 
   return positions;

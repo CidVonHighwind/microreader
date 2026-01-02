@@ -221,7 +221,7 @@ void printResults(const std::string& language, const std::vector<TestCase>& test
 }
 
 int main(int argc, char* argv[]) {
-  std::string language = "german";  // default
+  std::string language = "english";  // default
 
   if (argc > 1) {
     language = argv[1];
@@ -255,9 +255,10 @@ int main(int argc, char* argv[]) {
     }
 
     // Wrap into the hyphenate function used by the evaluator
+    // Use min lengths = 0 for tests so all hyphenation points are returned
     hyphenateFunc = [strategy](const std::string& w) {
       if (strategy) {
-        return strategy->hyphenate(w);
+        return strategy->hyphenate(w, 2, 2, 2);
       }
       return std::vector<size_t>();
     };

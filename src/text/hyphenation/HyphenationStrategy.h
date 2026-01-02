@@ -33,8 +33,12 @@ class HyphenationStrategy {
    * @param minFragmentLength Minimum characters that must remain on each side of a split
    * @return Vector of byte positions where hyphenation is allowed
    */
-  virtual std::vector<size_t> hyphenate(const std::string& word, size_t minWordLength = 6,
-                                        size_t minFragmentLength = 3) = 0;
+  // Hyphenate with separate minima for left and right fragments.
+  // @param minWordLength: minimum word length to consider for any hyphenation
+  // @param minLeft: minimum characters before the hyphen
+  // @param minRight: minimum characters after the hyphen
+  virtual std::vector<size_t> hyphenate(const std::string& word, size_t minWordLength = 6, size_t minLeft = 3,
+                                        size_t minRight = 3) = 0;
 
   /**
    * Find all hyphen positions in a word (both existing and algorithmic).
@@ -46,7 +50,8 @@ class HyphenationStrategy {
    * @param minFragmentLength Minimum characters on each side for algorithmic splits
    * @return Vector of positions (positive = existing, negative = algorithmic)
    */
-  std::vector<int> findHyphenPositions(const std::string& word, size_t minWordLength = 6, size_t minFragmentLength = 3);
+  std::vector<int> findHyphenPositions(const std::string& word, size_t minWordLength = 6, size_t minLeft = 3,
+                                       size_t minRight = 3);
 
   /**
    * Get the language this strategy handles
@@ -60,14 +65,14 @@ class HyphenationStrategy {
  */
 class NoHyphenation : public HyphenationStrategy {
  public:
-  std::vector<size_t> hyphenate(const std::string& word, size_t minWordLength = 6,
-                                size_t minFragmentLength = 3) override {
+  std::vector<size_t> hyphenate(const std::string& word, size_t minWordLength = 6, size_t minLeft = 3,
+                                size_t minRight = 3) override {
     return std::vector<size_t>();  // No algorithmic hyphenation points
   }
 
   // Override to prevent splitting even on existing hyphens
-  std::vector<int> findHyphenPositions(const std::string& word, size_t minWordLength = 6,
-                                       size_t minFragmentLength = 3) {
+  std::vector<int> findHyphenPositions(const std::string& word, size_t minWordLength = 6, size_t minLeft = 3,
+                                       size_t minRight = 3) {
     return std::vector<int>();  // No hyphenation at all
   }
 
@@ -82,8 +87,8 @@ class NoHyphenation : public HyphenationStrategy {
  */
 class ExistingHyphensOnly : public HyphenationStrategy {
  public:
-  std::vector<size_t> hyphenate(const std::string& word, size_t minWordLength = 6,
-                                size_t minFragmentLength = 3) override {
+  std::vector<size_t> hyphenate(const std::string& word, size_t minWordLength = 6, size_t minLeft = 3,
+                                size_t minRight = 3) override {
     return std::vector<size_t>();  // No algorithmic hyphenation, only existing hyphens
   }
 

@@ -51,7 +51,7 @@ static int find_pattern_index(const char* seg, int seglen, const HyphenationPatt
 
 // Hyphenate into an output integer buffer. Returns number of positions written.
 // This function avoids heap allocations by using fixed-size local arrays.
-int liang_hyphenate(const char* word, int leftmin, int rightmin, char boundary_char, int* out_positions,
+int liang_hyphenate(const char* word, size_t leftmin, size_t rightmin, char boundary_char, size_t* out_positions,
                     int max_positions, const HyphenationPatterns& pats) {
   if (!word)
     return 0;
@@ -89,13 +89,17 @@ int liang_hyphenate(const char* word, int leftmin, int rightmin, char boundary_c
     }
   }
 
+  // Convert size_t minima to int safely, clamped to word length
+  int leftmin_i = (leftmin > (size_t)word_len) ? word_len : static_cast<int>(leftmin);
+  int rightmin_i = (rightmin > (size_t)word_len) ? word_len : static_cast<int>(rightmin);
+
   // Compute allowed hyphen positions
   int count = 0;
   for (int k = 1; k < word_len; ++k) {
     int ext_pos = k + 1;
-    if ((H[ext_pos] & 1) && k >= leftmin && (word_len - k) >= rightmin) {
+    if ((H[ext_pos] & 1) && k >= leftmin_i && (word_len - k) >= rightmin_i) {
       if (count < max_positions)
-        out_positions[count] = k;
+        out_positions[count] = static_cast<size_t>(k);
       ++count;
     }
   }

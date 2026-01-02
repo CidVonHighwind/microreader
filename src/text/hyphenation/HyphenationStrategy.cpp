@@ -4,8 +4,8 @@
 #include "GermanHyphenation.h"
 
 // Implementation of the base class method
-std::vector<int> HyphenationStrategy::findHyphenPositions(const std::string& word, size_t minWordLength,
-                                                          size_t minFragmentLength) {
+std::vector<int> HyphenationStrategy::findHyphenPositions(const std::string& word, size_t minWordLength, size_t minLeft,
+                                                          size_t minRight) {
   std::vector<int> positions;
 
   // First, find existing hyphens in the text
@@ -18,7 +18,7 @@ std::vector<int> HyphenationStrategy::findHyphenPositions(const std::string& wor
   // Add algorithmic hyphenation positions for words without existing hyphens
   if (positions.empty()) {
     // Use the language-specific hyphenation strategy (call member, not global hyphenate)
-    std::vector<size_t> algorithmicPositions = this->hyphenate(word, minWordLength, minFragmentLength);
+    std::vector<size_t> algorithmicPositions = this->hyphenate(word, minWordLength, minLeft, minRight);
 
     // Store as negative values to indicate these are algorithmic positions
     // (need hyphen insertion). Offset by -1 so position 0 becomes -1, etc.
