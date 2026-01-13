@@ -377,8 +377,6 @@ static void removeDirRecursive(const String& path) {
 }
 
 bool EpubReader::cleanExtractDir() {
-  return true;
-
   if (extractDir_.isEmpty())
     return true;
   removeDirRecursive(extractDir_);
