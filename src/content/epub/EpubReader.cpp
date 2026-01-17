@@ -49,7 +49,7 @@ static File g_extract_file;
 // Metadata filename and current extract version. Update `CURRENT_EXTRACT_VERSION`
 // whenever conversion/extraction format changes to force a cache reset.
 static const char* EXTRACT_META_FILENAME = "epub_meta.txt";
-static const char* CURRENT_EXTRACT_VERSION = "8";
+static const char* CURRENT_EXTRACT_VERSION = "9";
 
 // Callback to write extracted data to SD card file
 static int extract_to_file_callback(const void* data, size_t size, void* user_data) {

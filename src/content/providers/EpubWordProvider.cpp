@@ -375,6 +375,7 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
   bool paragraphClassesWritten = false;     // Have we written style token?
   bool lineHasContent = false;              // Does current line have visible content?
   bool lineHasNbsp = false;                 // Does current line have &nbsp;?
+  bool pendingLinkCloseSpace = false;       // Do we need to add space before next text?
 
   while (parser.read()) {
     SimpleXmlParser::NodeType nodeType = parser.getNodeType();
@@ -392,7 +393,13 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
           String href = parser.getAttribute("href");
           if (!href.isEmpty()) {
             isLinkWithHref = true;
-            buffer += ' ';
+            // Add space before link only if buffer doesn't already end with whitespace
+            if (buffer.length() > 0) {
+              char lastChar = buffer.charAt(buffer.length() - 1);
+              if (lastChar != ' ' && lastChar != '\n' && lastChar != '\t') {
+                buffer += ' ';
+              }
+            }
             buffer += '[';
             buffer += (char)0x1B;  // ESC
             buffer += 'O';         // Link open (italic style)
@@ -407,6 +414,7 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
         buffer += "\n";
         lineHasContent = false;
         lineHasNbsp = false;
+        pendingLinkCloseSpace = false;  // Clear pending space at block boundaries
       }
 
       // Capture CSS classes and inline styles for block elements
@@ -470,7 +478,8 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
         buffer += (char)0x1B;  // ESC
         buffer += 'o';         // Link close (reset style)
         buffer += ']';
-        buffer += ' ';
+        // Set flag to potentially add space before next text content
+        pendingLinkCloseSpace = true;
       }
 
       // Block elements: add newline if line had content OR had &nbsp;
@@ -507,6 +516,7 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
         pendingTag = "";
         paragraphClassesWritten = false;
         paragraphStyleEmitted.clear();
+        pendingLinkCloseSpace = false;  // Clear pending space at paragraph end
       }
 
       // Pop from element stack and link stack
@@ -529,6 +539,20 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
       String text = readAndDecodeText(parser);
       if (text.isEmpty()) {
         continue;
+      }
+
+      // Check if we need to add a space after a link close
+      if (pendingLinkCloseSpace) {
+        // Only add space if text doesn't start with whitespace
+        bool startsWithWhitespace = false;
+        if (text.length() > 0) {
+          char firstChar = text.charAt(0);
+          startsWithWhitespace = (firstChar == ' ' || firstChar == '\n' || firstChar == '\t' || firstChar == '\r');
+        }
+        if (!startsWithWhitespace) {
+          buffer += ' ';
+        }
+        pendingLinkCloseSpace = false;
       }
 
       if (text.indexOf("\xC2\xA0") >= 0) {
