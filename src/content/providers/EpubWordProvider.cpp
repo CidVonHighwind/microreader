@@ -400,9 +400,9 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
                 buffer += ' ';
               }
             }
-            buffer += '[';
             buffer += (char)0x1B;  // ESC
             buffer += 'O';         // Link open (italic style)
+            buffer += '(';
           }
         }
         linkStack.push_back(isLinkWithHref);
@@ -475,9 +475,9 @@ void EpubWordProvider::performXhtmlToTxtConversion(SimpleXmlParser& parser, File
 
       // Handle end of link elements - add closing bracket and reset style
       if (name == "a" && !linkStack.empty() && linkStack.back()) {
+        buffer += ')';
         buffer += (char)0x1B;  // ESC
         buffer += 'o';         // Link close (reset style)
-        buffer += ']';
         // Set flag to potentially add space before next text content
         pendingLinkCloseSpace = true;
       }
