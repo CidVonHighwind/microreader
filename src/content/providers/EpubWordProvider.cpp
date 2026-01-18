@@ -1208,15 +1208,23 @@ StyledWord EpubWordProvider::getPrevWord() {
 float EpubWordProvider::getPercentage() {
   if (!fileProvider_)
     return 1.0f;
-  // For EPUBs, calculate book-wide percentage using chapter offset
+  // For EPUBs, map the TXT-based chapter progress to the XHTML-based chapter range
   if (isEpub_ && epubReader_) {
     size_t totalSize = epubReader_->getTotalBookSize();
     if (totalSize == 0)
       return 1.0f;
+
+    // Get this chapter's start and end percentage based on XHTML sizes
     size_t chapterOffset = epubReader_->getSpineItemOffset(currentChapter_);
-    size_t positionInChapter = static_cast<size_t>(fileProvider_->getCurrentIndex());
-    size_t absolutePosition = chapterOffset + positionInChapter;
-    return static_cast<float>(absolutePosition) / static_cast<float>(totalSize);
+    size_t chapterXhtmlSize = epubReader_->getSpineItemSize(currentChapter_);
+    float chapterStartPct = static_cast<float>(chapterOffset) / static_cast<float>(totalSize);
+    float chapterEndPct = static_cast<float>(chapterOffset + chapterXhtmlSize) / static_cast<float>(totalSize);
+
+    // Get progress within current chapter from TXT file (0.0 to 1.0)
+    float chapterProgress = fileProvider_->getPercentage();
+
+    // Map TXT progress to XHTML-based range
+    return chapterStartPct + chapterProgress * (chapterEndPct - chapterStartPct);
   }
   // Non-EPUB: delegate to file provider percentage
   return fileProvider_->getPercentage();
@@ -1229,9 +1237,18 @@ float EpubWordProvider::getPercentage(int index) {
     size_t totalSize = epubReader_->getTotalBookSize();
     if (totalSize == 0)
       return 1.0f;
+
+    // Get this chapter's start and end percentage based on XHTML sizes
     size_t chapterOffset = epubReader_->getSpineItemOffset(currentChapter_);
-    size_t absolutePosition = chapterOffset + static_cast<size_t>(index);
-    return static_cast<float>(absolutePosition) / static_cast<float>(totalSize);
+    size_t chapterXhtmlSize = epubReader_->getSpineItemSize(currentChapter_);
+    float chapterStartPct = static_cast<float>(chapterOffset) / static_cast<float>(totalSize);
+    float chapterEndPct = static_cast<float>(chapterOffset + chapterXhtmlSize) / static_cast<float>(totalSize);
+
+    // Get progress within current chapter from TXT file for the given index (0.0 to 1.0)
+    float chapterProgress = fileProvider_->getPercentage(index);
+
+    // Map TXT progress to XHTML-based range
+    return chapterStartPct + chapterProgress * (chapterEndPct - chapterStartPct);
   }
   return fileProvider_->getPercentage(index);
 }
