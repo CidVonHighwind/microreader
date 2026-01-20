@@ -12,10 +12,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* Error codes */
 typedef enum {
   EPUB_OK = 0,
@@ -62,7 +58,7 @@ epub_error epub_locate_file(epub_reader* reader, const char* filename, uint32_t*
 
 /* Extract file with streaming (minimal memory) */
 epub_error epub_extract_streaming(epub_reader* reader, uint32_t file_index, epub_data_callback callback,
-                                  void* user_data, size_t chunk_size);
+                                  void* user_data);
 
 /* -------------------- Pull-based Streaming API -------------------- */
 
@@ -71,9 +67,8 @@ typedef struct epub_stream_context epub_stream_context;
 
 /* Start streaming extraction of a file (pull-based)
  * Returns streaming context or NULL on error
- * chunk_size: size of internal buffer (0 for default 8KB)
  */
-epub_stream_context* epub_start_streaming(epub_reader* reader, uint32_t file_index, size_t chunk_size);
+epub_stream_context* epub_start_streaming(epub_reader* reader, uint32_t file_index);
 
 /* Read next chunk of decompressed data (pull-based)
  * Returns number of bytes read, 0 for EOF, -1 for error
@@ -87,9 +82,5 @@ void epub_end_streaming(epub_stream_context* ctx);
 
 /* Get error string */
 const char* epub_get_error_string(epub_error error);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* EPUB_PARSER_H */

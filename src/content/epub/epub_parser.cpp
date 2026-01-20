@@ -11,11 +11,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../../core/EInkDisplay.h"
 #include "../../lib/miniz.h"
+
+extern EInkDisplay einkDisplay;
 
 #ifdef ARDUINO
 #define USE_ARDUINO_FILE 1
-
+extern "C" {
 /* External Arduino file wrappers implemented in epub_parser_arduino.cpp */
 extern void* arduino_file_open(const char* path);
 extern void arduino_file_close(void* handle);
@@ -24,21 +27,13 @@ extern long arduino_file_tell(void* handle);
 extern size_t arduino_file_read(void* ptr, size_t size, size_t count, void* handle);
 extern int arduino_get_free_heap(void);
 extern void arduino_log_memory(const char* msg);
+}
 #endif
-
-/* Default chunk size: 8KB */
-#define DEFAULT_CHUNK_SIZE (8 * 1024)
 
 /* ZIP local file header signature */
 #define ZIP_LOCAL_HEADER_SIG 0x04034b50
 #define ZIP_CENTRAL_HEADER_SIG 0x02014b50
 #define ZIP_END_CENTRAL_SIG 0x06054b50
-
-/* Static decompression buffers to avoid repeated allocations */
-#ifdef USE_ARDUINO_FILE
-static uint8_t* g_decomp_buffer = NULL;
-static size_t g_decomp_buffer_size = 0;
-#endif
 
 /* File operation wrappers for Arduino compatibility */
 #ifdef USE_ARDUINO_FILE
@@ -123,9 +118,8 @@ struct epub_stream_context {
 
   /* Decompression state */
   tinfl_decompressor* inflator;
-  uint8_t* memory_block; /* Single allocation for inflator + buffers */
-  uint8_t* in_buf;       /* Input buffer for compressed data */
-  uint8_t* dict;         /* Decompression dictionary (32KB) */
+  uint8_t* in_buf; /* Input buffer for compressed data */
+  uint8_t* dict;   /* Decompression dictionary (32KB) */
 
   size_t chunk_size;
   size_t in_remaining;  /* Compressed bytes left to read */
@@ -136,9 +130,8 @@ struct epub_stream_context {
   size_t dict_avail;    /* Bytes available in dictionary for reading */
 
   tinfl_status status;
-  int done;                      /* 1 if decompression complete */
-  int error;                     /* 1 if error occurred */
-  int uses_shared_decomp_buffer; /* 1 if memory_block points to global g_decomp_buffer */
+  int done;  /* 1 if decompression complete */
+  int error; /* 1 if error occurred */
 };
 
 /* Find end of central directory record */
@@ -382,13 +375,9 @@ epub_error epub_locate_file(epub_reader* reader, const char* filename, uint32_t*
 }
 
 epub_error epub_extract_streaming(epub_reader* reader, uint32_t file_index, epub_data_callback callback,
-                                  void* user_data, size_t chunk_size) {
+                                  void* user_data) {
   if (!reader || !callback || file_index >= reader->file_count) {
     return EPUB_ERROR_INVALID_PARAM;
-  }
-
-  if (chunk_size == 0) {
-    chunk_size = DEFAULT_CHUNK_SIZE;
   }
 
   file_entry* entry = &reader->files[file_index];
@@ -425,99 +414,38 @@ epub_error epub_extract_streaming(epub_reader* reader, uint32_t file_index, epub
 
   if (entry->compression == 0) {
     /* Stored (uncompressed) */
-    uint8_t* buffer = (uint8_t*)malloc(chunk_size);
-    if (!buffer) {
-      return EPUB_ERROR_OUT_OF_MEMORY;
-    }
-#ifdef USE_ARDUINO_FILE
-    {
-      char msg[128];
-      snprintf(msg, sizeof(msg), "  [MEM] epub_extract_streaming: allocated input buffer %u bytes, Free=%d\n",
-               (unsigned)chunk_size, arduino_get_free_heap());
-      arduino_log_memory(msg);
-    }
-#else
-    printf("  [MEM] epub_extract_streaming: allocated input buffer %u bytes\n", (unsigned)chunk_size);
-#endif
+    uint8_t* buffer = einkDisplay.getFrameBuffer();
+    size_t chunk_size = EInkDisplay::BUFFER_SIZE;
 
     size_t remaining = entry->uncompressed_size;
     while (remaining > 0) {
       size_t to_read = (remaining < chunk_size) ? remaining : chunk_size;
       size_t read_size = file_read_impl(buffer, 1, to_read, fp);
       if (read_size == 0) {
-        free(buffer);
+        // free(buffer);
         return EPUB_ERROR_EXTRACTION_FAILED;
       }
 
       if (!callback(buffer, read_size, user_data)) {
-        free(buffer);
+        // free(buffer);
         return EPUB_OK; /* User cancelled */
       }
 
       remaining -= read_size;
     }
 
-    free(buffer);
+    // free(buffer);
     return EPUB_OK;
   } else if (entry->compression == 8) {
     /* DEFLATE compression - use tinfl with dictionary */
-#ifdef USE_ARDUINO_FILE
-    size_t total_size = sizeof(tinfl_decompressor) + chunk_size + TINFL_LZ_DICT_SIZE;
-    {
-      char msg[128];
-      snprintf(msg, sizeof(msg), "  [MEM] epub_start_streaming: attempting alloc total_size=%u\n",
-               (unsigned)total_size);
-      arduino_log_memory(msg);
-    }
-#else
-    size_t total_size = sizeof(tinfl_decompressor) + chunk_size + TINFL_LZ_DICT_SIZE;
-    printf("  [MEM] epub_start_streaming: attempting alloc total_size=%u\n", (unsigned)total_size);
-#endif
-    uint8_t* memory_block = NULL;
-
-#ifdef USE_ARDUINO_FILE
-    /* Reuse global buffer to avoid fragmentation */
-    if (g_decomp_buffer && g_decomp_buffer_size >= total_size) {
-      memory_block = g_decomp_buffer;
-    } else {
-      /* Free old buffer if exists */
-      if (g_decomp_buffer) {
-        free(g_decomp_buffer);
-        g_decomp_buffer = NULL;
-      }
-
-      memory_block = (uint8_t*)malloc(total_size);
-
-      if (!memory_block) {
-        g_decomp_buffer = NULL;
-        g_decomp_buffer_size = 0;
-        return EPUB_ERROR_OUT_OF_MEMORY;
-      }
-
-      g_decomp_buffer = memory_block;
-      g_decomp_buffer_size = total_size;
-    }
-#else
-    memory_block = (uint8_t*)malloc(total_size);
-    if (!memory_block) {
-      return EPUB_ERROR_OUT_OF_MEMORY;
-    }
-#ifdef USE_ARDUINO_FILE
-    {
-      char msg[128];
-      snprintf(msg, sizeof(msg), "  [MEM] epub_extract_streaming: allocated memory_block total_size=%u, Free=%d\n",
-               (unsigned)total_size, arduino_get_free_heap());
-      arduino_log_memory(msg);
-    }
-#else
-    printf("  [MEM] epub_extract_streaming: allocated memory_block total_size=%u\n", (unsigned)total_size);
-#endif
-#endif
+    size_t fixed_size = sizeof(tinfl_decompressor) + TINFL_LZ_DICT_SIZE;
+    uint8_t* memory_block = einkDisplay.getFrameBuffer();
+    size_t chunk_size = EInkDisplay::BUFFER_SIZE - fixed_size;
 
     /* Partition the block */
     tinfl_decompressor* inflator = (tinfl_decompressor*)memory_block;
-    uint8_t* in_buf = memory_block + sizeof(tinfl_decompressor);
-    uint8_t* dict = in_buf + chunk_size;
+    uint8_t* dict = memory_block + sizeof(tinfl_decompressor);
+    uint8_t* in_buf = dict + TINFL_LZ_DICT_SIZE;
 
     memset(inflator, 0, sizeof(tinfl_decompressor));
     memset(dict, 0, TINFL_LZ_DICT_SIZE); /* Initialize dictionary to zero */
@@ -536,9 +464,6 @@ epub_error epub_extract_streaming(epub_reader* reader, uint32_t file_index, epub
         size_t to_read = (in_remaining < chunk_size) ? in_remaining : chunk_size;
         in_buf_size = file_read_impl(in_buf, 1, to_read, fp);
         if (in_buf_size == 0) {
-#ifndef USE_ARDUINO_FILE
-          free(memory_block);
-#endif
           return EPUB_ERROR_EXTRACTION_FAILED;
         }
         in_remaining -= in_buf_size;
@@ -563,27 +488,16 @@ epub_error epub_extract_streaming(epub_reader* reader, uint32_t file_index, epub
       if (out_bytes > 0) {
         int cb_result = callback(dict + dict_ofs, out_bytes, user_data);
         if (cb_result == 0) {
-#ifndef USE_ARDUINO_FILE
-          free(memory_block);
-#endif
           return EPUB_ERROR_EXTRACTION_FAILED;
         }
         dict_ofs = (dict_ofs + out_bytes) & (TINFL_LZ_DICT_SIZE - 1);
       }
 
       if (status < TINFL_STATUS_DONE) {
-#ifndef USE_ARDUINO_FILE
-        free(memory_block);
-#endif
         return EPUB_ERROR_EXTRACTION_FAILED;
       }
     }
 
-#ifdef USE_ARDUINO_FILE
-    /* Keep buffer allocated for reuse */
-#else
-    free(memory_block);
-#endif
     return EPUB_OK;
   }
   return EPUB_ERROR_EXTRACTION_FAILED;
@@ -591,13 +505,9 @@ epub_error epub_extract_streaming(epub_reader* reader, uint32_t file_index, epub
 
 /* -------------------- Pull-based Streaming API -------------------- */
 
-epub_stream_context* epub_start_streaming(epub_reader* reader, uint32_t file_index, size_t chunk_size) {
+epub_stream_context* epub_start_streaming(epub_reader* reader, uint32_t file_index) {
   if (!reader || file_index >= reader->file_count) {
     return NULL;
-  }
-
-  if (chunk_size == 0) {
-    chunk_size = DEFAULT_CHUNK_SIZE;
   }
 
   file_entry* entry = &reader->files[file_index];
@@ -620,7 +530,6 @@ epub_stream_context* epub_start_streaming(epub_reader* reader, uint32_t file_ind
 
   ctx->reader = reader;
   ctx->entry = entry;
-  ctx->chunk_size = chunk_size;
   ctx->done = 0;
   ctx->error = 0;
 
@@ -663,53 +572,14 @@ epub_stream_context* epub_start_streaming(epub_reader* reader, uint32_t file_ind
 
   if (entry->compression == 8) {
     /* DEFLATE - allocate decompression buffers */
-    size_t total_size = sizeof(tinfl_decompressor) + chunk_size + TINFL_LZ_DICT_SIZE;
-#ifdef USE_ARDUINO_FILE
-    /* Reuse global buffer if available to reduce fragmentation and memory usage */
-    if (g_decomp_buffer && g_decomp_buffer_size >= total_size) {
-      ctx->memory_block = g_decomp_buffer;
-      ctx->uses_shared_decomp_buffer = 1;
-    } else {
-      /* Free old buffer if exists */
-      if (g_decomp_buffer) {
-        free(g_decomp_buffer);
-        g_decomp_buffer = NULL;
-        g_decomp_buffer_size = 0;
-      }
-
-      ctx->memory_block = (uint8_t*)malloc(total_size);
-      if (!ctx->memory_block) {
-        free(ctx);
-        return NULL;
-      }
-#ifdef USE_ARDUINO_FILE
-      {
-        char msg[128];
-        snprintf(msg, sizeof(msg), "  [MEM] epub_start_streaming: allocated decomp buffer total_size=%u, Free=%d\n",
-                 (unsigned)total_size, arduino_get_free_heap());
-        arduino_log_memory(msg);
-      }
-#else
-      printf("  [MEM] epub_start_streaming: allocated decomp buffer total_size=%u\n", (unsigned)total_size);
-#endif
-      /* Keep as global for future reuse */
-      g_decomp_buffer = ctx->memory_block;
-      g_decomp_buffer_size = total_size;
-      ctx->uses_shared_decomp_buffer = 1;
-    }
-#else
-    ctx->memory_block = (uint8_t*)malloc(total_size);
-    if (!ctx->memory_block) {
-      free(ctx);
-      return NULL;
-    }
-    ctx->uses_shared_decomp_buffer = 0;
-#endif
+    size_t fixed_size = sizeof(tinfl_decompressor) + TINFL_LZ_DICT_SIZE;
+    uint8_t* memory_block = einkDisplay.getFrameBuffer();
+    ctx->chunk_size = EInkDisplay::BUFFER_SIZE - fixed_size;
 
     /* Partition the block */
-    ctx->inflator = (tinfl_decompressor*)ctx->memory_block;
-    ctx->in_buf = ctx->memory_block + sizeof(tinfl_decompressor);
-    ctx->dict = ctx->in_buf + chunk_size;
+    ctx->inflator = (tinfl_decompressor*)memory_block;
+    ctx->dict = memory_block + sizeof(tinfl_decompressor);
+    ctx->in_buf = ctx->dict + TINFL_LZ_DICT_SIZE;
 
     memset(ctx->inflator, 0, sizeof(tinfl_decompressor));
     memset(ctx->dict, 0, TINFL_LZ_DICT_SIZE);
@@ -724,12 +594,8 @@ epub_stream_context* epub_start_streaming(epub_reader* reader, uint32_t file_ind
     ctx->status = TINFL_STATUS_NEEDS_MORE_INPUT;
   } else {
     /* Stored (uncompressed) - simpler, just need input buffer */
-    ctx->memory_block = (uint8_t*)malloc(chunk_size);
-    if (!ctx->memory_block) {
-      free(ctx);
-      return NULL;
-    }
-    ctx->in_buf = ctx->memory_block;
+    ctx->in_buf = einkDisplay.getFrameBuffer();
+    ctx->chunk_size = EInkDisplay::BUFFER_SIZE;
     ctx->in_remaining = entry->uncompressed_size;
   }
 
@@ -878,15 +744,6 @@ int epub_read_chunk(epub_stream_context* ctx, void* buffer, size_t max_size) {
 
 void epub_end_streaming(epub_stream_context* ctx) {
   if (ctx) {
-    if (ctx->memory_block) {
-#ifdef USE_ARDUINO_FILE
-      if (!ctx->uses_shared_decomp_buffer) {
-        free(ctx->memory_block);
-      }
-#else
-      free(ctx->memory_block);
-#endif
-    }
     free(ctx);
   }
 }

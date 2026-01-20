@@ -7,10 +7,7 @@
 #include <vector>
 
 #include "../css/CssParser.h"
-
-extern "C" {
 #include "epub_parser.h"
-}
 
 struct SpineItem {
   String idref;
@@ -75,9 +72,8 @@ class EpubReader {
   /**
    * Start pull-based streaming extraction of a file
    * Returns streaming context or nullptr on error
-   * chunk_size: internal buffer size (0 for default 8KB)
    */
-  epub_stream_context* startStreaming(const char* filename, size_t chunk_size = 0);
+  epub_stream_context* startStreaming(const char* filename);
 
   /**
    * Get the extract directory path (for building output paths)

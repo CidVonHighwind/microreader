@@ -466,7 +466,7 @@ bool EpubReader::extractFile(const char* filename) {
   uint32_t minFree = ESP.getMinFreeHeap();
   Serial.printf("  Memory before extraction: Free=%u, Total=%u, MinFree=%u\n", heapBefore, heapSize, minFree);
 
-  err = epub_extract_streaming(reader_, fileIndex, extract_to_file_callback, nullptr, 4096);
+  err = epub_extract_streaming(reader_, fileIndex, extract_to_file_callback, nullptr);
 
   // Log memory state after extraction and show delta
   uint32_t heapAfter = ESP.getFreeHeap();
@@ -504,7 +504,7 @@ String EpubReader::getFile(const char* filename) {
   return getExtractedPath(filename);
 }
 
-epub_stream_context* EpubReader::startStreaming(const char* filename, size_t chunk_size) {
+epub_stream_context* EpubReader::startStreaming(const char* filename) {
   // Open EPUB if not already open
   if (!openEpub()) {
     return nullptr;
@@ -518,7 +518,7 @@ epub_stream_context* EpubReader::startStreaming(const char* filename, size_t chu
   }
 
   // Start pull-based streaming
-  return epub_start_streaming(reader_, fileIndex, chunk_size);
+  return epub_start_streaming(reader_, fileIndex);
 }
 
 String EpubReader::getChapterNameForSpine(int spineIndex) const {
@@ -885,7 +885,7 @@ bool EpubReader::extractAll() {
 
     // Memory before extraction
     uint32_t heapBefore = ESP.getFreeHeap();
-    epub_error err = epub_extract_streaming(reader_, i, extract_to_file_callback, nullptr, 4096);
+    epub_error err = epub_extract_streaming(reader_, i, extract_to_file_callback, nullptr);
     uint32_t heapAfter = ESP.getFreeHeap();
     int32_t delta = (int32_t)heapAfter - (int32_t)heapBefore;
     Serial.printf("      Memory after extraction: Free=%u (delta: %d)\n", heapAfter, delta);

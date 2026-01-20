@@ -1,6 +1,7 @@
 #ifndef EINK_DISPLAY_H
 #define EINK_DISPLAY_H
 
+#include <cstddef>
 #ifdef ARDUINO
 #include <Arduino.h>
 #include <SPI.h>
@@ -70,8 +71,8 @@ class EInkDisplay {
   int8_t _sclk, _mosi, _cs, _dc, _rst, _busy;
 
   // Frame buffer (statically allocated)
-  uint8_t frameBuffer0[BUFFER_SIZE];
-  uint8_t frameBuffer1[BUFFER_SIZE];
+  __attribute__((aligned(16))) uint8_t frameBuffer0[BUFFER_SIZE];
+  __attribute__((aligned(16))) uint8_t frameBuffer1[BUFFER_SIZE];
 
   uint8_t* frameBuffer;
   uint8_t* frameBufferActive;

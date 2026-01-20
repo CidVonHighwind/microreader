@@ -166,7 +166,7 @@ std::vector<NodeSnapshot> readForwardNodesFromStream(TestUtils::TestRunner& runn
   }
 
   // Start streaming from spine item using full path
-  epub_stream_context* epubStreamCtx = reader.startStreaming(fullHref.c_str(), 8192);
+  epub_stream_context* epubStreamCtx = reader.startStreaming(fullHref.c_str());
   if (!epubStreamCtx) {
     std::cout << "  ERROR: Failed to start EPUB streaming\n";
     return result;

@@ -1040,7 +1040,7 @@ void testStreamRawBytes(TestUtils::TestRunner& runner, EpubReader& reader) {
   // Step 2: Stream the file and compare bytes
   // Note: startStreaming() internally opens the EPUB, so we don't need to check the handle
   std::cout << "\n  Step 2: Stream file and compare bytes...\n";
-  epub_stream_context* streamCtx = reader.startStreaming(xhtmlPath.c_str(), 8192);
+  epub_stream_context* streamCtx = reader.startStreaming(xhtmlPath.c_str());
   if (!streamCtx) {
     std::cout << "    ERROR: Failed to start streaming\n";
     delete[] extractedData;
