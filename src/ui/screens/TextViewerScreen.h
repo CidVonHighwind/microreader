@@ -58,6 +58,8 @@ class TextViewerScreen : public Screen {
   String pendingOpenPath;
   // Whether to show chapter numbers in the page indicator
   bool showChapterNumbers = true;
+  // Whether to flip page turn buttons (false=LEFT forward, true=RIGHT forward)
+  bool flipPageButtons = false;
 
   // Persist/load current reading position for `currentFilePath`
   void savePositionToFile();

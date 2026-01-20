@@ -52,15 +52,19 @@ namespace TestGlobals {
 #define USE_EPUB_PROVIDER
 // The test repository contains bobiverse one.epub; update the test path to match an existing file.
 // inline const char* g_testFilePath = "resources/books/mabuse.epub";
+// inline const int chapterToTest = 2;  // Chapter index to test in EPUB (0-based)
 
 // inline const char* g_testFilePath = "resources/books/snow crash eng.epub";
 // inline const int chapterToTest = 11;  // Chapter index to test in EPUB (0-based)
 
-inline const char* g_testFilePath = "resources/books/snow crash ger.epub";
-inline const int chapterToTest = 12;  // Chapter index to test in EPUB (0-based)
+// inline const char* g_testFilePath = "resources/books/snow crash ger.epub";
+// inline const int chapterToTest = 12;  // Chapter index to test in EPUB (0-based)
 
-// inline const char* g_testFilePath = "resources/books/ohler.epub";
-// inline const int chapterToTest = 5;  // Chapter index to test in EPUB (0-based)
+// inline const char* g_testFilePath = "resources/books/Eyes of the Void.epub";
+// inline const int chapterToTest = 12;  // Chapter index to test in EPUB (0-based)
+
+inline const char* g_testFilePath = "resources/books/ohler.epub";
+inline const int chapterToTest = 6;  // Chapter index to test in EPUB (0-based)
 
 // inline const char* g_testFilePath = "resources/books/bobiverse one.epub";
 // inline const int chapterToTest = 67;  // Chapter index to test in EPUB (0-based)

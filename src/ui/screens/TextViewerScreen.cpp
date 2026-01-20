@@ -105,6 +105,11 @@ void TextViewerScreen::loadSettingsFromFile() {
   if (s.getInt(String("settings.showChapterNumbers"), showChapterNumbersInt)) {
     showChapterNumbers = (showChapterNumbersInt != 0);
   }
+
+  int flipPageButtonsInt = 0;
+  if (s.getInt(String("settings.flipPageButtons"), flipPageButtonsInt)) {
+    flipPageButtons = (flipPageButtonsInt != 0);
+  }
 }
 
 void TextViewerScreen::saveSettingsToFile() {
@@ -142,23 +147,27 @@ void TextViewerScreen::handleButtons(Buttons& buttons) {
   } else if (buttons.isPressed(Buttons::CONFIRM)) {
     // Open settings
     uiManager.showScreen(UIManager::ScreenId::Settings);
-  } else if (buttons.isDown(Buttons::LEFT) || buttons.isDown(Buttons::VOLUME_UP)) {
-    uint8_t btn = buttons.isDown(Buttons::LEFT) ? Buttons::LEFT : Buttons::VOLUME_UP;
-    if (buttons.getHoldDuration(btn) >= LONG_PRESS_MS) {
-      // Long press - jump to next chapter (or end if last chapter)
-      jumpToNextChapter();
-    } else {
-      // Short press - go to next page (or next chapter if at end)
-      nextPage();
-    }
-  } else if (buttons.isDown(Buttons::RIGHT) || buttons.isDown(Buttons::VOLUME_DOWN)) {
-    uint8_t btn = buttons.isDown(Buttons::RIGHT) ? Buttons::RIGHT : Buttons::VOLUME_DOWN;
-    if (buttons.getHoldDuration(btn) >= LONG_PRESS_MS) {
-      // Long press - go to chapter start, then previous chapter
-      jumpToPreviousChapter();
-    } else {
-      // Short press - go to previous page
-      prevPage();
+  } else {
+    // Determine which buttons correspond to next/prev based on flipPageButtons setting
+    uint8_t nextBtn1 = flipPageButtons ? Buttons::RIGHT : Buttons::LEFT;
+    uint8_t nextBtn2 = flipPageButtons ? Buttons::VOLUME_DOWN : Buttons::VOLUME_UP;
+    uint8_t prevBtn1 = flipPageButtons ? Buttons::LEFT : Buttons::RIGHT;
+    uint8_t prevBtn2 = flipPageButtons ? Buttons::VOLUME_UP : Buttons::VOLUME_DOWN;
+
+    if (buttons.isDown(nextBtn1) || buttons.isDown(nextBtn2)) {
+      uint8_t btn = buttons.isDown(nextBtn1) ? nextBtn1 : nextBtn2;
+      if (buttons.getHoldDuration(btn) >= LONG_PRESS_MS) {
+        jumpToNextChapter();
+      } else {
+        nextPage();
+      }
+    } else if (buttons.isDown(prevBtn1) || buttons.isDown(prevBtn2)) {
+      uint8_t btn = buttons.isDown(prevBtn1) ? prevBtn1 : prevBtn2;
+      if (buttons.getHoldDuration(btn) >= LONG_PRESS_MS) {
+        jumpToPreviousChapter();
+      } else {
+        prevPage();
+      }
     }
   }
 

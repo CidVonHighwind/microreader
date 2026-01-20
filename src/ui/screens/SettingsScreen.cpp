@@ -138,19 +138,22 @@ void SettingsScreen::toggleCurrentSetting() {
     case 3:  // Show Chapter Numbers
       showChapterNumbersIndex = 1 - showChapterNumbersIndex;
       break;
-    case 4:  // Font Family
+    case 4:  // Flip Page Buttons
+      flipPageButtonsIndex = 1 - flipPageButtonsIndex;
+      break;
+    case 5:  // Font Family
       fontFamilyIndex++;
       if (fontFamilyIndex >= 2)
         fontFamilyIndex = 0;
       applyFontSettings();
       break;
-    case 5:  // Font Size
+    case 6:  // Font Size
       fontSizeIndex++;
       if (fontSizeIndex >= 3)
         fontSizeIndex = 0;
       applyFontSettings();
       break;
-    case 6:  // UI Font Size
+    case 7:  // UI Font Size
       uiFontSizeIndex = 1 - uiFontSizeIndex;
       applyUIFontSettings();
       break;
@@ -214,6 +217,12 @@ void SettingsScreen::loadSettings() {
     uiFontSizeIndex = uiFontSize;
   }
 
+  // Load flip page buttons (0=Normal, 1=Flipped)
+  int flipPageButtons = 0;
+  if (s.getInt(String("settings.flipPageButtons"), flipPageButtons)) {
+    flipPageButtonsIndex = flipPageButtons;
+  }
+
   // Apply the loaded font settings
   applyFontSettings();
   applyUIFontSettings();
@@ -229,6 +238,7 @@ void SettingsScreen::saveSettings() {
   s.setInt(String("settings.fontFamily"), fontFamilyIndex);
   s.setInt(String("settings.fontSize"), fontSizeIndex);
   s.setInt(String("settings.uiFontSize"), uiFontSizeIndex);
+  s.setInt(String("settings.flipPageButtons"), flipPageButtonsIndex);
 
   if (!s.save()) {
     Serial.println("SettingsScreen: Failed to write settings.cfg");
@@ -246,10 +256,12 @@ String SettingsScreen::getSettingName(int index) {
     case 3:
       return "Chapter Numbers";
     case 4:
-      return "Font Family";
+      return "Flip Page Buttons";
     case 5:
-      return "Font Size";
+      return "Font Family";
     case 6:
+      return "Font Size";
+    case 7:
       return "UI Font Size";
     default:
       return "";
@@ -276,6 +288,8 @@ String SettingsScreen::getSettingValue(int index) {
     case 3:
       return showChapterNumbersIndex ? "On" : "Off";
     case 4:
+      return flipPageButtonsIndex ? "Right=Next" : "Left=Next";
+    case 5:
       switch (fontFamilyIndex) {
         case 0:
           return "NotoSans";
@@ -284,7 +298,7 @@ String SettingsScreen::getSettingValue(int index) {
         default:
           return "Unknown";
       }
-    case 5:
+    case 6:
       switch (fontSizeIndex) {
         case 0:
           return "Small";
@@ -295,7 +309,7 @@ String SettingsScreen::getSettingValue(int index) {
         default:
           return "Unknown";
       }
-    case 6:
+    case 7:
       return uiFontSizeIndex ? "Large" : "Small";
     default:
       return "";

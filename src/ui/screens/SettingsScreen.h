@@ -25,16 +25,17 @@ class SettingsScreen : public Screen {
 
   // Menu navigation
   int selectedIndex = 0;
-  static constexpr int SETTINGS_COUNT = 7;
+  static constexpr int SETTINGS_COUNT = 8;
 
   // Setting values and their current indices
   int marginIndex = 1;
   int lineHeightIndex = 1;
   int alignmentIndex = 0;
   int showChapterNumbersIndex = 0;
-  int fontFamilyIndex = 1;  // 0=NotoSans, 1=Bookerly
-  int fontSizeIndex = 0;    // 0=Small(26), 1=Medium(28), 2=Large(30)
-  int uiFontSizeIndex = 0;  // 0=Small(14), 1=Large(28)
+  int fontFamilyIndex = 1;       // 0=NotoSans, 1=Bookerly
+  int fontSizeIndex = 0;         // 0=Small(26), 1=Medium(28), 2=Large(30)
+  int uiFontSizeIndex = 0;       // 0=Small(14), 1=Large(28)
+  int flipPageButtonsIndex = 0;  // 0=Normal (LEFT=next), 1=Flipped (RIGHT=next)
 
   // Available values for each setting
   static constexpr int marginValues[] = {5, 10, 15, 20, 25, 30};
