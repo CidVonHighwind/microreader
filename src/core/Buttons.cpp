@@ -4,11 +4,15 @@ const int Buttons::ADC_THRESHOLDS_1[] = {3470, 2655, 1470, 3};
 const int Buttons::ADC_THRESHOLDS_2[] = {2205, 3};
 const char* Buttons::BUTTON_NAMES[] = {"Back", "Confirm", "Left", "Right", "Volume Up", "Volume Down", "Power"};
 
-Buttons::Buttons() : currentState(0), previousState(0) {
+Buttons::Buttons() : currentState(0), previousState(0), queueHead(0), queueTail(0), queueCount(0) {
   // Initialize per-button debounce state
   for (uint8_t i = 0; i < NUM_BUTTONS; i++) {
     lastButtonState[i] = 0;
     lastDebounceTime[i] = 0;
+  }
+  // Initialize press queue
+  for (uint8_t i = 0; i < QUEUE_SIZE; i++) {
+    pressQueue[i] = 0;
   }
 }
 
@@ -83,6 +87,8 @@ void Buttons::update() {
       // Button is being pressed - wait for debounce
       if ((currentTime - lastDebounceTime[i]) > DEBOUNCE_DELAY) {
         currentState |= buttonMask;
+        // Queue this press for consumption by screens
+        enqueuePress(i);
       }
     } else if (!rawButtonState && currentButtonState) {
       // Button is being released - update immediately
@@ -125,4 +131,29 @@ unsigned long Buttons::getHoldDuration(uint8_t buttonIndex) {
     return 0;  // Button not held
   }
   return millis() - lastDebounceTime[buttonIndex];
+}
+
+void Buttons::enqueuePress(uint8_t buttonIndex) {
+  if (queueCount < QUEUE_SIZE) {
+    pressQueue[queueHead] = buttonIndex;
+    queueHead = (queueHead + 1) % QUEUE_SIZE;
+    queueCount++;
+  }
+  // If queue is full, oldest presses are lost (acceptable for UI)
+}
+
+uint8_t Buttons::consumeNextPress() {
+  if (queueCount == 0) {
+    return NONE;
+  }
+  uint8_t button = pressQueue[queueTail];
+  queueTail = (queueTail + 1) % QUEUE_SIZE;
+  queueCount--;
+  return button;
+}
+
+void Buttons::clearQueuedPresses() {
+  queueHead = 0;
+  queueTail = 0;
+  queueCount = 0;
 }

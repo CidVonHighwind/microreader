@@ -136,47 +136,76 @@ void TextViewerScreen::activate() {
 
 // Ensure member function is in class scope
 void TextViewerScreen::handleButtons(Buttons& buttons) {
-  // Long press threshold in milliseconds
+  // Determine which buttons correspond to next/prev based on flipPageButtons setting
+  uint8_t nextBtn1 = flipPageButtons ? Buttons::RIGHT : Buttons::LEFT;
+  uint8_t nextBtn2 = flipPageButtons ? Buttons::VOLUME_DOWN : Buttons::VOLUME_UP;
+  uint8_t prevBtn1 = flipPageButtons ? Buttons::LEFT : Buttons::RIGHT;
+  uint8_t prevBtn2 = flipPageButtons ? Buttons::VOLUME_UP : Buttons::VOLUME_DOWN;
+
+  // Check for long press first (chapter jump) - before consuming queued presses
   const unsigned long LONG_PRESS_MS = 500;
-
-  if (buttons.isPressed(Buttons::BACK)) {
-    // Save current position for the opened book (if any) before leaving
-    savePositionToFile();
-    saveSettingsToFile();
-    uiManager.showScreen(UIManager::ScreenId::FileBrowser);
-  } else if (buttons.isPressed(Buttons::CONFIRM)) {
-    // Open settings
-    uiManager.showScreen(UIManager::ScreenId::Settings);
-  } else {
-    // Determine which buttons correspond to next/prev based on flipPageButtons setting
-    uint8_t nextBtn1 = flipPageButtons ? Buttons::RIGHT : Buttons::LEFT;
-    uint8_t nextBtn2 = flipPageButtons ? Buttons::VOLUME_DOWN : Buttons::VOLUME_UP;
-    uint8_t prevBtn1 = flipPageButtons ? Buttons::LEFT : Buttons::RIGHT;
-    uint8_t prevBtn2 = flipPageButtons ? Buttons::VOLUME_UP : Buttons::VOLUME_DOWN;
-
-    if (buttons.isDown(nextBtn1) || buttons.isDown(nextBtn2)) {
-      uint8_t btn = buttons.isDown(nextBtn1) ? nextBtn1 : nextBtn2;
-      if (buttons.getHoldDuration(btn) >= LONG_PRESS_MS) {
-        jumpToNextChapter();
-      } else {
-        nextPage();
-      }
-    } else if (buttons.isDown(prevBtn1) || buttons.isDown(prevBtn2)) {
-      uint8_t btn = buttons.isDown(prevBtn1) ? prevBtn1 : prevBtn2;
-      if (buttons.getHoldDuration(btn) >= LONG_PRESS_MS) {
-        jumpToPreviousChapter();
-      } else {
-        prevPage();
-      }
+  if (buttons.isDown(nextBtn1) || buttons.isDown(nextBtn2)) {
+    uint8_t btn = buttons.isDown(nextBtn1) ? nextBtn1 : nextBtn2;
+    if (buttons.getHoldDuration(btn) >= LONG_PRESS_MS) {
+      buttons.clearQueuedPresses();
+      jumpToNextChapter();
+      return;
+    }
+  } else if (buttons.isDown(prevBtn1) || buttons.isDown(prevBtn2)) {
+    uint8_t btn = buttons.isDown(prevBtn1) ? prevBtn1 : prevBtn2;
+    if (buttons.getHoldDuration(btn) >= LONG_PRESS_MS) {
+      buttons.clearQueuedPresses();
+      jumpToPreviousChapter();
+      return;
     }
   }
 
-  // if (buttons.isPressed(Buttons::VOLUME_UP)) {
-  //   // switch through alignments (cycle through enum values safely)
-  //   layoutConfig.alignment =
-  //       static_cast<LayoutStrategy::TextAlignment>((static_cast<int>(layoutConfig.alignment) + 1) % 3);
-  //   showPage();
-  // }
+  // Now consume all queued button presses - but only act once per direction
+  bool shouldGoBack = false;
+  bool shouldOpenSettings = false;
+  bool shouldNextPage = false;
+  bool shouldPrevPage = false;
+
+  uint8_t btn;
+  while ((btn = buttons.consumeNextPress()) != Buttons::NONE) {
+    switch (btn) {
+      case Buttons::BACK:
+        shouldGoBack = true;
+        break;
+
+      case Buttons::CONFIRM:
+        shouldOpenSettings = true;
+        break;
+
+      default:
+        // Check if it's a next/prev button
+        if (btn == nextBtn1 || btn == nextBtn2) {
+          shouldNextPage = true;
+        } else if (btn == prevBtn1 || btn == prevBtn2) {
+          shouldPrevPage = true;
+        }
+        break;
+    }
+  }
+
+  // Handle navigation - only one action wins (priority: back > settings > page turn)
+  if (shouldGoBack) {
+    saveSettingsToFile();
+    uiManager.showScreen(UIManager::ScreenId::FileBrowser);
+    return;
+  }
+
+  if (shouldOpenSettings) {
+    uiManager.showScreen(UIManager::ScreenId::Settings);
+    return;
+  }
+
+  // Page navigation - next takes priority over prev if both pressed
+  if (shouldNextPage) {
+    nextPage();
+  } else if (shouldPrevPage) {
+    prevPage();
+  }
 }
 
 void TextViewerScreen::show() {

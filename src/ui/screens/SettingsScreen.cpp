@@ -25,16 +25,47 @@ void SettingsScreen::begin() {
 }
 
 void SettingsScreen::handleButtons(Buttons& buttons) {
-  if (buttons.isPressed(Buttons::BACK)) {
+  bool needsUpdate = false;
+  bool shouldGoBack = false;
+
+  // Consume all queued button presses
+  uint8_t btn;
+  while ((btn = buttons.consumeNextPress()) != Buttons::NONE) {
+    switch (btn) {
+      case Buttons::BACK:
+        shouldGoBack = true;
+        break;
+
+      case Buttons::LEFT:
+        selectNext();
+        needsUpdate = true;
+        break;
+
+      case Buttons::RIGHT:
+        selectPrev();
+        needsUpdate = true;
+        break;
+
+      case Buttons::CONFIRM:
+        if (!isSpacer(selectedIndex)) {
+          toggleCurrentSetting();
+          needsUpdate = true;
+        }
+        break;
+    }
+  }
+
+  // Handle navigation after processing all inputs
+  if (shouldGoBack) {
     saveSettings();
-    // Return to the screen we came from
     uiManager.showScreen(uiManager.getPreviousScreen());
-  } else if (buttons.isPressed(Buttons::LEFT)) {
-    selectNext();
-  } else if (buttons.isPressed(Buttons::RIGHT)) {
-    selectPrev();
-  } else if (buttons.isPressed(Buttons::CONFIRM)) {
-    toggleCurrentSetting();
+    return;
+  }
+
+  // Only update display once after processing all inputs
+  if (needsUpdate) {
+    saveSettings();
+    show();
   }
 }
 
@@ -124,7 +155,6 @@ void SettingsScreen::selectNext() {
     if (selectedIndex >= MENU_ITEM_COUNT)
       selectedIndex = 0;
   }
-  show();
 }
 
 void SettingsScreen::selectPrev() {
@@ -137,7 +167,6 @@ void SettingsScreen::selectPrev() {
     if (selectedIndex < 0)
       selectedIndex = MENU_ITEM_COUNT - 1;
   }
-  show();
 }
 
 void SettingsScreen::toggleCurrentSetting() {
@@ -185,8 +214,6 @@ void SettingsScreen::toggleCurrentSetting() {
       applyUIFontSettings();
       break;
   }
-  saveSettings();
-  show();
 }
 
 void SettingsScreen::loadSettings() {

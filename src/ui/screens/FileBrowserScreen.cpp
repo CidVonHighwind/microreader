@@ -25,14 +25,48 @@ void FileBrowserScreen::begin() {
 
 // Ensure member function is in class scope
 void FileBrowserScreen::handleButtons(Buttons& buttons) {
-  if (buttons.isPressed(Buttons::BACK)) {
+  bool needsUpdate = false;
+  bool shouldGoBack = false;
+  bool shouldConfirm = false;
+
+  // Consume all queued button presses
+  uint8_t btn;
+  while ((btn = buttons.consumeNextPress()) != Buttons::NONE) {
+    switch (btn) {
+      case Buttons::BACK:
+        shouldGoBack = true;
+        break;
+
+      case Buttons::CONFIRM:
+        shouldConfirm = true;
+        break;
+
+      case Buttons::LEFT:
+        selectNext();
+        needsUpdate = true;
+        break;
+
+      case Buttons::RIGHT:
+        selectPrev();
+        needsUpdate = true;
+        break;
+    }
+  }
+
+  // Handle navigation after processing all inputs
+  if (shouldGoBack) {
     uiManager.showScreen(UIManager::ScreenId::Settings);
-  } else if (buttons.isPressed(Buttons::CONFIRM)) {
+    return;
+  }
+
+  if (shouldConfirm) {
     confirm();
-  } else if (buttons.isPressed(Buttons::LEFT)) {
-    selectNext();
-  } else if (buttons.isPressed(Buttons::RIGHT)) {
-    selectPrev();
+    return;
+  }
+
+  // Only update display once after processing all inputs
+  if (needsUpdate) {
+    show();
   }
 }
 
@@ -191,8 +225,6 @@ void FileBrowserScreen::offsetSelection(int offset) {
     Settings& s = uiManager.getSettings();
     s.setString(String("filebrowser.selected"), sdFiles[sdSelectedIndex]);
   }
-
-  show();
 }
 
 void FileBrowserScreen::loadFolder(int maxFiles) {
