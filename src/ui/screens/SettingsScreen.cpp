@@ -13,6 +13,9 @@
 
 constexpr int SettingsScreen::marginValues[];
 constexpr int SettingsScreen::lineHeightValues[];
+constexpr SettingsScreen::MenuItem SettingsScreen::menuItems[];
+constexpr int SettingsScreen::MENU_ITEM_COUNT;
+constexpr int SettingsScreen::SETTINGS_COUNT;
 
 SettingsScreen::SettingsScreen(EInkDisplay& display, TextRenderer& renderer, UIManager& uiManager)
     : display(display), textRenderer(renderer), uiManager(uiManager) {}
@@ -59,22 +62,30 @@ void SettingsScreen::renderSettings() {
     int16_t x1, y1;
     uint16_t w, h;
     textRenderer.getTextBounds(title, 0, 0, &x1, &y1, &w, &h);
-    int16_t centerX = (480 - (int)w) / 2;
-    textRenderer.setCursor(centerX, 75);
+    int16_t centerX = (DISPLAY_WIDTH - (int)w) / 2;
+    textRenderer.setCursor(centerX, TITLE_Y);
     textRenderer.print(title);
   }
 
   textRenderer.setFont(getMainFont());
 
-  // Render settings list
-  const int lineHeight = 28;
-  int totalHeight = SETTINGS_COUNT * lineHeight;
-  int startY = (800 - totalHeight) / 2;  // center vertically
+  // Render menu items
+  const int spacerHeight = MENU_LINE_HEIGHT / 2;                            // Spacers are 50% smaller
+  int totalHeight = MENU_ITEM_COUNT * MENU_LINE_HEIGHT - spacerHeight * 3;  // Subtract spacer reductions
+  int startY = (DISPLAY_HEIGHT - totalHeight) / 2;                          // center vertically
 
-  for (int i = 0; i < SETTINGS_COUNT; ++i) {
-    String displayName = getSettingName(i);
+  int currentY = startY;
+  for (int i = 0; i < MENU_ITEM_COUNT; ++i) {
+    // Skip rendering spacer lines
+    if (isSpacer(i)) {
+      currentY += spacerHeight;
+      continue;
+    }
+
+    int settingIndex = getSettingIndexFromMenu(i);
+    String displayName = getSettingName(settingIndex);
     displayName += ": ";
-    displayName += getSettingValue(i);
+    displayName += getSettingValue(settingIndex);
 
     if (i == selectedIndex) {
       displayName = String(">") + displayName + String("<");
@@ -83,10 +94,10 @@ void SettingsScreen::renderSettings() {
     int16_t x1, y1;
     uint16_t w, h;
     textRenderer.getTextBounds(displayName.c_str(), 0, 0, &x1, &y1, &w, &h);
-    int16_t centerX = (480 - (int)w) / 2;
-    int16_t rowY = startY + i * lineHeight;
-    textRenderer.setCursor(centerX, rowY);
+    int16_t centerX = (DISPLAY_WIDTH - (int)w) / 2;
+    textRenderer.setCursor(centerX, currentY);
     textRenderer.print(displayName);
+    currentY += MENU_LINE_HEIGHT;
   }
 
   // Draw battery percentage at bottom
@@ -97,63 +108,79 @@ void SettingsScreen::renderSettings() {
     int16_t bx1, by1;
     uint16_t bw, bh;
     textRenderer.getTextBounds(pctStr.c_str(), 0, 0, &bx1, &by1, &bw, &bh);
-    int16_t bx = (480 - (int)bw) / 2;
-    int16_t by = 790;
-    textRenderer.setCursor(bx, by);
+    int16_t bx = (DISPLAY_WIDTH - (int)bw) / 2;
+    textRenderer.setCursor(bx, BATTERY_Y);
     textRenderer.print(pctStr);
   }
 }
 
 void SettingsScreen::selectNext() {
   selectedIndex++;
-  if (selectedIndex >= SETTINGS_COUNT)
+  if (selectedIndex >= MENU_ITEM_COUNT)
     selectedIndex = 0;
+  // Skip spacers
+  while (isSpacer(selectedIndex)) {
+    selectedIndex++;
+    if (selectedIndex >= MENU_ITEM_COUNT)
+      selectedIndex = 0;
+  }
   show();
 }
 
 void SettingsScreen::selectPrev() {
   selectedIndex--;
   if (selectedIndex < 0)
-    selectedIndex = SETTINGS_COUNT - 1;
+    selectedIndex = MENU_ITEM_COUNT - 1;
+  // Skip spacers
+  while (isSpacer(selectedIndex)) {
+    selectedIndex--;
+    if (selectedIndex < 0)
+      selectedIndex = MENU_ITEM_COUNT - 1;
+  }
   show();
 }
 
 void SettingsScreen::toggleCurrentSetting() {
-  switch (selectedIndex) {
-    case 0:  // Horizontal Margins
+  if (isSpacer(selectedIndex))
+    return;
+
+  int settingIndex = getSettingIndexFromMenu(selectedIndex);
+
+  switch (settingIndex) {
+    case SETTING_MARGINS:
       marginIndex++;
       if (marginIndex >= marginValuesCount)
         marginIndex = 0;
       break;
-    case 1:  // Line Height
+    case SETTING_LINE_SPACING:
       lineHeightIndex++;
       if (lineHeightIndex >= lineHeightValuesCount)
         lineHeightIndex = 0;
       break;
-    case 2:  // Alignment
+    case SETTING_ALIGNMENT:
       alignmentIndex++;
-      if (alignmentIndex >= 3)
+      if (alignmentIndex >= ALIGNMENT_COUNT)
         alignmentIndex = 0;
       break;
-    case 3:  // Show Chapter Numbers
+    case SETTING_CHAPTER_NUMBERS:
       showChapterNumbersIndex = 1 - showChapterNumbersIndex;
       break;
-    case 4:  // Flip Page Buttons
+    case SETTING_PAGE_BUTTONS:
       flipPageButtonsIndex = 1 - flipPageButtonsIndex;
       break;
-    case 5:  // Font Family
+    case SETTING_FONT_FAMILY:
       fontFamilyIndex++;
-      if (fontFamilyIndex >= 2)
+      if (fontFamilyIndex >= FONT_FAMILY_COUNT)
         fontFamilyIndex = 0;
       applyFontSettings();
       break;
-    case 6:  // Font Size
+    case SETTING_FONT_SIZE:
       fontSizeIndex++;
-      if (fontSizeIndex >= 3)
+      if (fontSizeIndex >= FONT_SIZE_COUNT)
         fontSizeIndex = 0;
       applyFontSettings();
       break;
-    case 7:  // UI Font Size
+    case SETTING_UI_FONT_SIZE:
       uiFontSizeIndex = 1 - uiFontSizeIndex;
       applyUIFontSettings();
       break;
@@ -166,7 +193,7 @@ void SettingsScreen::loadSettings() {
   Settings& s = uiManager.getSettings();
 
   // Load horizontal margins (applies to both left and right)
-  int margin = 10;
+  int margin = DEFAULT_MARGIN;
   if (s.getInt(String("settings.margin"), margin)) {
     for (int i = 0; i < marginValuesCount; i++) {
       if (marginValues[i] == margin) {
@@ -177,7 +204,7 @@ void SettingsScreen::loadSettings() {
   }
 
   // Load line height
-  int lineHeight = 30;
+  int lineHeight = DEFAULT_LINE_HEIGHT;
   if (s.getInt(String("settings.lineHeight"), lineHeight)) {
     for (int i = 0; i < lineHeightValuesCount; i++) {
       if (lineHeightValues[i] == lineHeight) {
@@ -247,21 +274,21 @@ void SettingsScreen::saveSettings() {
 
 String SettingsScreen::getSettingName(int index) {
   switch (index) {
-    case 0:
+    case SETTING_MARGINS:
       return "Margins";
-    case 1:
+    case SETTING_LINE_SPACING:
       return "Line Spacing";
-    case 2:
+    case SETTING_ALIGNMENT:
       return "Alignment";
-    case 3:
+    case SETTING_CHAPTER_NUMBERS:
       return "Chapter Numbers";
-    case 4:
-      return "Flip Page Buttons";
-    case 5:
+    case SETTING_PAGE_BUTTONS:
+      return "Page Buttons";
+    case SETTING_FONT_FAMILY:
       return "Font Family";
-    case 6:
+    case SETTING_FONT_SIZE:
       return "Font Size";
-    case 7:
+    case SETTING_UI_FONT_SIZE:
       return "UI Font Size";
     default:
       return "";
@@ -270,11 +297,11 @@ String SettingsScreen::getSettingName(int index) {
 
 String SettingsScreen::getSettingValue(int index) {
   switch (index) {
-    case 0:
+    case SETTING_MARGINS:
       return String(marginValues[marginIndex]);
-    case 1:
+    case SETTING_LINE_SPACING:
       return String(lineHeightValues[lineHeightIndex]);
-    case 2:
+    case SETTING_ALIGNMENT:
       switch (alignmentIndex) {
         case 0:
           return "Left";
@@ -285,11 +312,11 @@ String SettingsScreen::getSettingValue(int index) {
         default:
           return "Unknown";
       }
-    case 3:
+    case SETTING_CHAPTER_NUMBERS:
       return showChapterNumbersIndex ? "On" : "Off";
-    case 4:
-      return flipPageButtonsIndex ? "Right=Next" : "Left=Next";
-    case 5:
+    case SETTING_PAGE_BUTTONS:
+      return flipPageButtonsIndex ? "Inverted" : "Normal";
+    case SETTING_FONT_FAMILY:
       switch (fontFamilyIndex) {
         case 0:
           return "NotoSans";
@@ -298,7 +325,7 @@ String SettingsScreen::getSettingValue(int index) {
         default:
           return "Unknown";
       }
-    case 6:
+    case SETTING_FONT_SIZE:
       switch (fontSizeIndex) {
         case 0:
           return "Small";
@@ -309,7 +336,7 @@ String SettingsScreen::getSettingValue(int index) {
         default:
           return "Unknown";
       }
-    case 7:
+    case SETTING_UI_FONT_SIZE:
       return uiFontSizeIndex ? "Large" : "Small";
     default:
       return "";
@@ -361,4 +388,16 @@ void SettingsScreen::applyUIFontSettings() {
   } else {
     setMainFont(&MenuFontBig);
   }
+}
+
+bool SettingsScreen::isSpacer(int menuIndex) const {
+  if (menuIndex < 0 || menuIndex >= MENU_ITEM_COUNT)
+    return false;
+  return menuItems[menuIndex].type == ITEM_SPACER;
+}
+
+int SettingsScreen::getSettingIndexFromMenu(int menuIndex) const {
+  if (menuIndex < 0 || menuIndex >= MENU_ITEM_COUNT)
+    return 0;
+  return menuItems[menuIndex].settingIndex;
 }
