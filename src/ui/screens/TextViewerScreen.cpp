@@ -300,8 +300,9 @@ void TextViewerScreen::showPage() {
       String chapterName = provider->getCurrentChapterName();
       if (!chapterName.isEmpty()) {
         // Truncate long chapter names
-        if (chapterName.length() > 30) {
-          chapterName = chapterName.substring(0, 27) + "...";
+        const int maxChapterNameLength = 48;
+        if (chapterName.length() > maxChapterNameLength) {
+          chapterName = chapterName.substring(0, maxChapterNameLength - 3) + "...";
         }
         indicator = chapterName;
         if (showChapterNumbers) {
