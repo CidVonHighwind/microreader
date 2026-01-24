@@ -12,35 +12,41 @@
 
 class UIManager;
 
+struct FileEntry {
+  String filename;
+  String displayName;
+};
+
 class FileBrowserScreen : public Screen {
  public:
   FileBrowserScreen(EInkDisplay& display, TextRenderer& renderer, SDCardManager& sdManager, UIManager& uiManager);
+
   void begin() override;
   void show() override;
   void activate() override;
-
   void handleButtons(class Buttons& buttons) override;
 
-  // Input helpers
   void confirm();
   void selectNext();
   void selectPrev();
   void offsetSelection(int offset);
 
  private:
+  void render();
   void loadFolder(int maxFiles = 200);
-  void renderSdBrowser();
+  FileEntry createFileEntry(const String& filename) const;
+  String stripExtension(const String& filename) const;
+  bool isSupportedFile(const String& filename) const;
+  bool hasExtension(const String& filename, const char* ext) const;
 
   EInkDisplay& display;
   TextRenderer& textRenderer;
   SDCardManager& sdManager;
   UIManager& uiManager;
 
-  std::vector<String> sdFiles;
-  int sdSelectedIndex = 0;
-  int sdScrollOffset = 0;
-
-  static const int SD_LINES_PER_SCREEN = 8;
+  std::vector<FileEntry> files;
+  int selectedIndex = 0;
+  int scrollOffset = 0;
 };
 
 #endif
