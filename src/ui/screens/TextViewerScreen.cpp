@@ -190,6 +190,7 @@ void TextViewerScreen::handleButtons(Buttons& buttons) {
 
   // Handle navigation - only one action wins (priority: back > settings > page turn)
   if (shouldGoBack) {
+    savePositionToFile();
     saveSettingsToFile();
     uiManager.showScreen(UIManager::ScreenId::FileBrowser);
     return;
