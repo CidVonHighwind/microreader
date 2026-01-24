@@ -98,16 +98,27 @@ void SettingsScreen::renderSettings() {
     textRenderer.print(title);
   }
 
-  textRenderer.setFont(getMainFont());
+  textRenderer.setFont(getUIFont(uiManager.getSettings()));
 
-  // Render menu items
-  const int spacerHeight = MENU_LINE_HEIGHT / 2;                            // Spacers are 50% smaller
-  int totalHeight = MENU_ITEM_COUNT * MENU_LINE_HEIGHT - spacerHeight * 3;  // Subtract spacer reductions
+  // Fixed bar dimensions based on UI font size
+  int16_t barHeight, barYOffset;
+  if (uiFontSizeIndex == 0) {  // Small font (14px)
+    barHeight = 16;
+    barYOffset = -13;
+  } else {  // Large font (20px)
+    barHeight = 22;
+    barYOffset = -18;
+  }
 
   // Get text height for proper vertical centering (Y is baseline, not top)
   int16_t tx1, ty1;
   uint16_t tw, textHeight;
-  textRenderer.getTextBounds("Ag", 0, 0, &tx1, &ty1, &tw, &textHeight);  // Use sample text to get height
+  textRenderer.getTextBounds("A", 0, 0, &tx1, &ty1, &tw, &textHeight);  // Use sample text to get height
+
+  // Calculate line height based on font metrics with padding
+  const int lineHeight = textHeight + 6;
+  const int spacerHeight = lineHeight / 2;                            // Spacers are 50% smaller
+  int totalHeight = MENU_ITEM_COUNT * lineHeight - spacerHeight * 3;  // Subtract spacer reductions
 
   int startY = (DISPLAY_HEIGHT - totalHeight) / 2 + textHeight;  // Add text height since Y is baseline
 
@@ -131,13 +142,12 @@ void SettingsScreen::renderSettings() {
 
     // Draw inverted selection bar for selected item
     if (i == selectedIndex) {
-      int16_t barPadding = 4;                                   // Horizontal padding on each side
-      int16_t barHeight = h + 4;                                // Slightly larger than text height
-      int16_t barY = currentY - h + 1;                          // Align with text
-      int16_t barX = centerX - barPadding;                      // Start slightly before text
-      int16_t barWidth = w + barPadding * 2;                    // Text width plus padding
-      display.fillRect(barX, barY, barWidth, barHeight, 0x00);  // Black bar behind text
-      textRenderer.setTextColor(TextRenderer::COLOR_WHITE);     // White text
+      int16_t barPadding = 4;
+      int16_t barX = centerX - barPadding;
+      int16_t barY = currentY + barYOffset;
+      uint16_t barW = w + 2 * barPadding;
+      display.fillRect(barX, barY, barW, barHeight, 0x00);   // Black bar behind text
+      textRenderer.setTextColor(TextRenderer::COLOR_WHITE);  // White text
     }
 
     textRenderer.setCursor(centerX, currentY);
@@ -147,7 +157,7 @@ void SettingsScreen::renderSettings() {
     if (i == selectedIndex) {
       textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
     }
-    currentY += MENU_LINE_HEIGHT;
+    currentY += lineHeight;
   }
 
   // Draw battery percentage at bottom
@@ -230,7 +240,6 @@ void SettingsScreen::toggleCurrentSetting() {
       break;
     case SETTING_UI_FONT_SIZE:
       uiFontSizeIndex = 1 - uiFontSizeIndex;
-      applyUIFontSettings();
       break;
   }
 }
@@ -298,7 +307,6 @@ void SettingsScreen::loadSettings() {
 
   // Apply the loaded font settings
   applyFontSettings();
-  applyUIFontSettings();
 }
 
 void SettingsScreen::saveSettings() {
@@ -421,18 +429,6 @@ void SettingsScreen::applyFontSettings() {
 
   if (targetFamily) {
     setCurrentFontFamily(targetFamily);
-  }
-}
-
-void SettingsScreen::applyUIFontSettings() {
-  // Set main and title fonts for UI elements
-  // Always use MenuHeader for headers/titles
-  setTitleFont(&MenuHeader);
-
-  if (uiFontSizeIndex == 0) {
-    setMainFont(&MenuFontSmall);
-  } else {
-    setMainFont(&MenuFontBig);
   }
 }
 

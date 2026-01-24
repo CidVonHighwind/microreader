@@ -36,7 +36,6 @@ class SettingsScreen : public Screen {
   static constexpr int DISPLAY_HEIGHT = 800;
   static constexpr int TITLE_Y = 75;
   static constexpr int BATTERY_Y = 790;
-  static constexpr int MENU_LINE_HEIGHT = 28;
 
   // Setting limits
   static constexpr int ALIGNMENT_COUNT = 3;
@@ -104,7 +103,6 @@ class SettingsScreen : public Screen {
   void loadSettings();
   void saveSettings();
   void applyFontSettings();
-  void applyUIFontSettings();
   String getSettingName(int settingIndex);
   String getSettingValue(int settingIndex);
   bool isSpacer(int menuIndex) const;

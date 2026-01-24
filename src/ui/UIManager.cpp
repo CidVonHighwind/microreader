@@ -96,7 +96,7 @@ void UIManager::showSleepScreen() {
     textRenderer.setFrameBuffer(display.getFrameBuffer());
     textRenderer.setBitmapType(TextRenderer::BITMAP_BW);
     textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
-    textRenderer.setFont(getMainFont());
+    textRenderer.setFont(getUIFont(*settings));
 
     const char* sleepText = "Sleeping...";
     int16_t x1, y1;

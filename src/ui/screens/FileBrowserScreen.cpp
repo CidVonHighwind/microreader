@@ -33,12 +33,6 @@ void FileBrowserScreen::begin() {
 }
 
 void FileBrowserScreen::activate() {
-  Settings& settings = uiManager.getSettings();
-  int uiFontSize = 0;
-  settings.getInt("settings.uiFontSize", uiFontSize);
-  setTitleFont(&MenuHeader);
-  setMainFont(uiFontSize == 0 ? &MenuFontSmall : &MenuFontBig);
-
   loadFolder();
 }
 
@@ -132,7 +126,22 @@ void FileBrowserScreen::render() {
   textRenderer.print("Microreader");
 
   // File list
-  textRenderer.setFont(getMainFont());
+  textRenderer.setFont(getUIFont(uiManager.getSettings()));
+
+  // Fixed bar dimensions based on UI font size
+  Settings& settings = uiManager.getSettings();
+  int uiFontSize = 0;
+  settings.getInt(String("settings.uiFontSize"), uiFontSize);
+
+  int16_t barHeight, barYOffset;
+  if (uiFontSize == 0) {  // Small font (14px)
+    barHeight = 16;
+    barYOffset = -13;
+  } else {  // Large font (20px)
+    barHeight = 22;
+    barYOffset = -18;
+  }
+
   int visibleCount = std::min(MAX_VISIBLE_FILES, static_cast<int>(files.size()) - scrollOffset);
   if (visibleCount <= 0) {
     return;
@@ -151,7 +160,11 @@ void FileBrowserScreen::render() {
 
     if (fileIndex == selectedIndex) {
       // Selection bar
-      display.fillRect(centerX - 4, rowY - h + 1, w + 8, h + 4, 0x00);
+      int16_t barPadding = 4;
+      int16_t barX = centerX - barPadding;
+      int16_t barY = rowY + barYOffset;
+      uint16_t barW = w + 2 * barPadding;
+      display.fillRect(barX, barY, barW, barHeight, 0x00);
       textRenderer.setTextColor(TextRenderer::COLOR_WHITE);
     }
 

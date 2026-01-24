@@ -1,6 +1,7 @@
 #include "FontManager.h"
 
 #include "FontDefinitions.h"
+#include "core/Settings.h"
 #include "other/MenuFontBig.h"
 #include "other/MenuFontSmall.h"
 #include "other/MenuHeader.h"
@@ -18,16 +19,12 @@ void setCurrentFontFamily(FontFamily* family) {
 }
 
 // Simple fonts
-static const SimpleGFXfont* mainFont = &MenuFontSmall;
 static const SimpleGFXfont* titleFont = &MenuHeader;
 
-const SimpleGFXfont* getMainFont() {
-  return mainFont;
-}
-
-void setMainFont(const SimpleGFXfont* font) {
-  if (font)
-    mainFont = font;
+const SimpleGFXfont* getUIFont(Settings& settings) {
+  int uiFontSize = 0;
+  settings.getInt("settings.uiFontSize", uiFontSize);
+  return (uiFontSize == 0) ? &MenuFontSmall : &MenuFontBig;
 }
 
 const SimpleGFXfont* getTitleFont() {
