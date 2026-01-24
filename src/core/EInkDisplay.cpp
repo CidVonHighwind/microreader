@@ -307,6 +307,35 @@ void EInkDisplay::clearScreen(uint8_t color) {
   memset(frameBuffer, color, BUFFER_SIZE);
 }
 
+void EInkDisplay::fillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t color) {
+  // Fill a rectangle in the framebuffer
+  // Note: The display is 800x480 but we use it in portrait mode (480x800)
+  // The framebuffer is stored in landscape orientation (800 wide = 100 bytes, 480 rows)
+  // Portrait coordinates (x,y) map to landscape as: landscape_x = y, landscape_y = (480-1) - x
+
+  uint8_t fillByte = (color == 0x00) ? 0x00 : 0xFF;
+
+  for (uint16_t py = y; py < y + h && py < 800; py++) {
+    for (uint16_t px = x; px < x + w && px < 480; px++) {
+      // Convert portrait (px, py) to landscape coordinates
+      uint16_t lx = py;                         // landscape x = portrait y
+      uint16_t ly = (DISPLAY_HEIGHT - 1) - px;  // landscape y = inverted portrait x
+
+      if (lx >= DISPLAY_WIDTH || ly >= DISPLAY_HEIGHT)
+        continue;
+
+      uint32_t byteIndex = ly * DISPLAY_WIDTH_BYTES + (lx / 8);
+      uint8_t bitPosition = 7 - (lx % 8);
+
+      if (color == 0x00) {
+        frameBuffer[byteIndex] &= ~(1 << bitPosition);  // Clear bit (black)
+      } else {
+        frameBuffer[byteIndex] |= (1 << bitPosition);  // Set bit (white)
+      }
+    }
+  }
+}
+
 void EInkDisplay::drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                             bool fromProgmem) {
   if (!frameBuffer) {

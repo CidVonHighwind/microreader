@@ -103,7 +103,13 @@ void SettingsScreen::renderSettings() {
   // Render menu items
   const int spacerHeight = MENU_LINE_HEIGHT / 2;                            // Spacers are 50% smaller
   int totalHeight = MENU_ITEM_COUNT * MENU_LINE_HEIGHT - spacerHeight * 3;  // Subtract spacer reductions
-  int startY = (DISPLAY_HEIGHT - totalHeight) / 2;                          // center vertically
+
+  // Get text height for proper vertical centering (Y is baseline, not top)
+  int16_t tx1, ty1;
+  uint16_t tw, textHeight;
+  textRenderer.getTextBounds("Ag", 0, 0, &tx1, &ty1, &tw, &textHeight);  // Use sample text to get height
+
+  int startY = (DISPLAY_HEIGHT - totalHeight) / 2 + textHeight;  // Add text height since Y is baseline
 
   int currentY = startY;
   for (int i = 0; i < MENU_ITEM_COUNT; ++i) {
@@ -118,16 +124,29 @@ void SettingsScreen::renderSettings() {
     displayName += ": ";
     displayName += getSettingValue(settingIndex);
 
-    if (i == selectedIndex) {
-      displayName = String(">") + displayName + String("<");
-    }
-
     int16_t x1, y1;
     uint16_t w, h;
     textRenderer.getTextBounds(displayName.c_str(), 0, 0, &x1, &y1, &w, &h);
     int16_t centerX = (DISPLAY_WIDTH - (int)w) / 2;
+
+    // Draw inverted selection bar for selected item
+    if (i == selectedIndex) {
+      int16_t barPadding = 4;                                   // Horizontal padding on each side
+      int16_t barHeight = h + 4;                                // Slightly larger than text height
+      int16_t barY = currentY - h + 1;                          // Align with text
+      int16_t barX = centerX - barPadding;                      // Start slightly before text
+      int16_t barWidth = w + barPadding * 2;                    // Text width plus padding
+      display.fillRect(barX, barY, barWidth, barHeight, 0x00);  // Black bar behind text
+      textRenderer.setTextColor(TextRenderer::COLOR_WHITE);     // White text
+    }
+
     textRenderer.setCursor(centerX, currentY);
     textRenderer.print(displayName);
+
+    // Reset to black text for non-selected items
+    if (i == selectedIndex) {
+      textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
+    }
     currentY += MENU_LINE_HEIGHT;
   }
 

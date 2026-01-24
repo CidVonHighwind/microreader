@@ -265,6 +265,11 @@ void TextRenderer::drawChar(uint32_t codepoint) {
   const uint8_t* bitmap_msb = f->bitmap_gray_msb;
   bool isGrayscale = (bitmapType != BITMAP_BW);
 
+  // Determine pixel state based on text color
+  // COLOR_BLACK (0) = draw black pixels (state=true)
+  // COLOR_WHITE (1) = draw white pixels (state=false)
+  bool pixelState = (textColor == COLOR_BLACK);
+
   // Render each pixel in the glyph
   for (uint8_t yy = 0; yy < h; yy++) {
     for (uint8_t xx = 0; xx < w; xx++) {
@@ -283,7 +288,7 @@ void TextRenderer::drawChar(uint32_t codepoint) {
       } else {
         // Check if pixel is set (0 = pixel on in our bitmap format)
         if ((bitmap[byteIndex] & bitMask) == 0) {
-          drawPixel(px, py, true);
+          drawPixel(px, py, pixelState);
         }
       }
     }

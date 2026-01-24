@@ -130,8 +130,13 @@ void FileBrowserScreen::renderSdBrowser() {
   if (drawable == 0)
     return;
 
+  // Get text height for proper vertical centering (Y is baseline, not top)
+  int16_t tx1, ty1;
+  uint16_t tw, textHeight;
+  textRenderer.getTextBounds("Ag", 0, 0, &tx1, &ty1, &tw, &textHeight);  // Use sample text to get height
+
   int totalHeight = drawable * lineHeight;
-  int startY = (800 - totalHeight) / 2;  // center vertically (pageHeight = 800)
+  int startY = (800 - totalHeight) / 2 + textHeight;  // Add text height since Y is baseline
 
   for (int i = 0; i < drawable; ++i) {
     int idx = sdScrollOffset + i;
@@ -140,6 +145,15 @@ void FileBrowserScreen::renderSdBrowser() {
     // filename intact so confirm() can open it later.
     // For .epub files, keep the extension visible.
     String displayNameRaw = name;
+    // Strip .epub extension (5 characters)
+    if (displayNameRaw.length() >= 5) {
+      String ext = displayNameRaw.substring(displayNameRaw.length() - 5);
+      ext.toLowerCase();
+      if (ext == String(".epub")) {
+        displayNameRaw = displayNameRaw.substring(0, displayNameRaw.length() - 5);
+      }
+    }
+    // Strip .txt extension (4 characters)
     if (displayNameRaw.length() >= 4) {
       String ext = displayNameRaw.substring(displayNameRaw.length() - 4);
       ext.toLowerCase();
@@ -151,21 +165,32 @@ void FileBrowserScreen::renderSdBrowser() {
     if (displayNameRaw.length() > 30)
       displayNameRaw = displayNameRaw.substring(0, 27) + "...";
 
-    String displayName;
-    if (idx == sdSelectedIndex) {
-      // Show both left and right markers around the selection and center the whole string
-      displayName = String(">") + displayNameRaw + String("<");
-    } else {
-      displayName = displayNameRaw;
-    }
+    String displayName = displayNameRaw;
 
     int16_t x1, y1;
     uint16_t w, h;
     textRenderer.getTextBounds(displayName.c_str(), 0, 0, &x1, &y1, &w, &h);
-    int16_t centerX = (480 - (int)w) / 2;  // horizontal center (pageWidth = 480)
+    int16_t centerX = (480 - (int)w) / 2;
     int16_t rowY = startY + i * lineHeight;
+
+    // Draw inverted selection bar for selected item
+    if (idx == sdSelectedIndex) {
+      int16_t barPadding = 4;                                   // Horizontal padding on each side
+      int16_t barHeight = h + 4;                                // Slightly larger than text height
+      int16_t barY = rowY - h + 1;                              // Align with text
+      int16_t barX = centerX - barPadding;                      // Start slightly before text
+      int16_t barWidth = w + barPadding * 2;                    // Text width plus padding
+      display.fillRect(barX, barY, barWidth, barHeight, 0x00);  // Black bar behind text
+      textRenderer.setTextColor(TextRenderer::COLOR_WHITE);     // White text
+    }
+
     textRenderer.setCursor(centerX, rowY);
     textRenderer.print(displayName);
+
+    // Reset to black text for non-selected items
+    if (idx == sdSelectedIndex) {
+      textRenderer.setTextColor(TextRenderer::COLOR_BLACK);
+    }
   }
 
   // Draw battery percentage at bottom-right of the screen
