@@ -20,6 +20,11 @@ class MainMenu final : public ListMenuScreen {
     books_dir_ = dir;
   }
 
+  // Force the book list to rescan on the next update.
+  void request_rescan() {
+    needs_scan_ = true;
+  }
+
   // Restore the book list selection to the entry matching this path.
   // Call before start(); applied after directory scan.
   void set_initial_selection(const char* path) {
@@ -82,6 +87,17 @@ class MainMenu final : public ListMenuScreen {
   DrawBuffer* buf_ = nullptr;
   BookListFormat list_format_ = BookListFormat::TitleOnly;
   bool needs_scan_ = false;
+
+  // Long-press delete state
+  int pending_select_idx_ = -1;   // index selected via on_select, pending resolution
+  int delete_index_ = -1;         // book to delete when confirmed
+  bool delete_pending_ = false;   // waiting for confirm/cancel on delete prompt
+  uint32_t button1_hold_ms_ = 0;  // accumulated hold time for Button1
+  std::string delete_book_label_; // original label of book pending deletion
+  static constexpr uint32_t kLongPressMs = 800;
+
+  void do_delete_(DrawBuffer& buf, IRuntime& runtime);
+  void cancel_delete_(DrawBuffer& buf, IRuntime& runtime);
 
   struct BookEntry {
     std::string path;
