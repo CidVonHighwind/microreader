@@ -93,7 +93,7 @@ void MainMenu::update(const ButtonState& buttons, DrawBuffer& buf, IRuntime& run
       delete_index_ = idx;
       delete_book_label_ = entries_[idx].label;
       title_ = "Delete?";
-      set_item_label(idx, "Sel=Yes  Back=No");
+      set_item_label(idx, "Back=No  Sel=Yes");
       draw_all_(buf, runtime.battery_percentage());
       buf.refresh();
       return;
