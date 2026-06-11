@@ -112,6 +112,11 @@ void BookIndex::set_last_opened(std::string_view path, uint32_t order) {
   }
 }
 
+void BookIndex::remove_entry(int index) {
+  if (index >= 0 && index < static_cast<int>(entries_.size()))
+    entries_.erase(entries_.begin() + index);
+}
+
 void BookIndex::build_index(const std::string& root_dir, DrawBuffer& buf) {
   entries_.clear();
   pool_.reset();

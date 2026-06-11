@@ -34,6 +34,7 @@ static std::string_view filename_sv(const std::string& path) {
 
 void MainMenu::on_start() {
   title_ = "Microreader";
+  set_long_back_threshold(20);
 
   if (!app_->data_dir_) {
     needs_scan_ = false;
@@ -84,6 +85,13 @@ void MainMenu::stop() {
 
 void MainMenu::on_back() {
   app_->push_screen(ScreenId::Settings);
+}
+
+void MainMenu::on_long_back(int index) {
+  if (index < 0 || index >= static_cast<int>(entries_.size()))
+    return;
+  app_->delete_confirm()->setup(entries_[index].path);
+  app_->push_screen(ScreenId::DeleteConfirm);
 }
 
 void MainMenu::scan_directory_(DrawBuffer& buf) {

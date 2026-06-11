@@ -14,6 +14,7 @@ set(lib_sources
     ${LIB}/screens/ReaderScreen.cpp
     ${LIB}/screens/SettingsScreen.cpp
     ${LIB}/screens/ChapterSelectScreen.cpp
+    ${LIB}/screens/DeleteConfirmScreen.cpp
     ${LIB}/screens/LinksScreen.cpp
     ${LIB}/screens/ReaderOptionsScreen.cpp
     ${LIB}/content/ZipReader.cpp

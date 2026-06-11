@@ -46,6 +46,10 @@ class BookIndex {
   // entry only; call save() afterwards to persist.
   void set_last_opened(std::string_view path, uint32_t order);
 
+  // Remove the entry at `index` from the in-memory entries vector.
+  // The StringPool is not compacted (individual strings cannot be freed).
+  void remove_entry(int index);
+
   void clear_entries();
 
  private:

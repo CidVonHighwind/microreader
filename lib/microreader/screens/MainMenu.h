@@ -90,6 +90,7 @@ class MainMenu final : public ListMenuScreen {
   void on_start() override;
   void on_select(int index) override;
   void on_back() override;
+  void on_long_back(int index) override;
 
  private:
   const char* books_dir_ = nullptr;

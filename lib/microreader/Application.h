@@ -9,6 +9,7 @@
 #include "ScreenManager.h"
 #include "display/DrawBuffer.h"
 #include "screens/ChapterSelectScreen.h"
+#include "screens/DeleteConfirmScreen.h"
 #include "screens/IScreen.h"
 #include "screens/LinksScreen.h"
 #include "screens/MainMenu.h"
@@ -29,6 +30,7 @@ enum class ScreenId : uint8_t {
   ReaderOptions,
   ChapterSelect,
   Links,
+  DeleteConfirm,
   BouncingBall,
   GrayscaleDemo,
 };
@@ -105,6 +107,9 @@ class Application {
   }
   MainMenu* main_menu() {
     return &menu_;
+  }
+  DeleteConfirmScreen* delete_confirm() {
+    return &delete_confirm_;
   }
 
   bool invert_menu_buttons() const {
@@ -245,6 +250,7 @@ class Application {
   ReaderOptionsScreen reader_options_;
   ChapterSelectScreen chapter_select_;
   LinksScreen links_screen_;
+  DeleteConfirmScreen delete_confirm_;
 
 #ifdef MICROREADER_ENABLE_DEMOS
   BouncingBallDemo bouncing_ball_;

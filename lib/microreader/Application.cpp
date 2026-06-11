@@ -45,6 +45,7 @@ void Application::start(DrawBuffer& buf, IRuntime& runtime) {
   reader_options_.set_app(this);
   chapter_select_.set_app(this);
   links_screen_.set_app(this);
+  delete_confirm_.set_app(this);
 
 #ifdef MICROREADER_ENABLE_DEMOS
   bouncing_ball_.set_app(this);
@@ -287,6 +288,8 @@ IScreen* microreader::Application::screen_for_(ScreenId id) {
       return &chapter_select_;
     case ScreenId::Links:
       return &links_screen_;
+    case ScreenId::DeleteConfirm:
+      return &delete_confirm_;
 
 #ifdef MICROREADER_ENABLE_DEMOS
     case ScreenId::BouncingBall:

@@ -125,6 +125,16 @@ class ListMenuScreen : public IScreen {
   // Called when user presses back.
   virtual void on_back();
 
+  // Called when user holds back for long_back_threshold_ frames (0 = disabled).
+  virtual void on_long_back(int index) {}
+
+  void set_long_back_threshold(int frames) {
+    long_back_threshold_ = frames;
+  }
+  int long_back_threshold() const {
+    return long_back_threshold_;
+  }
+
  protected:
   BitmapFont ui_font_;
   BitmapFont header_font_;
@@ -133,6 +143,8 @@ class ListMenuScreen : public IScreen {
   void request_redraw() {
     force_redraw_ = true;
   }
+
+  int buffer_width() const { return buf_ ? buf_->width() : 0; }
 
   // Re-run start() to rebuild items with updated settings (e.g. after font change).
   void restart() {
@@ -155,6 +167,9 @@ class ListMenuScreen : public IScreen {
   int initial_selection_ = -1;
   int hold_frames_up_ = 0;
   int hold_frames_down_ = 0;
+  int long_back_threshold_ = 0;
+  int back_hold_frames_ = 0;
+  bool back_held_ = false;
 
   bool align_left_ = false;
   bool on_start_set_selection_ = false;

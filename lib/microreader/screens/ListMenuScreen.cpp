@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <cstring>
 
-#include "../HeapLog.h"
-
 #include "../Application.h"
 #include "../display/ui_font_header.h"
 #include "../display/ui_font_large.h"
@@ -40,6 +38,8 @@ void ListMenuScreen::start(DrawBuffer& buf, IRuntime& runtime) {
     ui_font_.init(kFontData_ui_small_mbf, kFontData_ui_small_mbf_size);
   if (!header_font_.valid())
     header_font_.init(kFontData_ui_header_mbf, kFontData_ui_header_mbf_size);
+  back_held_ = false;
+  back_hold_frames_ = 0;
   const int prev_selected = selected_;
   clear_items();
   on_start_set_selection_ = false;
@@ -444,13 +444,13 @@ void ListMenuScreen::update(const ButtonState& buttons, DrawBuffer& buf, IRuntim
   Button btn;
   while (buttons.next_press(btn)) {
     if (btn == logical_up_front || btn == logical_up_side) {
-      if (n > 0) {
+      if (n > 0 && !back_held_) {
         move_up();
         moved = true;
         had_up_press = true;
       }
     } else if (btn == logical_down_front || btn == logical_down_side) {
-      if (n > 0) {
+      if (n > 0 && !back_held_) {
         move_down();
         moved = true;
         had_down_press = true;
@@ -458,21 +458,28 @@ void ListMenuScreen::update(const ButtonState& buttons, DrawBuffer& buf, IRuntim
     } else {
       switch (btn) {
         case Button::Button0:
-          // Flush any pending move before back so the screen redraws correctly
-          // if on_back() decides to stay.
-          if (moved) {
-            draw_all_(buf, runtime.battery_percentage());
-            buf.refresh();
-            moved = false;
-          }
-          on_back();
-          if (app_ && app_->has_pending_transition()) {
-            return;
+          if (long_back_threshold_ > 0) {
+            if (!back_held_) {
+              back_held_ = true;
+              back_hold_frames_ = 0;
+            }
+          } else {
+            // Flush any pending move before back so the screen redraws correctly
+            // if on_back() decides to stay.
+            if (moved) {
+              draw_all_(buf, runtime.battery_percentage());
+              buf.refresh();
+              moved = false;
+            }
+            on_back();
+            if (app_ && app_->has_pending_transition()) {
+              return;
+            }
           }
           break;
 
         case Button::Button1:  // select
-          if (n > 0 && selected_ < n) {
+          if (n > 0 && selected_ < n && !back_held_) {
             on_select(selected_);
             if (app_ && app_->has_pending_transition()) {
               return;
@@ -491,8 +498,8 @@ void ListMenuScreen::update(const ButtonState& buttons, DrawBuffer& buf, IRuntim
   // step size grows by 1 each frame: frame 0 = 1, frame 1 = 2, frame 2 = 3, …
   auto hold_step = [](int frames) -> int { return frames + 1; };
 
-  const bool up_held = !had_up_press && (buttons.is_down(logical_up_front) || buttons.is_down(logical_up_side));
-  const bool down_held = !had_down_press && (buttons.is_down(logical_down_front) || buttons.is_down(logical_down_side));
+  const bool up_held = !had_up_press && !back_held_ && (buttons.is_down(logical_up_front) || buttons.is_down(logical_up_side));
+  const bool down_held = !had_down_press && !back_held_ && (buttons.is_down(logical_down_front) || buttons.is_down(logical_down_side));
 
   if (up_held && n > 0) {
     const int step = hold_step(hold_frames_up_);
@@ -512,6 +519,34 @@ void ListMenuScreen::update(const ButtonState& buttons, DrawBuffer& buf, IRuntim
     moved = true;
   } else if (!had_down_press) {
     hold_frames_down_ = 0;
+  }
+
+  // Long-back hold tracking: count frames while Button0 is held.
+  if (back_held_) {
+    if (buttons.is_down(Button::Button0)) {
+      ++back_hold_frames_;
+      if (back_hold_frames_ >= long_back_threshold_) {
+        on_long_back(selected_);
+        back_held_ = false;
+        back_hold_frames_ = 0;
+        return;
+      }
+    } else {
+      // Released before threshold — normal tap
+      if (moved) {
+        draw_all_(buf, runtime.battery_percentage());
+        buf.refresh();
+        moved = false;
+      }
+      on_back();
+      if (app_ && app_->has_pending_transition()) {
+        back_held_ = false;
+        back_hold_frames_ = 0;
+        return;
+      }
+      back_held_ = false;
+      back_hold_frames_ = 0;
+    }
   }
 
   if (moved || needs_draw || force_redraw_) {
