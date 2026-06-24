@@ -483,7 +483,7 @@ static void handle_font_upload() {
 //   'P'                       → render-page benchmark (current page)
 //   'R' + 2B path_len + path  → recursive delete
 //   'S'                       → heap status ("STATUS:free=N,largest=M\n")
-//   'T' + 2B path_len + path  → read file: "READY\n" + 4B size + raw data + 4B CRC32
+//   'T' + 2B path_len + path  → read file: "READY\n" + 4B size + [2KB chunks, 0x06 ACK each] + 4B CRC32
 //   'W' + 2B path_len + path
 //       + 4B size + data
 //       + 4B CRC32            → write file (chunked + 0x06 ACKs)
@@ -930,7 +930,14 @@ static void handle_serial_cmd() {
       break;
     }
     case 'T': {
-      // Read file: host receives "READY\n" + 4B size LE + raw data + 4B CRC32 LE.
+      // Read file: host receives "READY\n" + 4B size LE + [2KB chunks, each
+      // ACKed with 0x06 from the host] + 4B CRC32 LE.
+      //
+      // The ACK-per-chunk flow control mirrors the upload protocol ('W') and
+      // prevents USB-CDC TX buffer overruns that cause data corruption or
+      // transfer aborts on larger files. Without pacing, the device writes
+      // faster than the host can drain the shared USB serial TX buffer, leading
+      // to dropped bytes and CRC mismatches on the receiving end.
       if (!read_cmd_path("read"))
         return;
       FILE* tf = fopen(g_cmd_path, "rb");
@@ -943,24 +950,41 @@ static void handle_serial_cmd() {
       fstat(fileno(tf), &tst);
       const uint32_t tfsize = (uint32_t)tst.st_size;
       serial_write("READY\n");
-      // Silence ESP_LOG during the binary transfer to prevent log bytes from
-      // interleaving with raw data in the shared USB serial TX buffer. Without
-      // this, a refreshDisplay or index log line can land between "READY\n"
-      // and the 4-byte size header, causing the host to misparse the response.
+      // Silence ESP_LOG and pause UI updates for the duration of the binary
+      // transfer — same as upload handlers. Any log byte interleaved with chunk
+      // data will be read by the host as a misaligned data byte, corrupting the
+      // file and causing a CRC mismatch.
+      g_upload_in_progress = true;
       esp_log_level_set("*", ESP_LOG_NONE);
       uint8_t tszb[4] = {(uint8_t)tfsize, (uint8_t)(tfsize>>8), (uint8_t)(tfsize>>16), (uint8_t)(tfsize>>24)};
       serial_write_raw(tszb, 4);
       uint32_t tcrc = 0;
       uint8_t tchunk[2048];
       size_t tn;
+      bool terror = false;
       while ((tn = fread(tchunk, 1, sizeof(tchunk), tf)) > 0) {
         serial_write_raw(tchunk, tn);
         tcrc = esp_rom_crc32_le(tcrc, tchunk, tn);
+        // Wait for the host's 0x06 ACK before sending the next chunk.
+        uint8_t tack;
+        if (!serial_read_exact(&tack, 1, 30000)) {
+          ESP_LOGE(kCmdTag, "read: ACK timeout after chunk (%s)", g_cmd_path);
+          terror = true;
+          break;
+        }
+        if (tack != kAck) {
+          ESP_LOGE(kCmdTag, "read: bad ACK 0x%02x (%s)", tack, g_cmd_path);
+          terror = true;
+          break;
+        }
       }
       fclose(tf);
+      g_upload_in_progress = false;
+      esp_log_level_set("*", ESP_LOG_INFO);
+      if (terror)
+        break;
       uint8_t tcrb[4] = {(uint8_t)tcrc, (uint8_t)(tcrc>>8), (uint8_t)(tcrc>>16), (uint8_t)(tcrc>>24)};
       serial_write_raw(tcrb, 4);
-      esp_log_level_set("*", ESP_LOG_INFO);
       ESP_LOGI(kCmdTag, "read: sent %s (%lu bytes, CRC 0x%08lx)", g_cmd_path, (unsigned long)tfsize, (unsigned long)tcrc);
       break;
     }
