@@ -8,7 +8,7 @@ if(POLICY CMP0141)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "Embedded")
 endif()
 
-project(microreader_desktop CXX)
+project(microreader_desktop C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,7 +22,7 @@ include(FetchContent)
 FetchContent_Declare(
     SDL2
     GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-    GIT_TAG        release-2.30.10
+    GIT_TAG        release-2.32.10
     GIT_SHALLOW    TRUE
 )
 set(SDL_SHARED OFF CACHE BOOL "" FORCE)
