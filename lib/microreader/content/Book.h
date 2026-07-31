@@ -55,6 +55,10 @@ class Book {
     return epub_.chapter_count();
   }
 
+  int cover_entry_index() const {
+    return epub_.cover_entry_index();
+  }
+
   // Load a chapter by index (0-based).
   EpubError load_chapter(size_t index, Chapter& out);
 

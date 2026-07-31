@@ -74,6 +74,10 @@ class ReaderScreen final : public IScreen {
     return "Reader";
   }
 
+  std::string book_cache_dir() {
+    return book_cache_dir_;
+  }
+
   void start(DrawBuffer& buf, IRuntime& runtime) override;
   void stop() override;
   // pause(): keep mrb_ open while a child screen (options/chapter) is active.
