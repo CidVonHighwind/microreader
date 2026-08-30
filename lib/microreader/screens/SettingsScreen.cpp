@@ -61,6 +61,9 @@ static std::string get_menu_font_label(int size) {
 static std::string get_sleep_image_label(const std::string& path) {
   if (path.empty())
     return "Sleep Image: Auto";
+  if (path == "cover")
+    return "Sleep Image: Cover";
+
   std::string label = "Sleep Image: ";
   if (path.rfind("embedded:", 0) == 0) {
     int idx = std::atoi(path.c_str() + 9);
@@ -136,10 +139,12 @@ void SettingsScreen::on_start() {
   }
 
   // Sleep image list: first entry is empty string = Auto-cycle.
+  //   second entry is "cover" = The cover of the open book.
   // Custom SD images take priority — embedded ones are only shown when no
   // custom images are present.
   sleep_images_.clear();
-  sleep_images_.push_back("");  // Auto
+  sleep_images_.push_back("");       // Auto
+  sleep_images_.push_back("cover");  // The cover of the current book
   sleep_image_sel_idx_ = 0;
   std::vector<std::string> sd_sleep;
 #ifdef ESP_PLATFORM
@@ -151,7 +156,8 @@ void SettingsScreen::on_start() {
         if (ent->d_name[0] == '.')
           continue;
         const char* ext = std::strrchr(ent->d_name, '.');
-        if (!ext) continue;
+        if (!ext)
+          continue;
         if (strcmp(ext, ".mgr") == 0)
           sd_sleep.push_back(std::string("/sdcard/.sleep/") + ent->d_name);
         else if (strcmp(ext, ".bmp") == 0)
@@ -307,7 +313,8 @@ void SettingsScreen::on_select(int index) {
   }
   if (index == idx_sort_order_) {
     if (app_) {
-      BookSortOrder order = (app_->sort_order() == BookSortOrder::Alphabetical) ? BookSortOrder::LastOpened : BookSortOrder::Alphabetical;
+      BookSortOrder order =
+          (app_->sort_order() == BookSortOrder::Alphabetical) ? BookSortOrder::LastOpened : BookSortOrder::Alphabetical;
       app_->set_sort_order(order);
       set_item_label(idx_sort_order_, get_sort_order_label(order));
     }

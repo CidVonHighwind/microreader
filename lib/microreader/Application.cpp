@@ -148,22 +148,27 @@ void Application::do_sleep_(DrawBuffer& buf) {
   // if a specific image is pinned and show it. If none of the two are configured,
   // fall back to auto-cycle.
 
-  // TODO: Real configuration option.
-  bool do_sleep_cover = true;
-  if (do_sleep_cover) {
+  if (sleep_image_path_ == "cover") {
     std::string cache = reader_.book_cache_dir();
-    std::string cover_path = cache + "/cover.mgr";
+    if (cache != "") {
+      std::string cover_path = cache + "/cover.mgr";
 
-    MR_LOGI("sleep", "do_sleep_: cover='%s'", cover_path.c_str());
+      MR_LOGI("sleep", "do_sleep_: cover='%s'", cover_path.c_str());
 
-    save_settings_();
-    buf.set_rotation(Rotation::Deg90);
+      save_settings_();
+      buf.set_rotation(Rotation::Deg90);
 
-    bool shown = buf.show_sleep_image(cover_path.c_str());
+      bool shown = buf.show_sleep_image(cover_path.c_str());
 
-    MR_LOGI("sleep", "show result: %d", (int)shown);
-    if (!shown && !buf.show_sleep_image_embedded(0))
-      buf.deep_sleep();
+      MR_LOGI("sleep", "show result: %d", (int)shown);
+      if (!shown && !buf.show_sleep_image_embedded(0))
+        buf.deep_sleep();
+    } else {
+      MR_LOGI("sleep", "do_sleep_: cover='no book open'");
+
+      if (!buf.show_sleep_image_embedded(0))
+        buf.deep_sleep();
+    }
     running_ = false;
     return;
   }
