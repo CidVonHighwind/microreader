@@ -301,7 +301,8 @@ void ReaderScreen::start(DrawBuffer& buf, IRuntime& runtime) {
   if (!mrb_ok && cache_only) {
     MR_LOGI("reader", "cache-only open: MRB missing — returning to book list");
     open_ok_ = false;
-    if (app_) app_->pop_screen();
+    if (app_)
+      app_->pop_screen();
     return;
   }
   buf_was_touched_ = false;
@@ -354,6 +355,63 @@ void ReaderScreen::start(DrawBuffer& buf, IRuntime& runtime) {
     long total_ms = (long)((esp_timer_get_time() - open_start) / 1000);
     ESP_LOGI("perf", "Conversion: %ldms  (open+convert=%ldms)", conv_ms, total_ms);
 #endif
+
+    // TODO: Maybe handle different aspect ratios. Possible optios are stretch
+    // (what it does now), crop to fit, or show empty borders. Configuration option?
+
+    // Width and height are flipped to decode the cover for portrait.
+    DecodedImage decoded_cover;
+    book_.decode_image(book_.cover_entry_index(), decoded_cover, DisplayFrame::kPhysicalHeight,
+                       DisplayFrame::kPhysicalWidth, buf.scratch_buf1(), DrawBuffer::kBufSize);
+
+    std::string cover_cache_path = book_cache_dir_ + "/cover.mgr";
+    FILE* cover_cache_file = std::fopen(cover_cache_path.c_str(), "wb");
+
+    std::fwrite("MGR2", 1, 4, cover_cache_file);
+    std::fwrite(&decoded_cover.height, 1, 2, cover_cache_file);
+    std::fwrite(&decoded_cover.width, 1, 2, cover_cache_file);
+
+    // MGR format expects 2 bit grayscale color but we have 1 bit monochrome. Write
+    // each bit twice to get the effect.
+    // HACK: This may be slow, benchmark it. Possible optimization opportunities:
+    // buffered writes, better iteration.
+
+    uint8_t* src = decoded_cover.data.data();
+
+    uint8_t running_byte = 0;
+    uint8_t bits_writen_to_byte = 0;
+    for (int out_y = 0; out_y < DisplayFrame::kPhysicalHeight; out_y++) {
+      for (int out_x = 0; out_x < DisplayFrame::kPhysicalWidth; out_x++) {
+        int src_x = decoded_cover.width - 1 - out_y;
+        int src_y = out_x;
+
+        int src_i = src_y * decoded_cover.width + src_x;
+
+        uint8_t bit = (src[src_i / 8] >> (7 - (src_i % 8))) & 1;
+
+        // NOTE: Why does this need to be inverted.
+        bit = !bit;
+
+        uint8_t bit_twice = bit << 1 | bit;
+
+        running_byte <<= 2;
+        running_byte |= bit_twice;
+
+        bits_writen_to_byte += 2;
+        if (bits_writen_to_byte == 8) {
+          std::fwrite(&running_byte, 1, 1, cover_cache_file);
+          bits_writen_to_byte = 0;
+        }
+      }
+
+      if (bits_writen_to_byte > 0) {
+        std::fwrite(&running_byte, 1, 1, cover_cache_file);
+        bits_writen_to_byte = 0;
+      }
+    }
+
+    std::fclose(cover_cache_file);
+
     book_.close();
 
     // Reset both display buffers to white after scratch use (conversion

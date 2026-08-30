@@ -5,8 +5,8 @@
 #include <ctime>
 
 #include "HeapLog.h"
-#include "content/BookIndex.h"
 #include "content/BmpSleepConverter.h"
+#include "content/BookIndex.h"
 
 #ifdef ESP_PLATFORM
 #include <dirent.h>
@@ -100,19 +100,27 @@ void Application::auto_open_book(const char* epub_path, DrawBuffer& buf, IRuntim
 
 // Convert/cache a BMP sleep image and display it. Returns true if shown.
 static bool show_bmp_sleep(const char* bmp_path, const char* data_dir, DrawBuffer& buf) {
-  if (!data_dir) return false;
+  if (!data_dir)
+    return false;
   const char* slash = std::strrchr(bmp_path, '/');
-  const char* back  = std::strrchr(bmp_path, '\\');
-  if (back > slash) slash = back;
+  const char* back = std::strrchr(bmp_path, '\\');
+  if (back > slash)
+    slash = back;
   const char* bname = slash ? slash + 1 : bmp_path;
-  const char* dot   = std::strrchr(bname, '.');
+  const char* dot = std::strrchr(bname, '.');
   int nlen = dot ? (int)(dot - bname) : (int)std::strlen(bname);
   char cache_dir[256];
   std::snprintf(cache_dir, sizeof(cache_dir), "%s/cache/sleep", data_dir);
   char cache_path[384];
   std::snprintf(cache_path, sizeof(cache_path), "%s/%.*s.mgr", cache_dir, nlen, bname);
   bool cached = false;
-  { std::FILE* cf = std::fopen(cache_path, "rb"); if (cf) { std::fclose(cf); cached = true; } }
+  {
+    std::FILE* cf = std::fopen(cache_path, "rb");
+    if (cf) {
+      std::fclose(cf);
+      cached = true;
+    }
+  }
   if (!cached) {
 #ifdef ESP_PLATFORM
     char parent[256];
@@ -120,7 +128,9 @@ static bool show_bmp_sleep(const char* bmp_path, const char* data_dir, DrawBuffe
     mkdir(parent, 0775);
     mkdir(cache_dir, 0775);
 #else
-    try { fs::create_directories(cache_dir); } catch (...) {}
+    try {
+      fs::create_directories(cache_dir);
+    } catch (...) {}
 #endif
     MR_LOGI("sleep", "converting BMP: %s", bmp_path);
     cached = convert_bmp_to_mgr2(bmp_path, cache_path);
@@ -134,8 +144,37 @@ void Application::do_sleep_(DrawBuffer& buf) {
   if (IScreen* top = screen_mgr_.top())
     top->stop();
 
-  // If a specific image is pinned, always show it. Otherwise auto-cycle.
+  // If the sleep screen is configured to be the cover show it, if it isn't check
+  // if a specific image is pinned and show it. If none of the two are configured,
+  // fall back to auto-cycle.
+
+  if (sleep_image_path_ == "cover") {
+    std::string cache = reader_.book_cache_dir();
+    if (cache != "") {
+      std::string cover_path = cache + "/cover.mgr";
+
+      MR_LOGI("sleep", "do_sleep_: cover='%s'", cover_path.c_str());
+
+      save_settings_();
+      buf.set_rotation(Rotation::Deg90);
+
+      bool shown = buf.show_sleep_image(cover_path.c_str());
+
+      MR_LOGI("sleep", "show result: %d", (int)shown);
+      if (!shown && !buf.show_sleep_image_embedded(0))
+        buf.deep_sleep();
+    } else {
+      MR_LOGI("sleep", "do_sleep_: cover='no book open'");
+
+      if (!buf.show_sleep_image_embedded(0))
+        buf.deep_sleep();
+    }
+    running_ = false;
+    return;
+  }
+
   MR_LOGI("sleep", "do_sleep_: pinned='%s' idx=%d", sleep_image_path_.c_str(), sleep_image_idx_);
+
   if (!sleep_image_path_.empty()) {
     save_settings_();
     buf.set_rotation(Rotation::Deg90);
@@ -164,7 +203,8 @@ void Application::do_sleep_(DrawBuffer& buf) {
       if (ent->d_name[0] == '.')
         continue;
       const char* ext = std::strrchr(ent->d_name, '.');
-      if (!ext) continue;
+      if (!ext)
+        continue;
       if (std::strcmp(ext, ".mgr") == 0) {
         images.push_back(std::string("/sdcard/.sleep/") + ent->d_name);
       } else if (std::strcmp(ext, ".bmp") == 0 && data_dir_) {

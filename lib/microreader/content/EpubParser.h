@@ -32,17 +32,21 @@ class CssCache {
   // work_buf/work_buf_size: caller-provided decompression buffer (from the
   // application's framebuffer). Required on cache miss; if null and there
   // is a cache miss the stylesheet is silently skipped rather than crashing.
-  const CssStylesheet* get_or_load(IZipFile& file, const ZipReader& zip,
-                                   const std::string& path, const CssConfig& config,
-                                   uint32_t protect_gen = 0,
-                                   uint8_t* work_buf = nullptr,
+  const CssStylesheet* get_or_load(IZipFile& file, const ZipReader& zip, const std::string& path,
+                                   const CssConfig& config, uint32_t protect_gen = 0, uint8_t* work_buf = nullptr,
                                    size_t work_buf_size = 0);
 
   void clear();
 
-  size_t entry_count() const { return count_; }
-  size_t total_bytes() const { return total_bytes_; }
-  uint32_t current_gen() const { return gen_; }
+  size_t entry_count() const {
+    return count_;
+  }
+  size_t total_bytes() const {
+    return total_bytes_;
+  }
+  uint32_t current_gen() const {
+    return gen_;
+  }
 
  private:
   struct Entry {
@@ -140,6 +144,10 @@ class Epub {
   }
   const CssCache& css_cache() const {
     return css_cache_;
+  }
+
+  int cover_entry_index() const {
+    return cover_idx_;
   }
 
   // Resolve a path relative to a content file's directory.
