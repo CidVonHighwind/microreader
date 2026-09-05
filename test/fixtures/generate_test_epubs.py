@@ -176,6 +176,32 @@ def gen_multi_chapter():
 
 
 # ---------------------------------------------------------------------------
+# percent_encoded_ncx.epub — NCX URI target with an escaped filename byte
+# ---------------------------------------------------------------------------
+def gen_percent_encoded_ncx():
+    opf_path = "OEBPS/content.opf"
+    filename = "chapter!.xhtml"
+    chapter = make_xhtml("Escaped target", "<h1>Escaped NCX target</h1>")
+    opf = make_opf(
+        title="Percent Encoded NCX",
+        manifest_items=[
+            ("ch1", filename, "application/xhtml+xml"),
+            ("ncx", "toc.ncx", "application/x-dtbncx+xml"),
+        ],
+        spine_idrefs=["ch1"],
+        toc_id="ncx",
+    )
+    ncx = make_ncx([("Escaped target", "chapter%21.xhtml")])
+    files = [
+        ("META-INF/container.xml", CONTAINER_XML.format(opf_path=opf_path), False),
+        (opf_path, opf, True),
+        ("OEBPS/toc.ncx", ncx, True),
+        ("OEBPS/" + filename, chapter, True),
+    ]
+    write_epub("percent_encoded_ncx.epub", files, opf_path)
+
+
+# ---------------------------------------------------------------------------
 # 3. with_css.epub — inline + external CSS
 # ---------------------------------------------------------------------------
 def gen_with_css():
@@ -431,6 +457,7 @@ if __name__ == "__main__":
     print("Generating test EPUBs...")
     gen_basic()
     gen_multi_chapter()
+    gen_percent_encoded_ncx()
     gen_with_css()
     gen_with_images()
     gen_stored()
