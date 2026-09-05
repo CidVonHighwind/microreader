@@ -310,6 +310,37 @@ static std::string normalize_path(const std::string& path) {
   return result;
 }
 
+// Decode percent escapes in a URI path for ZIP entry lookup.  EPUB 2 NCX
+// targets are URIs, while ZIP entry names store the decoded filename bytes.
+// Invalid escapes are kept verbatim so they can still match a literal '%'.
+static std::string decode_percent_escapes(const std::string& path) {
+  auto hex_value = [](char c) -> int {
+    if (c >= '0' && c <= '9')
+      return c - '0';
+    if (c >= 'a' && c <= 'f')
+      return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+      return c - 'A' + 10;
+    return -1;
+  };
+
+  std::string decoded;
+  decoded.reserve(path.size());
+  for (size_t i = 0; i < path.size(); ++i) {
+    if (path[i] == '%' && i + 2 < path.size()) {
+      int high = hex_value(path[i + 1]);
+      int low = hex_value(path[i + 2]);
+      if (high >= 0 && low >= 0) {
+        decoded += static_cast<char>((high << 4) | low);
+        i += 2;
+        continue;
+      }
+    }
+    decoded += path[i];
+  }
+  return decoded;
+}
+
 static std::string decode_entities(const std::string& text) {
   std::string result;
   result.reserve(text.size());
@@ -412,6 +443,20 @@ static EpubError parse_ncx(IZipFile& file, const ZipReader& zip, const ZipEntry&
             if (zip.entry(i).name == full_path) {
               idx = static_cast<int>(i);
               break;
+            }
+          }
+          // Prefer an exact match: '%' is legal in a ZIP entry name.  If it
+          // is absent, resolve the URI's percent escapes for EPUB 2 NCX files
+          // that encode otherwise literal filename characters (e.g. %21).
+          if (idx < 0 && full_path.find('%') != std::string::npos) {
+            std::string decoded_path = decode_percent_escapes(full_path);
+            if (decoded_path != full_path) {
+              for (size_t i = 0; i < zip.entry_count(); ++i) {
+                if (zip.entry(i).name == decoded_path) {
+                  idx = static_cast<int>(i);
+                  break;
+                }
+              }
             }
           }
           if (idx >= 0) {

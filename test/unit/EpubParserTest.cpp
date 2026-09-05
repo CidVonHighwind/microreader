@@ -78,6 +78,14 @@ TEST_F(EpubTest, MultiChapterToc) {
   }
 }
 
+TEST_F(EpubTest, PercentEncodedNcxTargetResolvesToZipEntry) {
+  open_fixture("percent_encoded_ncx.epub");
+
+  ASSERT_EQ(epub.toc().entries.size(), 1u);
+  EXPECT_EQ(epub.toc().label_view(epub.toc().entries[0]), "Escaped target");
+  EXPECT_EQ(epub.toc().entries[0].file_idx, epub.spine()[0].file_idx);
+}
+
 TEST_F(EpubTest, WithCssStylesheet) {
   // CSS is now loaded lazily per chapter — the cache is populated on first parse.
   open_fixture("with_css.epub");
