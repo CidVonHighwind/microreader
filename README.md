@@ -76,6 +76,23 @@ The first time an image is shown it is converted and cached; subsequent sleeps l
 
 Configure in **Settings → Sleep Image**: **Auto** cycles through all images in `.sleep/`; selecting a specific filename pins the device to that image.
 
+## Reading Stats
+
+Open **Settings → Reading Stats** for a month calendar of your reading. Each day shows the time spent reading and a bar that fills at one hour; the selected day lists the books you read, and the panel below shows the month's total time, days read, pages, daily average and current/longest streaks.
+
+| Button | Action |
+|--------|--------|
+| ▲ / ▼ (front, follows *Menu Nav*) | Previous / next day |
+| Side up / down | Previous / next month |
+| ▶ | Set date & time |
+| ◀ | Back |
+
+**How it's counted:** the time a page stays on screen is credited when you turn it, capped at 3 minutes so leaving the device on doesn't count. A forward page turn after at least 2 seconds counts as a page read, so skimming or holding the button doesn't inflate the numbers. Time spent in menus over the book is not counted.
+
+**The clock:** stats are dated with the device clock, which keeps running through sleep. Set it in **Settings → Date & Time** (or press ▶ in the calendar); connecting the browser manager, or running `python tools/serial_cmd.py --sync-time`, sets it from your computer automatically. If the battery is ever fully drained the clock resumes from the last time it was saved — check the date shown on the *Today* line and correct it if needed.
+
+**Storage:** one small text file per month in `.microreader/stats/` on the SD card (`YYYY-MM.txt`, one `day seconds pages title` line per reading session). **Clear Cache** does not touch it; delete the folder to reset your stats.
+
 ## Building
 
 ### Prerequisites
@@ -166,6 +183,7 @@ python tools/serial_cmd.py --port COM5 --upload-dir "path/to/dir"    # upload al
 python tools/serial_cmd.py --port COM5 --upload-sleep "image.bmp"    # upload a sleep image
 python tools/serial_cmd.py --port COM5 --upload-sd-font "font.mfb"   # upload a font to SD card
 python tools/serial_cmd.py --port COM5 --list                        # list books on device
+python tools/serial_cmd.py --port COM5 --sync-time                   # set the device clock from this PC
 ```
 
 **Interactive** — a REPL for manual control:

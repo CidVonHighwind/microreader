@@ -10,6 +10,7 @@ lib/microreader/          ← shared core (platform-agnostic C++17)
     mrb/                  ← MRB binary format (MrbFormat, MrbReader, MrbWriter, MrbConverter)
   display/                ← Canvas, DisplayQueue, Font, Display interface
   screens/                ← IScreen implementations (UI screens)
+  stats/                  ← reading statistics (ReadingStats: recorder, month files, calendar math)
 platforms/desktop/        ← SDL2 desktop emulator
 platforms/esp32/          ← real hardware (ESP-IDF + PlatformIO)
 test/                     ← Google Test suite (unit + integration)
@@ -93,6 +94,18 @@ All inherit from `IScreen` (`lib/microreader/screens/IScreen.h`): `name()`, `sta
 | `MainMenu` | `MainMenu.h/.cpp` | Main navigation menu. Owns all child screens. |
 | `ReaderScreen` | `ReaderScreen.h/.cpp` | EPUB page viewer. 2×-scaled 8×8 bitmap font (16×16 glyphs). Next/prev page, chapter transitions. |
 | `BouncingBallDemo` | `BouncingBallDemo.h/.cpp` | Bouncing ball + random shapes. |
+| `StatsCalendarScreen` | `StatsCalendarScreen.h/.cpp` | Reading-stats month calendar (Settings → Reading Stats). Portrait and landscape layouts. |
+| `DateTimeScreen` | `DateTimeScreen.h/.cpp` | Sets the wall clock (day/month/year/hour/minute). |
+
+Screens that don't derive from `ListMenuScreen` get the UI fonts via `ListMenuScreen::shared_font()` / `shared_menu_font()` and the standard battery + hint row via `ListMenuScreen::draw_menu_bottom_bar()`. **Don't include `display/ui_font_*.h` in new .cpp files** — the tables are `static constexpr` arrays, so every TU that uses them gets its own copy in flash (the header font alone is ~110 KB).
+
+## Reading statistics (`lib/microreader/stats/ReadingStats.h/.cpp`)
+
+- **Recorder**: `Application` owns a `ReadingStats` (`app_->stats()`), clocked by the platform `IRuntime`. `ReaderScreen` calls `book_opened()` (start), `page_turned(forward)` (after each render), `reading_paused()/reading_resumed()` (pause/resume around child screens) and `book_closed()` (stop). `Application::do_sleep_()` calls `flush()`.
+- **Accounting**: time a page is on screen is credited when it's left, capped at `kMaxPageMs` (3 min); a forward turn after ≥ `kMinPageMs` (2 s) counts as a page. Pending data is flushed on book close, sleep, day change, and every `kFlushEveryMs` (10 min).
+- **Storage**: append-only `<data_dir>/stats/YYYY-MM.txt`, lines `day seconds pages title` (`#` = comment). `MonthStats::load()` sums lines and skips malformed/partial ones. Not under `cache/`, so Clear Cache keeps it.
+- **Clock**: `IRuntime::monotonic_ms()`, `local_time()`, `set_local_time()` (defaults: no clock → nothing recorded). The device clock holds **local wall time, no time zone**. ESP32: `time()/settimeofday()` — survives deep sleep, resets to 1970 on cold power-on; `Application::restore_clock_()` then restores `max(saved "clock=" from settings, firmware build time)`. Desktop: host local time plus an offset (`set_local_time` never touches the host clock).
+- **Sync**: serial `CMND 'E'` + int64 LE local seconds. The browser manager sends it on every connect; `serial_cmd.py --sync-time` / interactive `time`.
 
 
 ### Screen navigation flow
@@ -247,6 +260,9 @@ Test fixtures in `test/fixtures/` (synthetic EPUBs). Real books in `test/books/`
 - **ohler.epub OOM**: 487 spine items, XHTML files up to 218KB, causes heap exhaustion on ESP32 during `parse_chapter()`. See "Memory constraints" section.
 - **Heap fragmentation on ESP32**: After `Book::open()`, the largest contiguous block can be much smaller than total free heap (e.g. 59KB largest with 133KB total free). Large single allocations (>50KB) should be split into smaller ones.
 - **SD SPI max 20 MHz**: The SD card on the prototype board fails at 40 MHz (`ESP_ERR_INVALID_RESPONSE` during `sdmmc_enable_hs_mode_and_check`). Keep `max_freq_khz = 20000`.
+- **`uint32_t` is `unsigned long` on ESP-IDF 5** and IDF builds with `-Werror=all`: cast to `unsigned`/`unsigned long` before passing to `%u`/`%lu` (fine on x86, a build error on device).
+- **`Application::set_data_dir()` keeps the raw `const char*`** (firmware passes static strings). Tests must keep the string alive for the Application's lifetime.
+- **Linux/GCC test build**: needs `#include <cstring>` wherever `std::strlen` is used (MSVC pulls it in implicitly).
 - **Do NOT add `setvbuf` to `StdioZipFile`**: Adding a read buffer to the EPUB input `FILE*` causes wasteful 4 KB read-ahead after every seek, making SEEK 3× slower and DECOMP ~12% slower. The `ZipEntryInput` already manages its own efficient input buffering.
 
 ## Device testing
@@ -268,6 +284,7 @@ Device commands (sent via `serial_cmd.py` — see interactive commands below):
 | Button press | Inject button press by index |
 | Open book | Push ReaderScreen for a book path |
 | Status | Query heap info (`STATUS:free=N,largest=N`) |
+| Set clock | `CMND 'E'` + 8-byte LE local seconds (`OK`) — `serial_cmd.py --sync-time` |
 | List books | List `.epub`/`.mrb` files on SD card |
 | Clear `.mrb` | Delete all `.mrb` files (`CLEARED:N`) |
 | Bench | Run EPUB conversion benchmark for a book |
