@@ -181,6 +181,24 @@ async function cmdRename(src, dst) {
 }
 
 // ── Formatting ────────────────────────────────────────────────────────────────
+// 'E' — set the device clock. The reader keeps local wall time with no time
+// zone, so send this computer's local time as seconds since 1970 (int64 LE).
+async function cmdSetClock() {
+  const localSecs = Math.floor(Date.now() / 1000) - new Date().getTimezoneOffset() * 60;
+  const b = new Uint8Array(8);
+  new DataView(b.buffer).setBigInt64(0, BigInt(localSecs), true);
+  await conn.write(new Uint8Array([...CMND, 0x45, ...b]));
+  return readUntil(l => l === 'OK' || l.startsWith('ERR:'), 2000);
+}
+
+// Keep the reader's clock (used by Reading Stats) in sync on every connect.
+// Firmware without the command answers ERR:unknown_cmd, which is ignored.
+async function syncClock() {
+  try {
+    if ((await cmdSetClock()) === 'OK') log('Device clock synced');
+  } catch (_) { /* no reply: older firmware or busy device — not fatal */ }
+}
+
 function fmtSize(bytes) {
   if (!bytes) return '—';
   if (bytes < 1024) return `${bytes} B`;
@@ -440,6 +458,7 @@ async function onConnect() {
     conn = new SerialConn(port);
     setConnected(true);
     log('Connected');
+    await syncClock();
     await navigate('/sdcard', { replace: true });
   } catch (e) {
     if (e.name !== 'NotFoundError') { log('Connect error: ' + e.message); setStatus(e.message); }
@@ -616,6 +635,7 @@ if ('serial' in navigator) {
       await port.open({ baudRate: 115200 });
       conn = new SerialConn(port);
       setConnected(true);
+      await syncClock();
       await navigate('/sdcard', { replace: true });
     } catch (e) {
       log('[auto] open failed: ' + e.message);

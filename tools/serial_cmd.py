@@ -13,6 +13,9 @@ Benchmark mode (non-interactive, sends bench command and saves output):
 Image-size benchmark all books (non-interactive):
     python serial_cmd.py --imgbench-all [--timeout 120]
 
+Set the device clock to this computer's local time (used by Reading Stats):
+    python serial_cmd.py --sync-time
+
 Interactive commands:
     btn <N>           Press button N (0=back, 1=select, 2=down/next, 3=up/prev, 4=up, 5=down, 6=power)
     back              Alias for btn 0
@@ -33,6 +36,7 @@ Interactive commands:
     imgsize <book>    Run image format+size benchmark for a book
     imgdecode <book>  Fully decode every image in a book (streaming decoder test)
     renderbench       Benchmark render_page_ on the currently open page (20 iterations)
+    time              Set the device clock to this computer's local time
     help              Show this help
     quit / exit       Exit
 """
@@ -99,6 +103,21 @@ def send_renderbench(ser: serial.Serial, iterations: int = 20) -> str:
     Returns the initial OK/ERR, then streams per-iteration and summary lines."""
     ser.write(MAGIC + b"P")
     return read_response(ser, timeout=5.0)
+
+
+def local_epoch_seconds() -> int:
+    """Local wall time as seconds since 1970-01-01 (the device clock has no time zone)."""
+    now = time.time()
+    offset = time.localtime(now).tm_gmtoff or 0
+    return int(now) + int(offset)
+
+
+def send_set_time(ser: serial.Serial, seconds: Optional[int] = None) -> str:
+    """Set the device wall clock via CMND 'E' + 8-byte LE local seconds."""
+    if seconds is None:
+        seconds = local_epoch_seconds()
+    ser.write(MAGIC + b"E" + struct.pack("<q", seconds))
+    return read_response(ser)
 
 
 def read_response(ser: serial.Serial, timeout: float = 3.0) -> str:
@@ -694,6 +713,12 @@ def main():
         help="Non-interactive: run conversion benchmark on every .epub on the device",
     )
     parser.add_argument(
+        "--sync-time",
+        action="store_true",
+        default=False,
+        help="Non-interactive: set the device clock to this computer's local time, then exit",
+    )
+    parser.add_argument(
         "--renderbench",
         action="store_true",
         default=False,
@@ -795,6 +820,12 @@ def main():
         ok = upload_font_sd(ser, fp)
         ser.close()
         sys.exit(0 if ok else 1)
+
+    if args.sync_time:
+        result = send_set_time(ser)
+        print(result)
+        ser.close()
+        sys.exit(0 if result.startswith("OK") else 1)
 
     if args.invalidate_font:
         result = send_invalidate_font(ser)
@@ -1115,6 +1146,8 @@ def main():
                 print(send_button(ser, mask))
             elif verb in ("status", "st"):
                 print(send_status(ser))
+            elif verb == "time":
+                print(send_set_time(ser))
             elif verb in ("books", "ls"):
                 print(send_list_books(ser))
             elif verb == "open":
