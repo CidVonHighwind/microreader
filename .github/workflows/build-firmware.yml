@@ -1,0 +1,90 @@
+# Builds the ESP32-C3 firmware on GitHub's servers and publishes it as a
+# release with a ready-to-flash `micropow-firmware.bin` (an app image for the
+# CrossPoint web flasher's custom-firmware option, which writes it to the
+# spare OTA slot).
+#
+# Runs on every push. Nothing needs to be installed on your own computer.
+
+name: Build firmware
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write  # needed to create the release
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history: tools/generate_version.py counts commits
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache PlatformIO toolchains
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Install the ESP-IDF framework and toolchain
+        run: pio pkg install -e esp32c3
+
+      # tools/patch_ffconf.py enables exFAT SD cards by patching the framework's
+      # ffconf.h. As a pre-build script it silently skips when the framework
+      # isn't installed yet (always the case on a fresh build machine), which
+      # would produce firmware that can't read exFAT cards. Apply it now and
+      # refuse to continue if it didn't take.
+      - name: Enable exFAT SD card support
+        run: |
+          python tools/patch_ffconf.py
+          grep -q "patched by tools/patch_ffconf.py" ~/.platformio/packages/framework-espidf/components/fatfs/src/ffconf.h
+
+      - name: Build
+        run: pio run -e esp32c3
+
+      - name: Collect the firmware file
+        run: |
+          cp .pio/build/esp32c3/firmware.bin micropow-firmware.bin
+          ls -l micropow-firmware.bin
+          # Sanity check: an ESP32 app image starts with the 0xE9 magic byte.
+          test "$(head -c1 micropow-firmware.bin | od -An -tx1 | tr -d ' ')" = "e9"
+
+      - name: Keep the file with this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: micropow-firmware
+          path: micropow-firmware.bin
+
+      - name: Publish a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="build-${{ github.run_number }}"
+          notes=$(cat <<'EOF'
+          Firmware for the Xteink X4, built automatically from this repository.
+
+          **To install:** download `micropow-firmware.bin` below, then flash it with the
+          CrossPoint web flasher (https://crosspointreader.com/#flash-tools) in Chrome or
+          Edge, using its option to flash your own firmware file. Choose the X4 model.
+          EOF
+          )
+          gh release create "$tag" micropow-firmware.bin \
+            --target "${{ github.sha }}" \
+            --title "micropow build ${{ github.run_number }} (${{ github.ref_name }})" \
+            --notes "$notes"
