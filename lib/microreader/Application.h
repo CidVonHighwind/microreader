@@ -9,14 +9,17 @@
 #include "ScreenManager.h"
 #include "display/DrawBuffer.h"
 #include "screens/ChapterSelectScreen.h"
+#include "screens/DateTimeScreen.h"
 #include "screens/IScreen.h"
 #include "screens/LinksScreen.h"
 #include "screens/MainMenu.h"
 #include "screens/ReaderOptionsScreen.h"
 #include "screens/ReaderScreen.h"
 #include "screens/SettingsScreen.h"
+#include "screens/StatsCalendarScreen.h"
 #include "screens/demo/BouncingBallDemo.h"
 #include "screens/demo/GrayscaleDemo.h"
+#include "stats/ReadingStats.h"
 
 namespace microreader {
 
@@ -31,6 +34,8 @@ enum class ScreenId : uint8_t {
   Links,
   BouncingBall,
   GrayscaleDemo,
+  Stats,
+  DateTime,
 };
 
 class Application {
@@ -45,6 +50,7 @@ class Application {
     data_dir_ = dir;
     reader_.set_data_dir(dir ? dir : "");
     settings_.set_data_dir(dir);
+    stats_.set_data_dir(dir);
   }
 
   // Path to data directory for settings/state persistence
@@ -116,6 +122,16 @@ class Application {
   }
   MainMenu* main_menu() {
     return &menu_;
+  }
+  // Reading statistics recorder (fed by ReaderScreen, shown by StatsCalendarScreen).
+  ReadingStats& stats() {
+    return stats_;
+  }
+  StatsCalendarScreen* stats_screen() {
+    return &stats_screen_;
+  }
+  DateTimeScreen* date_time_screen() {
+    return &date_time_;
   }
 
   bool invert_menu_buttons() const {
@@ -260,6 +276,14 @@ class Application {
   ReaderOptionsScreen reader_options_;
   ChapterSelectScreen chapter_select_;
   LinksScreen links_screen_;
+  StatsCalendarScreen stats_screen_;
+  DateTimeScreen date_time_;
+
+  ReadingStats stats_;
+  // Last wall-clock time written to the settings file ("clock="). Used to
+  // restore the clock after a cold power-on, when the ESP32 RTC restarts at 1970.
+  int64_t saved_clock_ = 0;
+  void restore_clock_(IRuntime& runtime);
 
 #ifdef MICROREADER_ENABLE_DEMOS
   BouncingBallDemo bouncing_ball_;

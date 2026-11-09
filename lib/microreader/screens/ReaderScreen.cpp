@@ -397,6 +397,10 @@ void ReaderScreen::start(DrawBuffer& buf, IRuntime& runtime) {
   layout_engine_.set_image_size_fn(image_size_fn_);
   layout_engine_.set_hyphenation_lang(detect_language(mrb_.metadata().language));
   render_page_(buf);
+  if (app_) {
+    const std::string& title = mrb_.metadata().title;
+    app_->stats().book_opened(title.empty() ? book_stem_() : title);
+  }
 #ifdef ESP_PLATFORM
   ESP_LOGI("reader", "BOOK_OK: %s", path_.c_str());
 #endif
@@ -410,6 +414,13 @@ show_error:
     buf.fill(true);
     buf.draw_text(kPaddingLeft, kPaddingTop, "Failed to open book", true, kScale);
   }
+}
+
+void ReaderScreen::pause() {
+  // Keep mrb_ open while a child screen (options/chapter) is active; just stop
+  // counting reading time until we come back.
+  if (open_ok_ && app_)
+    app_->stats().reading_paused();
 }
 
 void ReaderScreen::resume(DrawBuffer& buf, IRuntime& runtime) {
@@ -450,9 +461,13 @@ void ReaderScreen::resume(DrawBuffer& buf, IRuntime& runtime) {
 
   render_page_(buf);
   save_position_();
+  if (app_)
+    app_->stats().reading_resumed();
 }
 
 void ReaderScreen::stop() {
+  if (open_ok_ && app_)
+    app_->stats().book_closed();
   image_size_fn_ = {};
   chapter_src_.reset();
   mrb_.close();
@@ -532,6 +547,7 @@ void ReaderScreen::update(const ButtonState& buttons, DrawBuffer& buf, IRuntime&
             render_page_(buf);
             buf.refresh();
             save_position_();
+            app_->stats().page_turned(false);
             return;
           }
           app_->pop_screen();
@@ -583,6 +599,8 @@ void ReaderScreen::update(const ButtonState& buttons, DrawBuffer& buf, IRuntime&
     render_page_(buf);
     buf.refresh();
     save_position_();
+    if (app_)
+      app_->stats().page_turned(page_delta > 0);
   }
 
   // Deferred grayscale: only apply when no nav buttons are held, so rapid

@@ -16,6 +16,9 @@ set(lib_sources
     ${LIB}/screens/ChapterSelectScreen.cpp
     ${LIB}/screens/LinksScreen.cpp
     ${LIB}/screens/ReaderOptionsScreen.cpp
+    ${LIB}/screens/StatsCalendarScreen.cpp
+    ${LIB}/screens/DateTimeScreen.cpp
+    ${LIB}/stats/ReadingStats.cpp
     ${LIB}/content/ZipReader.cpp
     ${LIB}/content/XmlReader.cpp
     ${LIB}/content/CssParser.cpp

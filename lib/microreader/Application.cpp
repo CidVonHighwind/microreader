@@ -30,6 +30,9 @@ void Application::start(DrawBuffer& buf, IRuntime& runtime) {
   started_ = true;
   running_ = true;
 
+  // Reading statistics take their time from the platform clocks.
+  stats_.set_clock(&runtime);
+
 #ifdef ESP_PLATFORM
   std::srand(esp_random());
 #else
@@ -45,6 +48,8 @@ void Application::start(DrawBuffer& buf, IRuntime& runtime) {
   reader_options_.set_app(this);
   chapter_select_.set_app(this);
   links_screen_.set_app(this);
+  stats_screen_.set_app(this);
+  date_time_.set_app(this);
 
 #ifdef MICROREADER_ENABLE_DEMOS
   bouncing_ball_.set_app(this);
@@ -58,6 +63,10 @@ void Application::start(DrawBuffer& buf, IRuntime& runtime) {
   // Load settings first so initial_selection_ and reader settings are ready
   // before the menu's on_start() (directory scan + selection restore) runs.
   load_settings_();
+
+  // After a cold power-on the wall clock restarts at 1970; continue from the
+  // last saved time so reading stats keep a plausible date.
+  restore_clock_(runtime);
 
   // Apply persisted menu font size to all list screens.
   ListMenuScreen::set_font_size(menu_font_size_);
@@ -133,6 +142,8 @@ void Application::do_sleep_(DrawBuffer& buf) {
   // Stop the active screen so it can save state (e.g. reading position).
   if (IScreen* top = screen_mgr_.top())
     top->stop();
+  // Write out reading time not yet saved (e.g. reader paused under its options menu).
+  stats_.flush();
 
   // If a specific image is pinned, always show it. Otherwise auto-cycle.
   MR_LOGI("sleep", "do_sleep_: pinned='%s' idx=%d", sleep_image_path_.c_str(), sleep_image_idx_);
@@ -287,6 +298,10 @@ IScreen* microreader::Application::screen_for_(ScreenId id) {
       return &chapter_select_;
     case ScreenId::Links:
       return &links_screen_;
+    case ScreenId::Stats:
+      return &stats_screen_;
+    case ScreenId::DateTime:
+      return &date_time_;
 
 #ifdef MICROREADER_ENABLE_DEMOS
     case ScreenId::BouncingBall:
@@ -363,7 +378,27 @@ void microreader::Application::save_settings_() {
     std::fprintf(f, "sleep_image=%s\n", sleep_image_path_.c_str());
   std::fprintf(f, "sleep_image_idx=%d\n", sleep_image_idx_);
 
+  // Wall clock, so it can be restored after a cold power-on (see restore_clock_).
+  if (IRuntime* rt = stats_.clock()) {
+    const int64_t now = rt->local_time();
+    if (clock_is_valid(now)) {
+      saved_clock_ = now;
+      std::fprintf(f, "clock=%lu\n", static_cast<unsigned long>(now));
+    }
+  }
+
   std::fclose(f);
+}
+
+void microreader::Application::restore_clock_(IRuntime& runtime) {
+  if (clock_is_valid(runtime.local_time()))
+    return;  // clock survived (deep sleep keeps the RTC running) or has no RTC to lose
+  int64_t t = firmware_build_time();
+  if (saved_clock_ > t)
+    t = saved_clock_;
+  if (runtime.set_local_time(t))
+    MR_LOGI("clock", "restored wall clock to %lu (saved=%lu)", static_cast<unsigned long>(t),
+            static_cast<unsigned long>(saved_clock_));
 }
 void microreader::Application::record_book_opened(const std::string& path) {
   BookIndex::instance().set_last_opened(path, ++open_counter_);
@@ -447,6 +482,8 @@ void microreader::Application::load_settings_() {
       sleep_image_path_ = sval;
     else if (std::sscanf(line, "sleep_image_idx=%u", &uval) == 1)
       sleep_image_idx_ = static_cast<int>(uval);
+    else if (std::strncmp(line, "clock=", 6) == 0)
+      saved_clock_ = static_cast<int64_t>(std::strtoul(line + 6, nullptr, 10));
   }
   std::fclose(f);
 

@@ -26,6 +26,19 @@
 
 namespace microreader {
 
+static std::string get_date_time_label(Application* app) {
+  IRuntime* rt = app ? app->stats().clock() : nullptr;
+  const int64_t now = rt ? rt->local_time() : 0;
+  if (!clock_is_valid(now))
+    return "Date & Time: not set";
+  const CivilDate d = date_from_local_time(now);
+  const int sod = seconds_of_day(now);
+  char buf[64];
+  std::snprintf(buf, sizeof(buf), "Date: %d %s %d, %02d:%02d", d.day, month_abbrev(d.month), d.year, sod / 3600,
+                (sod / 60) % 60);
+  return buf;
+}
+
 static std::string get_menu_nav_label(bool inverted) {
   return std::string("Menu Nav: ") + (inverted ? "Right=Down" : "Right=Up");
 }
@@ -189,6 +202,15 @@ void SettingsScreen::on_start() {
     }
   }
 
+  // --- Reading statistics ---
+  idx_stats_ = count();
+  add_item("Reading Stats");
+
+  idx_date_time_ = count();
+  add_item(get_date_time_label(app_));
+
+  add_separator();
+
   // --- Appearance ---
   idx_rotate_display_ = count();
   add_item(get_rotate_display_label(app_ && app_->rotate_display()));
@@ -283,6 +305,14 @@ void SettingsScreen::on_select(int index) {
     return;
   }
 #endif
+  if (index == idx_stats_) {
+    app_->push_screen(ScreenId::Stats);
+    return;
+  }
+  if (index == idx_date_time_) {
+    app_->push_screen(ScreenId::DateTime);
+    return;
+  }
   if (index == idx_clear_cache_) {
     clear_cache_();
     toast_original_label_ = get_item_label(idx_clear_cache_);

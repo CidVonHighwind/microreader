@@ -1,7 +1,10 @@
 #pragma once
 
+#include <sys/time.h>
+
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
@@ -92,6 +95,21 @@ class Esp32Runtime final : public microreader::IRuntime {
 
   void yield() override {
     vTaskDelay(1);  // 1 tick (10ms at 100Hz); pdMS_TO_TICKS(1) rounds to 0
+  }
+
+  // Clocks for Reading Stats. The system clock holds LOCAL wall time (no TZ
+  // configured). ESP-IDF keeps it running through deep sleep; after a cold
+  // power-on it restarts at 1970 and Application restores the last saved value.
+  uint32_t monotonic_ms() const override {
+    return millis();
+  }
+  int64_t local_time() const override {
+    return static_cast<int64_t>(time(nullptr));
+  }
+  bool set_local_time(int64_t seconds) override {
+    struct timeval tv = {};
+    tv.tv_sec = static_cast<time_t>(seconds);
+    return settimeofday(&tv, nullptr) == 0;
   }
 
  private:

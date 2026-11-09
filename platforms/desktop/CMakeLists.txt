@@ -62,6 +62,8 @@ add_library(microreader_content STATIC
     ${CONTENT_DIR}/mrb/MrbWriter.cpp
     ${CONTENT_DIR}/mrb/MrbReader.cpp
     ${CONTENT_DIR}/mrb/MrbConverter.cpp
+    # Reading statistics (platform-agnostic, no screen deps; kept here so unit tests can link it)
+    ${CONTENT_DIR}/../stats/ReadingStats.cpp
 )
 target_include_directories(microreader_content PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../../lib
@@ -83,6 +85,8 @@ add_library(microreader_core STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../../lib/microreader/screens/ChapterSelectScreen.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../lib/microreader/screens/LinksScreen.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../lib/microreader/screens/ReaderOptionsScreen.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../lib/microreader/screens/StatsCalendarScreen.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../lib/microreader/screens/DateTimeScreen.cpp
 )
 target_include_directories(microreader_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../../lib

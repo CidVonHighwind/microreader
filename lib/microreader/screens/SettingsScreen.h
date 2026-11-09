@@ -45,6 +45,8 @@ class SettingsScreen final : public ListMenuScreen {
   int idx_grayscale_demo_ = -1;
 #endif
 
+  int idx_stats_ = -1;
+  int idx_date_time_ = -1;
   int idx_clear_cache_ = -1;
   int idx_rebuild_index_ = -1;
   int idx_list_format_ = -1;

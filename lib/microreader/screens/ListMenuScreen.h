@@ -42,6 +42,19 @@ class ListMenuScreen : public IScreen {
     return font_size_idx_;
   }
 
+  // Shared, lazily-initialised copies of the embedded UI fonts. Screens that
+  // don't derive from ListMenuScreen use these so the font tables (100+ KB)
+  // aren't duplicated in flash by another translation unit.
+  enum class UiFont : uint8_t { Small, Medium, Large, Header };
+  static const BitmapFont& shared_font(UiFont which);
+  // The list font matching the current "Menu Size" setting.
+  static const BitmapFont& shared_menu_font();
+
+  // Draws the standard menu bottom bar (battery + ◀ ▶ ▼ ▲ button hints) and
+  // returns the height it reserves. inv_menu swaps the ▼/▲ hints.
+  static int draw_menu_bottom_bar(DrawBuffer& buf, const BitmapFont& font, bool inv_menu,
+                                  std::optional<uint8_t> battery_pct);
+
  protected:
   const char* title_ = nullptr;
   const char* title2_ = nullptr;
@@ -184,6 +197,7 @@ class ListMenuScreen : public IScreen {
 
   // 4. Draws the four navigaton-button hint glyphs. Called by draw_bottom_.
   void draw_button_hints_(DrawBuffer& buf) const;
+  static void draw_nav_hints_(DrawBuffer& buf, const BitmapFont& font, bool inv_menu);
 };
 
 }  // namespace microreader
