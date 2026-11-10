@@ -662,6 +662,11 @@ class Esp32WifiTransfer final : public microreader::IWifiTransfer {
     std::snprintf(host, sizeof(host), "%s.local", microreader::kWifiHostname);
     const uint32_t ip = server_ip_;
     const uint8_t* ipb = reinterpret_cast<const uint8_t*>(&ip);
+    // Message buffers live only while Wi-Fi is on.
+    std::vector<uint8_t> rx(512), tx(512);
+    uint8_t* const rxb = rx.data();
+    uint8_t* const txb = tx.data();
+    constexpr size_t kBuf = 512;
 
     int mdns = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (mdns >= 0) {
@@ -709,9 +714,9 @@ class Esp32WifiTransfer final : public microreader::IWifiTransfer {
     uint32_t next_announce = now_ms_();
     while (!dns_stop_) {
       if (mdns >= 0 && announces < 3 && now_ms_() >= next_announce) {
-        const size_t n = microreader::net::mdns_announce(host, ipb, tx_, sizeof(tx_));
+        const size_t n = microreader::net::mdns_announce(host, ipb, txb, kBuf);
         if (n)
-          sendto(mdns, tx_, n, 0, reinterpret_cast<sockaddr*>(&group), sizeof(group));
+          sendto(mdns, txb, n, 0, reinterpret_cast<sockaddr*>(&group), sizeof(group));
         ++announces;
         next_announce = now_ms_() + 1000u * announces;
       }
@@ -735,25 +740,25 @@ class Esp32WifiTransfer final : public microreader::IWifiTransfer {
       socklen_t from_len = sizeof(from);
       if (mdns >= 0 && FD_ISSET(mdns, &fds)) {
         const int got =
-            recvfrom(mdns, rx_, sizeof(rx_), 0, reinterpret_cast<sockaddr*>(&from), &from_len);
+            recvfrom(mdns, rxb, kBuf, 0, reinterpret_cast<sockaddr*>(&from), &from_len);
         if (got > 0) {
           bool unicast = false;
           const bool legacy = ntohs(from.sin_port) != microreader::net::kMdnsPort;
-          const size_t n = microreader::net::mdns_answer(rx_, static_cast<size_t>(got), host, ipb, legacy, tx_,
-                                                         sizeof(tx_), &unicast);
+          const size_t n = microreader::net::mdns_answer(rxb, static_cast<size_t>(got), host, ipb, legacy, txb,
+                                                         kBuf, &unicast);
           if (n) {
             const sockaddr_in& to = unicast ? from : group;
-            sendto(mdns, tx_, n, 0, reinterpret_cast<const sockaddr*>(&to), sizeof(to));
+            sendto(mdns, txb, n, 0, reinterpret_cast<const sockaddr*>(&to), sizeof(to));
           }
         }
       }
       if (dns >= 0 && FD_ISSET(dns, &fds)) {
         from_len = sizeof(from);
-        const int got = recvfrom(dns, rx_, sizeof(rx_), 0, reinterpret_cast<sockaddr*>(&from), &from_len);
+        const int got = recvfrom(dns, rxb, kBuf, 0, reinterpret_cast<sockaddr*>(&from), &from_len);
         if (got > 0) {
-          const size_t n = microreader::net::dns_answer_all(rx_, static_cast<size_t>(got), ipb, tx_, sizeof(tx_));
+          const size_t n = microreader::net::dns_answer_all(rxb, static_cast<size_t>(got), ipb, txb, kBuf);
           if (n)
-            sendto(dns, tx_, n, 0, reinterpret_cast<sockaddr*>(&from), from_len);
+            sendto(dns, txb, n, 0, reinterpret_cast<sockaddr*>(&from), from_len);
         }
       }
     }
@@ -799,8 +804,6 @@ class Esp32WifiTransfer final : public microreader::IWifiTransfer {
   volatile bool busy_ = false;
   volatile bool dns_stop_ = false;
   volatile bool dns_running_ = false;
-  uint8_t rx_[512];
-  uint8_t tx_[512];
 
   SemaphoreHandle_t activity_mutex_ = nullptr;
   std::string activity_;
