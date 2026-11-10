@@ -395,11 +395,17 @@ TEST_F(StatsScreensTest, SettingsHasStatsEntries) {
   start_app();
   tap(Button::Button0);  // book list ◀ → Settings
   ASSERT_EQ(top(), "Settings");
-  tap(Button::Button1);  // first item: Reading Stats
+  tap(Button::Button1);  // first item: Finished Books
+  EXPECT_EQ(top(), "Finished");
+  tap(Button::Button0);
+  ASSERT_EQ(top(), "Settings");
+  tap(Button::Button2);  // ▼ Reading Stats
+  tap(Button::Button1);
   EXPECT_EQ(top(), "Stats");
   tap(Button::Button0);
   ASSERT_EQ(top(), "Settings");
-  tap(Button::Button2);  // ▼ to "Date: ..."
+  tap(Button::Button2);  // ▼ Daily Goal
+  tap(Button::Button2);  // ▼ "Date: ..."
   tap(Button::Button1);
   EXPECT_EQ(top(), "Date & Time");
 }

@@ -82,7 +82,22 @@ std::string days_text(int days) {
 // ── Lifecycle ───────────────────────────────────────────────────────────────
 
 void StatsCalendarScreen::start(DrawBuffer& buf, IRuntime& runtime) {
+  sleep_mode_ = false;
+  init_(runtime);
+  draw_(buf, runtime.battery_percentage());
+}
+
+void StatsCalendarScreen::render_for_sleep(DrawBuffer& buf, IRuntime& runtime) {
+  sleep_mode_ = true;
+  init_(runtime);
+  draw_(buf, std::nullopt);
+  sleep_mode_ = false;
+  month_.clear();
+}
+
+void StatsCalendarScreen::init_(IRuntime& runtime) {
   stats_dir_ = app_ ? app_->stats().stats_dir() : std::string();
+  goal_s_ = app_ ? app_->goal_seconds() : 0;
   if (app_)
     app_->stats().flush();  // make sure nothing read so far is missing
 
@@ -95,9 +110,8 @@ void StatsCalendarScreen::start(DrawBuffer& buf, IRuntime& runtime) {
   view_year_ = today_.year;
   view_month_ = today_.month;
   sel_day_ = today_.day;
-  streak_ = (have_today_ && app_) ? app_->stats().current_streak(today_) : 0;
+  streak_ = (have_today_ && app_) ? app_->stats().current_streak(today_, goal_s_) : 0;
   load_month_();
-  draw_(buf, runtime.battery_percentage());
 }
 
 void StatsCalendarScreen::stop() {
@@ -266,6 +280,10 @@ void StatsCalendarScreen::draw_(DrawBuffer& buf, std::optional<uint8_t> battery)
   draw_grid_(buf, L);
   draw_info_(buf, L);
 
+  if (sleep_mode_) {
+    text_center(buf, small, L.content_w / 2, buf.height() - small.y_advance() - 4, "sleeping...");
+    return;
+  }
   ListMenuScreen::draw_menu_bottom_bar(buf, ListMenuScreen::shared_menu_font(), app_ && app_->invert_menu_buttons(),
                                        battery);
 }
@@ -309,17 +327,27 @@ void StatsCalendarScreen::draw_cell_(DrawBuffer& buf, int x, int y, int w, int h
   const int dur_y = num_y + medium.y_advance();
   text_center(buf, small, x + w / 2, dur_y, dur, ink);
 
-  // Progress bar toward kFullBarSeconds, below the duration with a small gap.
+  // Progress bar toward the daily goal (or kFullBarSeconds without one),
+  // below the duration with a small gap.
+  const uint32_t full = bar_full_seconds_();
   const int bar_x = x + 8;
   const int bar_w = w - 16;
   const int bar_h = 6;
   const int bar_y = std::min(dur_y + small.y_advance() + 3, y + h - 4 - bar_h - 2);
   frame(buf, bar_x, bar_y, bar_w, bar_h, 1, ink);
-  const uint32_t capped = std::min<uint32_t>(t.seconds, kFullBarSeconds);
-  int fill = static_cast<int>((bar_w - 2) * static_cast<int64_t>(capped) / kFullBarSeconds);
+  const uint32_t capped = std::min<uint32_t>(t.seconds, full);
+  int fill = static_cast<int>((bar_w - 2) * static_cast<int64_t>(capped) / full);
   if (fill < 1)
     fill = 1;  // any reading at all shows a sliver
   buf.fill_rect(bar_x + 1, bar_y + 1, fill, bar_h - 2, ink);
+
+  // Goal reached: a small corner flag in the top-right of the cell.
+  if (goal_s_ && t.seconds >= goal_s_) {
+    const int fx = x + w - 5;  // right edge of the flag
+    const int fy = y + 5;
+    for (int r = 0; r < 8; ++r)
+      buf.fill_rect(fx - (8 - r), fy + r, 8 - r, 1, ink);
+  }
 }
 
 void StatsCalendarScreen::draw_info_(DrawBuffer& buf, const Layout& L) const {
@@ -358,8 +386,24 @@ void StatsCalendarScreen::draw_info_(DrawBuffer& buf, const Layout& L) const {
   }
   y += large.y_advance() + 6;
 
-  // Books read that day, longest first.
   const int line_h = small.y_advance() + 4;
+  // Daily goal status for the selected day.
+  if (goal_s_) {
+    const std::string goal = format_duration(goal_s_);
+    std::string status;
+    if (t.seconds >= goal_s_)
+      status = "Goal met (" + goal + ")";
+    else if (is_future_(sel_day_))
+      status = "Goal: " + goal;
+    else if (is_today_(sel_day_))
+      status = format_duration(goal_s_ - t.seconds) + " to go \xe2\x80\x94 goal " + goal;
+    else
+      status = "Goal missed \xe2\x80\x94 " + format_duration(t.seconds) + " of " + goal;
+    text_at(buf, small, x, y, status);
+    y += line_h;
+  }
+
+  // Books read that day, longest first.
   const int max_lines = L.landscape ? 5 : 3;
   int shown = 0, total_books = 0;
   {
@@ -391,7 +435,7 @@ void StatsCalendarScreen::draw_info_(DrawBuffer& buf, const Layout& L) const {
   }
   // Reserve the book-line block so the summary below doesn't jump around
   // as the selection moves between days.
-  y = L.info_y + medium.y_advance() + 6 + large.y_advance() + 6 + line_h * max_lines;
+  y = L.info_y + medium.y_advance() + 6 + large.y_advance() + 6 + line_h * (max_lines + (goal_s_ ? 1 : 0));
 
   // ── Month summary ──
   y += 6;
@@ -401,7 +445,8 @@ void StatsCalendarScreen::draw_info_(DrawBuffer& buf, const Layout& L) const {
   const uint32_t total = month_.total_seconds();
   const int elapsed = days_elapsed_in_view_();
   char days_read[32];
-  std::snprintf(days_read, sizeof(days_read), "%d / %d", month_.days_read(), days_in_month(view_year_, view_month_));
+  std::snprintf(days_read, sizeof(days_read), "%d / %d", goal_s_ ? month_.days_counted(goal_s_) : month_.days_read(),
+                days_in_month(view_year_, view_month_));
   const std::string avg = elapsed > 0 ? format_duration(total / static_cast<uint32_t>(elapsed)) : "\xe2\x80\x94";
   const std::string streak = have_today_ ? days_text(streak_) : "\xe2\x80\x94";
 
@@ -411,11 +456,11 @@ void StatsCalendarScreen::draw_info_(DrawBuffer& buf, const Layout& L) const {
   };
   const Stat stats[6] = {
       {"MONTH TOTAL", format_duration(total)},
-      {"DAYS READ", days_read},
+      {goal_s_ ? "GOALS MET" : "DAYS READ", days_read},
       {"PAGES", std::to_string(month_.total_pages())},
       {"DAILY AVERAGE", avg},
       {"CURRENT STREAK", streak},
-      {"LONGEST STREAK", days_text(month_.longest_streak())},
+      {"LONGEST STREAK", days_text(month_.longest_streak(goal_s_))},
   };
   const int col_w = L.info_w / 2;
   const int row_h = small.y_advance() + 2 + large.y_advance() + 8;

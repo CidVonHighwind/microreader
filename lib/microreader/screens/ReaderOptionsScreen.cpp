@@ -193,7 +193,7 @@ void ReaderOptionsScreen::on_start() {
 
   clear_items();
   idx_justify_ = idx_padding_h_ = idx_padding_v_ = idx_line_spacing_ = idx_progress_ = idx_progress_scope_ =
-      idx_chapters_ = idx_pub_fonts_ = idx_rotate_display_ = idx_links_ = -1;
+      idx_chapters_ = idx_pub_fonts_ = idx_rotate_display_ = idx_links_ = idx_finished_ = idx_chapter_bar_ = -1;
 
   char tmp[40];
 
@@ -212,8 +212,15 @@ void ReaderOptionsScreen::on_start() {
     add_item(link_label);
   }
 
+  // Move the book to / from the Finished shelf.
+  if (app_ && !book_path_.empty()) {
+    idx_finished_ = count();
+    const bool done = app_->finished_books().contains(book_path_, book_meta_title_, book_author_);
+    add_item(fmt_setting(tmp, sizeof(tmp), "Finished", done ? "Yes" : "No"));
+  }
+
   // Separator between chapter navigation and text layout settings.
-  if (settings_ && app_ && has_toc)
+  if (settings_ && app_ && (has_toc || idx_finished_ >= 0))
     add_separator();
 
   if (settings_) {
@@ -272,6 +279,9 @@ void ReaderOptionsScreen::on_start() {
                            settings_->progress_scope == ProgressScope::Chapter ? "Chapter" : "Book"));
     }
 
+    idx_chapter_bar_ = count();
+    add_item(fmt_setting(tmp, sizeof(tmp), "Chapter Bar", settings_->chapter_bar ? "On" : "Off"));
+
     idx_rotate_display_ = count();
     add_item(fmt_setting(tmp, sizeof(tmp), "Display", app_ && app_->rotate_display() ? "Landscape" : "Portrait"));
   }
@@ -312,6 +322,19 @@ void ReaderOptionsScreen::on_select(int index) {
     return;
   }
 
+  if (index == idx_finished_) {
+    if (app_) {
+      const bool done = app_->finished_books().contains(book_path_, book_meta_title_, book_author_);
+      app_->finished_books().set(book_path_, book_meta_title_, book_author_, !done, app_->local_time_now());
+    }
+    refresh_items_(index);
+    return;
+  }
+  if (index == idx_chapter_bar_) {
+    settings_->chapter_bar = !settings_->chapter_bar;
+    refresh_items_(index);
+    return;
+  }
   if (index == idx_justify_) {
     settings_->align_override = static_cast<AlignOverride>((static_cast<uint8_t>(settings_->align_override) + 1) %
                                                            ReaderSettings::kNumAlignPresets);

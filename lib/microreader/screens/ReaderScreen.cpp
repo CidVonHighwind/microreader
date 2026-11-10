@@ -566,6 +566,8 @@ void ReaderScreen::update(const ButtonState& buttons, DrawBuffer& buf, IRuntime&
           app_->reader_options()->populate(mrb_.toc(), static_cast<uint16_t>(chapter_idx_), page_pos_.paragraph,
                                            mrb_.metadata().title, progress_pct(), chapter_progress_pct());
           app_->reader_options()->set_page_links(page_links_, mrb_.spine_files(), mrb_);
+          app_->reader_options()->set_book_identity(path_, mrb_.metadata().title,
+                                                    mrb_.metadata().author.value_or(""));
           app_->push_screen(ScreenId::ReaderOptions);
           return;
         default:
@@ -848,12 +850,13 @@ void ReaderScreen::render_page_(DrawBuffer& buf) {
 }
 
 uint16_t ReaderScreen::bottom_padding_(bool landscape) const {
-  const uint16_t base =
-      static_cast<uint16_t>(reader_settings_.progress_bottom() + reader_settings_.v_padding() + (landscape ? 2 : 0));
+  const uint16_t base = static_cast<uint16_t>(reader_settings_.progress_bottom() + reader_settings_.chapter_bar_reserve() +
+                                              reader_settings_.v_padding() + (landscape ? 2 : 0));
   if (nav_history_.empty() || landscape)
     return base;  // landscape hints go on the right edge, not bottom — no extra bottom padding needed
   // Portrait: hints share the bottom margin. Need at least as much room as the percentage indicator, plus 2px for bar.
-  const uint16_t pct_base = static_cast<uint16_t>(16 + reader_settings_.v_padding() + 2);
+  const uint16_t pct_base =
+      static_cast<uint16_t>(16 + reader_settings_.v_padding() + 2 + reader_settings_.chapter_bar_reserve());
   if (reader_settings_.progress_style == ProgressStyle::Bar)
     return std::max(base, static_cast<uint16_t>(pct_base + 2));
   if (reader_settings_.progress_style == ProgressStyle::None)
@@ -863,7 +866,31 @@ uint16_t ReaderScreen::bottom_padding_(bool landscape) const {
 
 void ReaderScreen::draw_bottom_(DrawBuffer& buf, bool landscape) {
   const int W = buf.width();
-  const int H = buf.height();
+  const int H_full = buf.height();
+  // With the chapter bar on, it takes the very bottom edge and the regular
+  // progress indicator moves up above it.
+  const int ch_reserve = reader_settings_.chapter_bar_reserve();
+  const int H = H_full - ch_reserve;
+  // Chapter bar top edge. Up 2px in landscape, where the panel edge is hidden.
+  const int ch_y = (landscape ? H_full - 4 : H_full - 2) - ReaderSettings::kChapterBarH;
+
+  if (mrb_.paragraph_count() > 0 && reader_settings_.chapter_bar) {
+    // Chapter bar: outlined track across the text width, filled up to the
+    // chapter progress.
+    constexpr int kH = ReaderSettings::kChapterBarH;
+    const int x0 = reader_settings_.h_padding();
+    const int w = W - 2 * x0;
+    const int y = ch_y;
+    buf.fill_rect(x0, y, w, kH, true);
+    buf.fill_rect(x0, y, w, 1, false);
+    buf.fill_rect(x0, y + kH - 1, w, 1, false);
+    buf.fill_rect(x0, y, 1, kH, false);
+    buf.fill_rect(x0 + w - 1, y, 1, kH, false);
+    const int pct = chapter_progress_pct();
+    const int fill = (w - 4) * pct / 100;
+    if (fill > 0)
+      buf.fill_rect(x0 + 2, y + 2, fill, kH - 4, false);
+  }
 
   if (mrb_.paragraph_count() > 0 && reader_settings_.progress_style != ProgressStyle::None) {
     int pct = reader_settings_.progress_scope == ProgressScope::Chapter ? chapter_progress_pct() : progress_pct();
@@ -874,7 +901,8 @@ void ReaderScreen::draw_bottom_(DrawBuffer& buf, bool landscape) {
     } else {
       // Progress bar: a thin filled line at the very bottom of the screen.
       // Move it up 2px in landscape mode because of the screen edges being partially hidden.
-      const int kBarY = landscape ? H - 4 : H - 2;
+      // With the chapter bar on, sit 2px above it.
+      const int kBarY = ch_reserve ? ch_y - 2 - 2 : (landscape ? H - 4 : H - 2);
       constexpr int kBarH = 2;
       const int bar_w = pct * W / 100;
       buf.fill_rect(0, kBarY, bar_w, kBarH, false);         // filled portion (black)
@@ -901,7 +929,8 @@ void ReaderScreen::draw_bottom_(DrawBuffer& buf, bool landscape) {
   const int gap = 50;
   const int btn0_pos = pair0 - gap;  // Button0 = back
   const int btn1_pos = pair0 + gap;  // Button1 = stay
-  const int pct_top = (reader_settings_.progress_style == ProgressStyle::Bar) ? H90 - 18 : H90 - 16;
+  const int pct_top = ((reader_settings_.progress_style == ProgressStyle::Bar) ? H90 - 18 : H90 - 16) -
+                      reader_settings_.chapter_bar_reserve();
   const int text_y = pct_top + static_cast<int>(hint_font_.baseline());
 
   const char* kBack = "back";
@@ -1074,6 +1103,13 @@ bool ReaderScreen::prev_page_() {
 void ReaderScreen::save_position_() {
   if (pos_path_.empty())
     return;
+  // Remember progress for the "Book cover" sleep screen. Only while the book
+  // is loaded: stop() saves the position after releasing it, when
+  // progress_pct() would read 0.
+  if (app_ && open_ok_ && chapter_src_ && mrb_.paragraph_count() > 0) {
+    const std::string& title = mrb_.metadata().title;
+    app_->note_reading_progress(path_, title.empty() ? book_stem_() : title, progress_pct());
+  }
   const std::string& path = pos_path_;
   FILE* f = std::fopen(path.c_str(), "w");
   if (!f)

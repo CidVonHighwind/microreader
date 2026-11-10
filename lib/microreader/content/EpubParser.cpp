@@ -538,6 +538,12 @@ EpubError Epub::parse_opf(IZipFile& file, const std::string& opf_path, uint8_t* 
             if (metadata_.cover_id.has_value() && id.length == metadata_.cover_id->size() &&
                 std::string(id.data, id.length) == *metadata_.cover_id) {
               cover_idx_ = idx;
+            } else if (cover_idx_ < 0 && idx >= 0) {
+              // EPUB 3: <item properties="cover-image" .../>
+              auto props = ev.attrs.get("properties");
+              if (props.length >= 11 &&
+                  std::string_view(props.data, props.length).find("cover-image") != std::string_view::npos)
+                cover_idx_ = idx;
             }
           }
         }

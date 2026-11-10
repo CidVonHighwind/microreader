@@ -19,6 +19,9 @@ set(lib_sources
     ${LIB}/screens/StatsCalendarScreen.cpp
     ${LIB}/screens/DateTimeScreen.cpp
     ${LIB}/stats/ReadingStats.cpp
+    ${LIB}/library/FinishedBooks.cpp
+    ${LIB}/screens/FinishedBooksScreen.cpp
+    ${LIB}/screens/SleepScreens.cpp
     ${LIB}/content/ZipReader.cpp
     ${LIB}/content/XmlReader.cpp
     ${LIB}/content/CssParser.cpp

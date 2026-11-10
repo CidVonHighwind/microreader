@@ -77,6 +77,7 @@ add_library(microreader_content STATIC
     ${LIB_DIR}/content/mrb/MrbConverter.cpp
     # Reading statistics (platform-agnostic, no screen deps)
     ${LIB_DIR}/stats/ReadingStats.cpp
+    ${LIB_DIR}/library/FinishedBooks.cpp
 )
 target_include_directories(microreader_content PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib
@@ -100,6 +101,8 @@ add_library(microreader_core STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib/microreader/screens/LinksScreen.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib/microreader/screens/StatsCalendarScreen.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib/microreader/screens/DateTimeScreen.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../lib/microreader/screens/FinishedBooksScreen.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../lib/microreader/screens/SleepScreens.cpp
 )
 target_include_directories(microreader_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib
@@ -127,6 +130,7 @@ add_executable(unit_tests
     unit/BmpSleepConverterTest.cpp
     unit/BookIndexTest.cpp
     unit/ReadingStatsTest.cpp
+    unit/FinishedBooksTest.cpp
 )
 target_include_directories(unit_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/support
@@ -170,7 +174,9 @@ add_executable(microreader_tests
     unit/LinksScreenTest.cpp
     unit/BookIndexTest.cpp
     unit/ReadingStatsTest.cpp
+    unit/FinishedBooksTest.cpp
     unit/StatsScreensTest.cpp
+    unit/NewFeaturesTest.cpp
 )
 target_include_directories(microreader_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/support

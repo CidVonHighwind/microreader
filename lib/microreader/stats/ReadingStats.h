@@ -87,7 +87,17 @@ struct DayTotals {
   bool any() const {
     return seconds > 0 || pages > 0;
   }
+  // Whether this day counts toward a streak. goal_seconds == 0 means "no
+  // daily goal": any reading counts. Otherwise the goal must be reached.
+  bool counts(uint32_t goal_seconds) const {
+    return goal_seconds == 0 ? any() : seconds >= goal_seconds;
+  }
 };
+
+// Daily reading goal presets offered in Settings (minutes).
+constexpr uint16_t kGoalPresetMinutes[] = {10, 15, 20, 25, 30, 45, 60, 90, 120};
+constexpr int kNumGoalPresets = static_cast<int>(sizeof(kGoalPresetMinutes) / sizeof(kGoalPresetMinutes[0]));
+constexpr uint16_t kDefaultGoalMinutes = 30;
 
 // Aggregated contents of one month's stats file.
 struct MonthStats {
@@ -118,7 +128,8 @@ struct MonthStats {
   uint32_t total_seconds() const;
   uint32_t total_pages() const;
   int days_read() const;
-  int longest_streak() const;  // within this month only
+  int days_counted(uint32_t goal_seconds) const;           // days that count toward a streak
+  int longest_streak(uint32_t goal_seconds = 0) const;     // within this month only
 };
 
 // ── Recorder ────────────────────────────────────────────────────────────────
@@ -156,9 +167,9 @@ class ReadingStats {
   void book_closed();  // credits the current page and flushes
   void flush();        // append pending reading to the month file
 
-  // Consecutive days with reading ending today — or yesterday, if nothing has
-  // been read yet today. Reads the month files on demand.
-  int current_streak(const CivilDate& today) const;
+  // Consecutive days that count (see DayTotals::counts) ending today — or
+  // yesterday, if today doesn't count yet. Reads the month files on demand.
+  int current_streak(const CivilDate& today, uint32_t goal_seconds = 0) const;
 
   // ── File helpers (public for tests/tools) ──
   static std::string month_path(const std::string& stats_dir, int year, int month);

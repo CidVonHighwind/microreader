@@ -7,6 +7,7 @@
 #include "../Application.h"
 #include "../content/BookIndex.h"
 #include "../version.h"
+#include "SleepScreens.h"
 
 #ifdef ESP_PLATFORM
 #include <dirent.h>
@@ -37,6 +38,14 @@ static std::string get_date_time_label(Application* app) {
   std::snprintf(buf, sizeof(buf), "Date: %d %s %d, %02d:%02d", d.day, month_abbrev(d.month), d.year, sod / 3600,
                 (sod / 60) % 60);
   return buf;
+}
+
+static std::string get_goal_label(bool enabled) {
+  return std::string("Daily Goal: ") + (enabled ? "On" : "Off");
+}
+
+static std::string get_goal_target_label(int minutes) {
+  return "Goal: " + format_duration(static_cast<uint32_t>(minutes) * 60u) + " a day";
 }
 
 static std::string get_menu_nav_label(bool inverted) {
@@ -72,14 +81,20 @@ static std::string get_menu_font_label(int size) {
 }
 
 static std::string get_sleep_image_label(const std::string& path) {
-  if (path.empty())
-    return "Sleep Image: Auto";
-  std::string label = "Sleep Image: ";
+  std::string label = "Sleep Screen: ";
+  if (path == sleep_screens::kModeCycle)
+    return label + "Cycle images";
+  if (path == sleep_screens::kModeRandom)
+    return label + "Random image";
+  if (path == sleep_screens::kModeCover)
+    return label + "Book cover";
+  if (path == sleep_screens::kModeStats)
+    return label + "Reading stats";
   if (path.rfind("embedded:", 0) == 0) {
     int idx = std::atoi(path.c_str() + 9);
     label += (idx == 0 ? "bird" : (idx == 1 ? "stone" : "bebop"));
   } else {
-    const char* p = path.rfind("bmp:", 0) == 0 ? path.c_str() + 4 : path.c_str();
+    const char* p = (path.rfind("bmp:", 0) == 0 || path.rfind("img:", 0) == 0) ? path.c_str() + 4 : path.c_str();
     const char* slash = nullptr;
     for (const char* c = p; *c; ++c)
       if (*c == '/' || *c == '\\')
@@ -152,38 +167,12 @@ void SettingsScreen::on_start() {
   // Custom SD images take priority — embedded ones are only shown when no
   // custom images are present.
   sleep_images_.clear();
-  sleep_images_.push_back("");  // Auto
+  sleep_images_.push_back(sleep_screens::kModeCycle);
+  sleep_images_.push_back(sleep_screens::kModeRandom);
+  sleep_images_.push_back(sleep_screens::kModeCover);
+  sleep_images_.push_back(sleep_screens::kModeStats);
   sleep_image_sel_idx_ = 0;
-  std::vector<std::string> sd_sleep;
-#ifdef ESP_PLATFORM
-  {
-    DIR* sd = opendir("/sdcard/.sleep");
-    if (sd) {
-      struct dirent* ent;
-      while ((ent = readdir(sd)) != nullptr) {
-        if (ent->d_name[0] == '.')
-          continue;
-        const char* ext = std::strrchr(ent->d_name, '.');
-        if (!ext) continue;
-        if (strcmp(ext, ".mgr") == 0)
-          sd_sleep.push_back(std::string("/sdcard/.sleep/") + ent->d_name);
-        else if (strcmp(ext, ".bmp") == 0)
-          sd_sleep.push_back(std::string("bmp:/sdcard/.sleep/") + ent->d_name);
-      }
-      closedir(sd);
-    }
-  }
-#else
-  try {
-    for (const auto& entry : fs::directory_iterator("sd/.sleep")) {
-      const auto& p = entry.path();
-      if (p.extension() == ".mgr")
-        sd_sleep.push_back(p.string());
-      else if (p.extension() == ".bmp")
-        sd_sleep.push_back("bmp:" + p.string());
-    }
-  } catch (...) {}
-#endif
+  std::vector<std::string> sd_sleep = sleep_screens::list_sd_images(data_dir_ != nullptr);
   if (sd_sleep.empty()) {
     sleep_images_.push_back("embedded:0");
     sleep_images_.push_back("embedded:1");
@@ -202,9 +191,26 @@ void SettingsScreen::on_start() {
     }
   }
 
-  // --- Reading statistics ---
+  // --- Library & reading statistics ---
+  idx_finished_ = count();
+  {
+    char label[40];
+    std::snprintf(label, sizeof(label), "Finished Books (%u)",
+                  static_cast<unsigned>(app_ ? app_->finished_books().size() : 0));
+    add_item(label);
+  }
+
   idx_stats_ = count();
   add_item("Reading Stats");
+
+  idx_goal_ = count();
+  add_item(get_goal_label(app_ && app_->goal_enabled()));
+
+  idx_goal_target_ = -1;
+  if (app_ && app_->goal_enabled()) {
+    idx_goal_target_ = count();
+    add_item(get_goal_target_label(app_->goal_minutes()), 1);
+  }
 
   idx_date_time_ = count();
   add_item(get_date_time_label(app_));
@@ -305,12 +311,34 @@ void SettingsScreen::on_select(int index) {
     return;
   }
 #endif
+  if (index == idx_finished_) {
+    app_->push_screen(ScreenId::Finished);
+    return;
+  }
   if (index == idx_stats_) {
     app_->push_screen(ScreenId::Stats);
     return;
   }
   if (index == idx_date_time_) {
     app_->push_screen(ScreenId::DateTime);
+    return;
+  }
+  if (index == idx_goal_) {
+    app_->set_goal_enabled(!app_->goal_enabled());
+    restart();  // adds/removes the "Goal: ..." line under this one
+    return;
+  }
+  if (index == idx_goal_target_) {
+    // Step to the next preset; a custom value from the settings file restarts at the first.
+    int next = kGoalPresetMinutes[0];
+    for (int i = 0; i < kNumGoalPresets; ++i) {
+      if (kGoalPresetMinutes[i] == app_->goal_minutes()) {
+        next = kGoalPresetMinutes[(i + 1) % kNumGoalPresets];
+        break;
+      }
+    }
+    app_->set_goal_minutes(next);
+    set_item_label(idx_goal_target_, get_goal_target_label(next));
     return;
   }
   if (index == idx_clear_cache_) {

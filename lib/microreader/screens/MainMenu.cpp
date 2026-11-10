@@ -161,7 +161,12 @@ void MainMenu::populate_list_() {
   separator_visual_index_ = -1;
 
   const StringPool& bpool = BookIndex::instance().pool();
+  const FinishedBooks& finished = app_->finished_books();
   for (const auto& idx : BookIndex::instance().entries()) {
+    // Finished books live on their own shelf (Settings → Finished Books).
+    if (finished.size() > 0 &&
+        finished.contains(idx.path.view(bpool), idx.title.view(bpool), idx.author.view(bpool)))
+      continue;
     BookEntry e;
     e.path = idx.path.to_string(bpool);
     e.title_ref = idx.title;

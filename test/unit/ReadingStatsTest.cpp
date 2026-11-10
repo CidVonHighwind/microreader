@@ -382,3 +382,49 @@ TEST_F(RecorderTest, StreakSpansMonthsAndToleratesUnreadToday) {
   EXPECT_EQ(stats_.current_streak({2026, 11, 4}), 0);  // missed a day
   EXPECT_EQ(stats_.current_streak({2026, 10, 30}), 1);
 }
+
+// ── Daily goal ──────────────────────────────────────────────────────────────
+
+TEST(DailyGoal, DayCounts) {
+  DayTotals t;
+  EXPECT_FALSE(t.counts(0));
+  t.pages = 1;
+  EXPECT_TRUE(t.counts(0));  // no goal: any reading counts
+  EXPECT_FALSE(t.counts(60));
+  t.seconds = 1799;
+  EXPECT_FALSE(t.counts(1800));
+  t.seconds = 1800;
+  EXPECT_TRUE(t.counts(1800));  // reaching the goal exactly counts
+}
+
+TEST_F(StatsDirTest, GoalChangesDaysCountedAndLongestStreak) {
+  // 1..4 Mar: 40m, 10m, 35m, 31m; 6 Mar: 5m.
+  write_month(2026, 3, "1 2400 10 A\n2 600 3 A\n3 2100 9 A\n4 1860 8 A\n6 300 1 A\n");
+  MonthStats m;
+  m.load(stats_dir_, 2026, 3);
+  EXPECT_EQ(m.days_read(), 5);
+  EXPECT_EQ(m.days_counted(0), 5);
+  EXPECT_EQ(m.longest_streak(0), 4);
+  EXPECT_EQ(m.days_counted(30 * 60), 3);
+  EXPECT_EQ(m.longest_streak(30 * 60), 2);  // 3 and 4 Mar
+  EXPECT_EQ(m.longest_streak(60 * 60), 0);
+}
+
+TEST_F(RecorderTest, CurrentStreakWithGoal) {
+  ReadingStats::append_record(stats_dir_, {2026, 11, 6}, 1800, 1, "B");
+  ReadingStats::append_record(stats_dir_, {2026, 11, 7}, 600, 1, "B");  // short day
+  ReadingStats::append_record(stats_dir_, {2026, 11, 8}, 2000, 1, "B");
+  ReadingStats::append_record(stats_dir_, {2026, 11, 9}, 300, 1, "B");  // today, goal not reached yet
+  EXPECT_EQ(stats_.current_streak({2026, 11, 9}, 0), 4);
+  // With a 30-minute goal the short day breaks it; today doesn't count yet but doesn't break it.
+  EXPECT_EQ(stats_.current_streak({2026, 11, 9}, 30 * 60), 1);
+  ReadingStats::append_record(stats_dir_, {2026, 11, 9}, 1600, 1, "B");  // now 31m today
+  EXPECT_EQ(stats_.current_streak({2026, 11, 9}, 30 * 60), 2);
+}
+
+TEST(DailyGoal, PresetsIncludeDefault) {
+  bool found = false;
+  for (int i = 0; i < kNumGoalPresets; ++i)
+    found |= kGoalPresetMinutes[i] == kDefaultGoalMinutes;
+  EXPECT_TRUE(found);
+}

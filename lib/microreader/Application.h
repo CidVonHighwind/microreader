@@ -9,7 +9,9 @@
 #include "ScreenManager.h"
 #include "display/DrawBuffer.h"
 #include "screens/ChapterSelectScreen.h"
+#include "library/FinishedBooks.h"
 #include "screens/DateTimeScreen.h"
+#include "screens/FinishedBooksScreen.h"
 #include "screens/IScreen.h"
 #include "screens/LinksScreen.h"
 #include "screens/MainMenu.h"
@@ -36,6 +38,7 @@ enum class ScreenId : uint8_t {
   GrayscaleDemo,
   Stats,
   DateTime,
+  Finished,
 };
 
 class Application {
@@ -51,6 +54,7 @@ class Application {
     reader_.set_data_dir(dir ? dir : "");
     settings_.set_data_dir(dir);
     stats_.set_data_dir(dir);
+    finished_books_.set_file(dir ? std::string(dir) + "/finished.txt" : std::string());
   }
 
   // Path to data directory for settings/state persistence
@@ -69,6 +73,8 @@ class Application {
   void load_settings_();
   // Common sleep sequence (save state, show sleep image, set running_=false)
   void do_sleep_(DrawBuffer& buf);
+  bool show_sleep_entry_(const std::string& path, DrawBuffer& buf);
+  void finish_bw_sleep_(DrawBuffer& buf);
 
   // Font management. set_reader_font() also propagates to the reader screen.
   void set_reader_font(const BitmapFontSet* fonts) {
@@ -130,6 +136,33 @@ class Application {
   StatsCalendarScreen* stats_screen() {
     return &stats_screen_;
   }
+  // Books marked as finished (hidden from the book list, shown on their shelf).
+  FinishedBooks& finished_books() {
+    return finished_books_;
+  }
+  // Current local time, or 0 when there is no valid clock.
+  int64_t local_time_now() const {
+    IRuntime* rt = stats_.clock();
+    const int64_t t = rt ? rt->local_time() : 0;
+    return clock_is_valid(t) ? t : 0;
+  }
+
+  // The book most recently read and how far through it is, for the
+  // "Book cover" sleep screen. Updated by ReaderScreen as pages turn.
+  void note_reading_progress(const std::string& path, const std::string& title, int pct) {
+    last_book_path_ = path;
+    last_book_title_ = title;
+    last_book_pct_ = pct;
+  }
+  const std::string& last_book_path() const {
+    return last_book_path_;
+  }
+  const std::string& last_book_title() const {
+    return last_book_title_;
+  }
+  int last_book_pct() const {
+    return last_book_pct_;
+  }
   DateTimeScreen* date_time_screen() {
     return &date_time_;
   }
@@ -153,6 +186,27 @@ class Application {
   }
   void set_invert_side_buttons(bool v) {
     invert_side_buttons_ = v;
+  }
+
+  // Daily reading goal (Settings → Daily Goal). When enabled, the Reading
+  // Stats calendar bar fills at the goal and streaks count days that reach it.
+  bool goal_enabled() const {
+    return goal_enabled_;
+  }
+  void set_goal_enabled(bool v) {
+    goal_enabled_ = v;
+    save_settings_();
+  }
+  int goal_minutes() const {
+    return goal_minutes_;
+  }
+  void set_goal_minutes(int minutes) {
+    goal_minutes_ = minutes;
+    save_settings_();
+  }
+  // Goal in seconds, or 0 when the goal is disabled.
+  uint32_t goal_seconds() const {
+    return goal_enabled_ ? static_cast<uint32_t>(goal_minutes_) * 60u : 0u;
   }
 
   bool rotate_display() const {
@@ -258,6 +312,8 @@ class Application {
   bool invert_menu_buttons_ = false;
   bool invert_bottom_paging_ = true;
   bool invert_side_buttons_ = false;
+  bool goal_enabled_ = false;
+  int goal_minutes_ = kDefaultGoalMinutes;
   bool rotate_display_ = false;
 
   int menu_font_size_ = 0;
@@ -278,6 +334,12 @@ class Application {
   LinksScreen links_screen_;
   StatsCalendarScreen stats_screen_;
   DateTimeScreen date_time_;
+  FinishedBooksScreen finished_screen_;
+  FinishedBooks finished_books_;
+
+  std::string last_book_path_;
+  std::string last_book_title_;
+  int last_book_pct_ = 0;
 
   ReadingStats stats_;
   // Last wall-clock time written to the settings file ("clock="). Used to

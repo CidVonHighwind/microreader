@@ -20,7 +20,8 @@ namespace microreader {
 //   ◀ (Button0)     back
 class StatsCalendarScreen final : public IScreen {
  public:
-  // A day counts as a "full bar" at this much reading.
+  // Without a daily goal, a day's bar is full at this much reading.
+  // With a goal (Settings → Daily Goal), the bar is full at the goal instead.
   static constexpr uint32_t kFullBarSeconds = 60u * 60u;
 
   const char* name() const override {
@@ -30,6 +31,10 @@ class StatsCalendarScreen final : public IScreen {
   void start(DrawBuffer& buf, IRuntime& runtime) override;
   void stop() override;
   void update(const ButtonState& buttons, DrawBuffer& buf, IRuntime& runtime) override;
+
+  // Draw this month's calendar with today selected, for the sleep screen:
+  // no button hints, a "sleeping" note instead. The caller refreshes the panel.
+  void render_for_sleep(DrawBuffer& buf, IRuntime& runtime);
 
   // Test accessors.
   int view_year() const {
@@ -47,6 +52,9 @@ class StatsCalendarScreen final : public IScreen {
   const MonthStats& month() const {
     return month_;
   }
+  uint32_t goal_seconds() const {
+    return goal_s_;
+  }
 
  private:
   struct Layout {
@@ -61,7 +69,11 @@ class StatsCalendarScreen final : public IScreen {
   };
 
   Layout layout_(const DrawBuffer& buf) const;
+  void init_(IRuntime& runtime);  // shared by start() and render_for_sleep()
   void load_month_();
+  uint32_t bar_full_seconds_() const {
+    return goal_s_ ? goal_s_ : kFullBarSeconds;
+  }
   void move_day_(int delta);
   void move_month_(int delta);
 
@@ -84,6 +96,8 @@ class StatsCalendarScreen final : public IScreen {
   int view_month_ = 1;
   int sel_day_ = 1;
   int streak_ = 0;
+  uint32_t goal_s_ = 0;  // daily goal in seconds, 0 = no goal
+  bool sleep_mode_ = false;
   MonthStats month_;
 };
 

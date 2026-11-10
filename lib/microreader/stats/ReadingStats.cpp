@@ -356,10 +356,17 @@ int MonthStats::days_read() const {
   return n;
 }
 
-int MonthStats::longest_streak() const {
+int MonthStats::days_counted(uint32_t goal_seconds) const {
+  int n = 0;
+  for (const auto& d : days)
+    n += d.counts(goal_seconds) ? 1 : 0;
+  return n;
+}
+
+int MonthStats::longest_streak(uint32_t goal_seconds) const {
   int best = 0, run = 0;
   for (const auto& d : days) {
-    run = d.any() ? run + 1 : 0;
+    run = d.counts(goal_seconds) ? run + 1 : 0;
     if (run > best)
       best = run;
   }
@@ -459,7 +466,7 @@ void ReadingStats::flush() {
   pending_pages_ = 0;
 }
 
-int ReadingStats::current_streak(const CivilDate& today) const {
+int ReadingStats::current_streak(const CivilDate& today, uint32_t goal_seconds) const {
   if (stats_dir_.empty())
     return 0;
   MonthStats m;
@@ -475,9 +482,9 @@ int ReadingStats::current_streak(const CivilDate& today) const {
       if (!existed && i > 0)
         break;  // a month with no file at all ends any streak
     }
-    if (!m.day(d.day).any()) {
+    if (!m.day(d.day).counts(goal_seconds)) {
       if (i == 0)
-        continue;  // nothing yet today: the streak can still run through yesterday
+        continue;  // today doesn't count yet: the streak can still run through yesterday
       break;
     }
     ++streak;

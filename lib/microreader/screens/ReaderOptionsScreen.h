@@ -50,6 +50,7 @@ struct ReaderSettings {
   ProgressStyle progress_style = ProgressStyle::Bar;   // reading progress indicator style
   ProgressScope progress_scope = ProgressScope::Book;  // progress scope: whole book or current chapter
   bool override_publisher_fonts = false;               // ignore publisher's font sizes
+  bool chapter_bar = false;                            // chapter progress bar along the very bottom edge
 
   static constexpr uint16_t kHPaddingPresets[] = {4, 12, 24, 40};
   static constexpr uint16_t kVPaddingPresets[] = {0, 4, 12, 20};
@@ -76,6 +77,15 @@ struct ReaderSettings {
   uint16_t line_height_multiplier_percent() const {
     return kSpacingPercents[static_cast<uint8_t>(spacing_override)];
   }
+  // Chapter bar geometry: an outlined bar kChapterBarH px tall at the bottom
+  // edge, with kChapterBarGap px between it and anything above.
+  static constexpr int kChapterBarH = 7;
+  static constexpr int kChapterBarGap = 4;
+  // Extra bottom padding the chapter bar needs (0 when it's off).
+  uint16_t chapter_bar_reserve() const {
+    return chapter_bar ? static_cast<uint16_t>(kChapterBarH + kChapterBarGap) : 0;
+  }
+
   // Bottom padding reserved for the progress indicator.
   uint16_t progress_bottom() const {
     switch (progress_style) {
@@ -131,6 +141,13 @@ class ReaderOptionsScreen final : public ListMenuScreen {
   void set_page_links(const std::vector<PageLink>& links, const std::vector<std::string>& spine_files,
                       const MrbReader& mrb);
 
+  // Identify the open book so "Finished" can be toggled (call after populate).
+  void set_book_identity(std::string path, std::string title, std::string author) {
+    book_path_ = std::move(path);
+    book_meta_title_ = std::move(title);
+    book_author_ = std::move(author);
+  }
+
   void stop() override {
     toc_ = nullptr;
   }
@@ -164,6 +181,12 @@ class ReaderOptionsScreen final : public ListMenuScreen {
   int idx_chapters_ = -1;
   int idx_rotate_display_ = -1;
   int idx_links_ = -1;
+  int idx_finished_ = -1;
+  int idx_chapter_bar_ = -1;
+
+  std::string book_path_;
+  std::string book_meta_title_;
+  std::string book_author_;
 
   // Page links set by ReaderScreen before pushing this screen.
   std::vector<PageLink> page_links_;

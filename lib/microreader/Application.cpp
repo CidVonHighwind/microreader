@@ -7,6 +7,7 @@
 #include "HeapLog.h"
 #include "content/BookIndex.h"
 #include "content/BmpSleepConverter.h"
+#include "screens/SleepScreens.h"
 
 #ifdef ESP_PLATFORM
 #include <dirent.h>
@@ -50,6 +51,7 @@ void Application::start(DrawBuffer& buf, IRuntime& runtime) {
   links_screen_.set_app(this);
   stats_screen_.set_app(this);
   date_time_.set_app(this);
+  finished_screen_.set_app(this);
 
 #ifdef MICROREADER_ENABLE_DEMOS
   bouncing_ball_.set_app(this);
@@ -63,6 +65,7 @@ void Application::start(DrawBuffer& buf, IRuntime& runtime) {
   // Load settings first so initial_selection_ and reader settings are ready
   // before the menu's on_start() (directory scan + selection restore) runs.
   load_settings_();
+  finished_books_.load();
 
   // After a cold power-on the wall clock restarts at 1970; continue from the
   // last saved time so reading stats keep a plausible date.
@@ -138,6 +141,29 @@ static bool show_bmp_sleep(const char* bmp_path, const char* data_dir, DrawBuffe
   return cached && buf.show_sleep_image(cache_path);
 }
 
+// Show one sleep image entry (see SleepScreens.h for the formats). The .mgr /
+// BMP / embedded paths refresh the panel themselves; JPEG/PNG images are
+// drawn into the buffer and finished here with a full black & white refresh.
+bool Application::show_sleep_entry_(const std::string& path, DrawBuffer& buf) {
+  if (path.rfind("embedded:", 0) == 0)
+    return buf.show_sleep_image_embedded(std::atoi(path.c_str() + 9));
+  if (path.rfind("bmp:", 0) == 0)
+    return show_bmp_sleep(path.c_str() + 4, data_dir_, buf);
+  if (path.rfind("img:", 0) == 0) {
+    if (!sleep_screens::draw_image_file(buf, path.substr(4), data_dir_))
+      return false;
+    sleep_screens::draw_sleeping_label(buf);
+    finish_bw_sleep_(buf);
+    return true;
+  }
+  return buf.show_sleep_image(path.c_str());
+}
+
+void Application::finish_bw_sleep_(DrawBuffer& buf) {
+  buf.full_refresh(RefreshMode::Full, /*turnOffScreen=*/true);
+  buf.deep_sleep();
+}
+
 void Application::do_sleep_(DrawBuffer& buf) {
   // Stop the active screen so it can save state (e.g. reading position).
   if (IScreen* top = screen_mgr_.top())
@@ -145,19 +171,41 @@ void Application::do_sleep_(DrawBuffer& buf) {
   // Write out reading time not yet saved (e.g. reader paused under its options menu).
   stats_.flush();
 
-  // If a specific image is pinned, always show it. Otherwise auto-cycle.
-  MR_LOGI("sleep", "do_sleep_: pinned='%s' idx=%d", sleep_image_path_.c_str(), sleep_image_idx_);
-  if (!sleep_image_path_.empty()) {
+  const std::string mode = sleep_image_path_;
+  MR_LOGI("sleep", "do_sleep_: mode='%s' idx=%d", mode.c_str(), sleep_image_idx_);
+
+  // Sleep screens are always drawn in portrait.
+  buf.set_rotation(Rotation::Deg90);
+
+  // Book cover with reading progress.
+  if (mode == sleep_screens::kModeCover) {
     save_settings_();
-    buf.set_rotation(Rotation::Deg90);
-    bool shown = false;
-    if (sleep_image_path_.rfind("embedded:", 0) == 0) {
-      shown = buf.show_sleep_image_embedded(std::atoi(sleep_image_path_.c_str() + 9));
-    } else if (sleep_image_path_.rfind("bmp:", 0) == 0) {
-      shown = show_bmp_sleep(sleep_image_path_.c_str() + 4, data_dir_, buf);
-    } else {
-      shown = buf.show_sleep_image(sleep_image_path_.c_str());
+    if (!last_book_path_.empty() &&
+        sleep_screens::draw_book_cover(buf, last_book_path_, last_book_title_, last_book_pct_, data_dir_)) {
+      finish_bw_sleep_(buf);
+      running_ = false;
+      return;
     }
+    MR_LOGI("sleep", "no book cover available; showing an image instead");
+  }
+
+  // Reading Stats calendar with today selected.
+  if (mode == sleep_screens::kModeStats) {
+    save_settings_();
+    if (IRuntime* rt = stats_.clock()) {
+      stats_screen_.render_for_sleep(buf, *rt);
+      finish_bw_sleep_(buf);
+      running_ = false;
+      return;
+    }
+  }
+
+  // A single pinned image.
+  const bool pinned = !mode.empty() && mode != sleep_screens::kModeRandom && mode != sleep_screens::kModeCover &&
+                      mode != sleep_screens::kModeStats;
+  if (pinned) {
+    save_settings_();
+    const bool shown = show_sleep_entry_(mode, buf);
     MR_LOGI("sleep", "show result: %d", (int)shown);
     if (!shown && !buf.show_sleep_image_embedded(0))
       buf.deep_sleep();
@@ -165,64 +213,33 @@ void Application::do_sleep_(DrawBuffer& buf) {
     return;
   }
 
-  // Auto-cycle: build list. Custom SD images take priority over embedded ones.
-  std::vector<std::string> images;
-#ifdef ESP_PLATFORM
-  DIR* d = opendir("/sdcard/.sleep");
-  if (d) {
-    struct dirent* ent;
-    while ((ent = readdir(d)) != nullptr) {
-      if (ent->d_name[0] == '.')
-        continue;
-      const char* ext = std::strrchr(ent->d_name, '.');
-      if (!ext) continue;
-      if (std::strcmp(ext, ".mgr") == 0) {
-        images.push_back(std::string("/sdcard/.sleep/") + ent->d_name);
-      } else if (std::strcmp(ext, ".bmp") == 0 && data_dir_) {
-        images.push_back(std::string("bmp:/sdcard/.sleep/") + ent->d_name);
-      }
-    }
-    closedir(d);
-  }
-#else
-  try {
-    for (const auto& entry : fs::directory_iterator("sd/.sleep")) {
-      const auto& p = entry.path();
-      if (p.extension() == ".mgr")
-        images.push_back(p.string());
-      else if (p.extension() == ".bmp" && data_dir_)
-        images.push_back("bmp:" + p.string());
-    }
-  } catch (...) {}
-#endif
+  // Cycle (or pick at random) through the SD card images. Custom images take
+  // priority; the built-in ones are used only when there are none.
+  std::vector<std::string> images = sleep_screens::list_sd_images(data_dir_ != nullptr);
   if (images.empty()) {
     images.push_back("embedded:0");
     images.push_back("embedded:1");
     images.push_back("embedded:2");
   }
-
-  // Pick current image, then advance index for next sleep.
-  int idx = sleep_image_idx_ % static_cast<int>(images.size());
-  sleep_image_idx_ = (idx + 1) % static_cast<int>(images.size());
-
-  MR_LOGI("sleep", "auto-cycle: %d images, showing idx=%d path='%s'", (int)images.size(), idx, images[idx].c_str());
-
-  // Save state (includes updated sleep_image_idx_).
-  save_settings_();
-
-  // Reset rotation before drawing the sleeping screen.
-  buf.set_rotation(Rotation::Deg90);
-
-  const std::string& path = images[idx];
-  bool sleep_shown = false;
-  if (path.rfind("embedded:", 0) == 0) {
-    sleep_shown = buf.show_sleep_image_embedded(std::atoi(path.c_str() + 9));
-  } else if (path.rfind("bmp:", 0) == 0) {
-    sleep_shown = show_bmp_sleep(path.c_str() + 4, data_dir_, buf);
+  const int n = static_cast<int>(images.size());
+  int idx;
+  if (mode == sleep_screens::kModeRandom) {
+    idx = std::rand() % n;
+    if (n > 1 && idx == sleep_image_idx_ % n)
+      idx = (idx + 1 + std::rand() % (n - 1)) % n;  // never the same image twice in a row
+    sleep_image_idx_ = idx;
   } else {
-    sleep_shown = buf.show_sleep_image(path.c_str());
+    idx = sleep_image_idx_ % n;
+    sleep_image_idx_ = (idx + 1) % n;
   }
 
+  MR_LOGI("sleep", "%s: %d images, showing idx=%d path='%s'", mode.empty() ? "cycle" : mode.c_str(), n, idx,
+          images[idx].c_str());
+
+  // Save state (includes the updated sleep_image_idx_).
+  save_settings_();
+
+  const bool sleep_shown = show_sleep_entry_(images[idx], buf);
   MR_LOGI("sleep", "show result: %d", (int)sleep_shown);
   if (!sleep_shown && !buf.show_sleep_image_embedded(0))
     buf.deep_sleep();
@@ -302,6 +319,8 @@ IScreen* microreader::Application::screen_for_(ScreenId id) {
       return &stats_screen_;
     case ScreenId::DateTime:
       return &date_time_;
+    case ScreenId::Finished:
+      return &finished_screen_;
 
 #ifdef MICROREADER_ENABLE_DEMOS
     case ScreenId::BouncingBall:
@@ -359,6 +378,7 @@ void microreader::Application::save_settings_() {
   std::fprintf(f, "progress_scope=%u\n", static_cast<unsigned>(rs.progress_scope));
   std::fprintf(f, "override_pub_fonts=%u\n", rs.override_publisher_fonts ? 1u : 0u);
   std::fprintf(f, "font_size=%u\n", static_cast<unsigned>(rs.font_size_idx));
+  std::fprintf(f, "chapter_bar=%u\n", rs.chapter_bar ? 1u : 0u);
 
   // Menu list format
   std::fprintf(f, "list_format=%u\n", static_cast<unsigned>(menu_.list_format()));
@@ -377,6 +397,13 @@ void microreader::Application::save_settings_() {
   if (!sleep_image_path_.empty())
     std::fprintf(f, "sleep_image=%s\n", sleep_image_path_.c_str());
   std::fprintf(f, "sleep_image_idx=%d\n", sleep_image_idx_);
+  if (!last_book_path_.empty()) {
+    std::fprintf(f, "last_book=%s\n", last_book_path_.c_str());
+    std::fprintf(f, "last_title=%s\n", last_book_title_.c_str());
+    std::fprintf(f, "last_pct=%d\n", last_book_pct_);
+  }
+  std::fprintf(f, "goal_on=%u\n", goal_enabled_ ? 1u : 0u);
+  std::fprintf(f, "goal_min=%d\n", goal_minutes_);
 
   // Wall clock, so it can be restored after a cold power-on (see restore_clock_).
   if (IRuntime* rt = stats_.clock()) {
@@ -458,6 +485,8 @@ void microreader::Application::load_settings_() {
       rs.override_publisher_fonts = (uval != 0);
     else if (std::sscanf(line, "font_size=%u", &uval) == 1)
       rs.font_size_idx = uval < kMaxFontSizes ? static_cast<uint8_t>(uval) : 1;
+    else if (std::sscanf(line, "chapter_bar=%u", &uval) == 1)
+      rs.chapter_bar = (uval != 0);
     else if (std::sscanf(line, "list_format=%u", &uval) == 1)
       menu_.set_list_format(uval <= 2 ? static_cast<BookListFormat>(uval) : BookListFormat::TitleAndAuthor);
     else if (std::sscanf(line, "sort_order=%u", &uval) == 1)
@@ -482,6 +511,16 @@ void microreader::Application::load_settings_() {
       sleep_image_path_ = sval;
     else if (std::sscanf(line, "sleep_image_idx=%u", &uval) == 1)
       sleep_image_idx_ = static_cast<int>(uval);
+    else if (std::sscanf(line, "last_book=%511[^\n]", sval) == 1)
+      last_book_path_ = sval;
+    else if (std::sscanf(line, "last_title=%511[^\n]", sval) == 1)
+      last_book_title_ = sval;
+    else if (std::sscanf(line, "last_pct=%u", &uval) == 1)
+      last_book_pct_ = uval > 100 ? 100 : static_cast<int>(uval);
+    else if (std::sscanf(line, "goal_on=%u", &uval) == 1)
+      goal_enabled_ = (uval != 0);
+    else if (std::sscanf(line, "goal_min=%u", &uval) == 1)
+      goal_minutes_ = (uval >= 1 && uval <= 24 * 60) ? static_cast<int>(uval) : kDefaultGoalMinutes;
     else if (std::strncmp(line, "clock=", 6) == 0)
       saved_clock_ = static_cast<int64_t>(std::strtoul(line + 6, nullptr, 10));
   }
