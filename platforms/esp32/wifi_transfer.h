@@ -119,8 +119,8 @@ class Esp32WifiTransfer final : public microreader::IWifiTransfer {
       radio_on_ = false;
     }
     wifi_config_t cfg = {};
-    std::strncpy(reinterpret_cast<char*>(cfg.sta.ssid), ssid.c_str(), sizeof(cfg.sta.ssid));
-    std::strncpy(reinterpret_cast<char*>(cfg.sta.password), password.c_str(), sizeof(cfg.sta.password));
+    copy_field_(cfg.sta.ssid, ssid);
+    copy_field_(cfg.sta.password, password);
     cfg.sta.threshold.authmode = password.empty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA_PSK;
     cfg.sta.pmf_cfg.capable = true;
     cfg.sta.pmf_cfg.required = false;
@@ -161,9 +161,9 @@ class Esp32WifiTransfer final : public microreader::IWifiTransfer {
       radio_on_ = false;
     }
     wifi_config_t cfg = {};
-    std::strncpy(reinterpret_cast<char*>(cfg.ap.ssid), ssid.c_str(), sizeof(cfg.ap.ssid));
+    copy_field_(cfg.ap.ssid, ssid);
     cfg.ap.ssid_len = static_cast<uint8_t>(MIN(ssid.size(), sizeof(cfg.ap.ssid)));
-    std::strncpy(reinterpret_cast<char*>(cfg.ap.password), password.c_str(), sizeof(cfg.ap.password));
+    copy_field_(cfg.ap.password, password);
     cfg.ap.channel = 6;
     cfg.ap.max_connection = 4;
     cfg.ap.authmode = password.size() >= 8 ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
@@ -173,13 +173,12 @@ class Esp32WifiTransfer final : public microreader::IWifiTransfer {
       fail_("Couldn't set up the hotspot");
       return false;
     }
-    offer_own_dns_();
     if (esp_wifi_start() != ESP_OK) {
       fail_("Couldn't start the hotspot");
       return false;
     }
     radio_on_ = true;
-    esp_wifi_set_ps(WIFI_PS_NONE);
+    offer_own_dns_();  // after start, like IDF's captive portal example
 
     esp_netif_ip_info_t info = {};
     esp_netif_get_ip_info(ap_netif_, &info);
@@ -304,6 +303,14 @@ class Esp32WifiTransfer final : public microreader::IWifiTransfer {
 
  private:
   // ── Driver ────────────────────────────────────────────────────────────────
+
+  // Copies into a fixed-size, zero-filled config field. Wi-Fi names may use
+  // all 32 bytes with no terminating zero, so this doesn't add one.
+  template <size_t N>
+  static void copy_field_(uint8_t (&dst)[N], const std::string& src) {
+    std::memset(dst, 0, N);
+    std::memcpy(dst, src.data(), MIN(src.size(), N));
+  }
 
   static uint32_t now_ms_() {
     return static_cast<uint32_t>(esp_timer_get_time() / 1000);
