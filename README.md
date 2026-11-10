@@ -1,3 +1,11 @@
+# Sami
+
+Sami is a fork of [Microreader](https://github.com/CidVonHighwind/microreader) that adds reading statistics, a daily reading goal, a Finished shelf, a chapter progress bar and more sleep screen options. Everything below about Microreader applies to Sami too.
+
+**Installing Sami:** download `sami-firmware.bin` from this repository's [Releases](../../releases/latest) page and flash it with the CrossPoint web flasher's **Custom .bin** option (see [Installation](#installation)). Every change to the code builds a new release automatically.
+
+---
+
 # Microreader
 
 An EPUB reader for the [Xteink X4](https://xteink.com), written from scratch.
@@ -68,13 +76,21 @@ The device is detected automatically. Books on the device show checkmarks in the
 
 ## Sleep Screen
 
-The device shows an image when it enters deep sleep. Several images are built into the firmware; add your own by placing BMP files in the `.sleep/` folder on the SD card, or upload them via the browser manager.
+The device shows a sleep screen when it enters deep sleep. Choose it in **Settings → Sleep Screen** (press ▶ to step through the options):
 
-**Supported formats:** 1 bpp monochrome, 4/8 bpp indexed, 16 bpp RGB565/BGR555, 24 bpp BGR, 32 bpp BGRA. Use 800×480 (landscape) or 480×800 for best quality — other sizes are scaled to fit.
+| Option | What it shows |
+|--------|---------------|
+| **Cycle images** | Your sleep images in turn (the original behaviour) |
+| **Random image** | A random sleep image each time, never the same one twice in a row |
+| **Book cover** | The cover of the book you're reading, with its title and how far through you are. Books without a cover image fall back to your sleep images. |
+| **Reading stats** | The Reading Stats calendar with today selected |
+| *an image name* | Always that one image |
 
-The first time an image is shown it is converted and cached; subsequent sleeps load the cache directly. Clear the cache via **Settings → Clear Cache**.
+Several images are built into the firmware; add your own by putting them in the `sleep/` or `.sleep/` folder on the SD card, or upload them with the browser manager (which uses `sleep/`). When you have your own images, the built-in ones are skipped.
 
-Configure in **Settings → Sleep Image**: **Auto** cycles through all images in `.sleep/`; selecting a specific filename pins the device to that image.
+**Supported formats:** JPEG (`.jpg`, `.jpeg`), PNG, and BMP (1 bpp monochrome, 4/8 bpp indexed, 16 bpp RGB565/BGR555, 24 bpp BGR, 32 bpp BGRA). Images are scaled to fit; landscape images are turned sideways to fill the screen. Use 480×800 (or 800×480) for best quality. Very large photos can take a while to convert or fail for lack of memory — resize them first if they don't show.
+
+The first time an image or cover is shown it is converted and cached; later sleeps load the cache directly. Clear the cache via **Settings → Clear Cache**.
 
 ## Reading Stats
 
@@ -91,7 +107,17 @@ Open **Settings → Reading Stats** for a month calendar of your reading. Each d
 
 **The clock:** stats are dated with the device clock, which keeps running through sleep. Set it in **Settings → Date & Time** (or press ▶ in the calendar); connecting the browser manager, or running `python tools/serial_cmd.py --sync-time`, sets it from your computer automatically. If the battery is ever fully drained the clock resumes from the last time it was saved — check the date shown on the *Today* line and correct it if needed.
 
+**Daily goal:** turn on **Settings → Daily Goal** and pick a target under it (10 minutes to 2 hours a day). Each day's bar then fills at your goal instead of at one hour, days that reach it get a small flag in the corner, the day summary says whether you met it, "Days read" becomes "Goals met", and streaks only count days that reached the goal.
+
 **Storage:** one small text file per month in `.microreader/stats/` on the SD card (`YYYY-MM.txt`, one `day seconds pages title` line per reading session). **Clear Cache** does not touch it; delete the folder to reset your stats.
+
+## Finished Books
+
+While reading, press ▶ to open the book menu and select **Finished: No** to mark the book as finished. It moves off the main book list onto its own shelf, **Settings → Finished Books**, which lists finished books with the date you finished them, newest first. Select a book there to open it again; select **Finished: Yes** in its menu to put it back on the main list. The shelf is stored in `.microreader/finished.txt` and recognises a book by its title and author, so renaming or moving the file keeps it on the shelf.
+
+## Chapter Progress Bar
+
+In the book menu (▶ while reading), **Chapter Bar: On** adds an outlined bar along the very bottom of the page that fills as you read through the current chapter. It works alongside the regular **Progress** indicator, which moves up above it — for example *Progress: Percent* with *Scope: Book* shows both the whole-book percentage and the chapter bar.
 
 ## Building
 

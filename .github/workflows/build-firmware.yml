@@ -1,5 +1,5 @@
 # Builds the ESP32-C3 firmware on GitHub's servers and publishes it as a
-# release with a ready-to-flash `micropow-firmware.bin` (an app image for the
+# release with a ready-to-flash `sami-firmware.bin` (an app image for the
 # CrossPoint web flasher's custom-firmware option, which writes it to the
 # spare OTA slot).
 #
@@ -60,16 +60,16 @@ jobs:
 
       - name: Collect the firmware file
         run: |
-          cp .pio/build/esp32c3/firmware.bin micropow-firmware.bin
-          ls -l micropow-firmware.bin
+          cp .pio/build/esp32c3/firmware.bin sami-firmware.bin
+          ls -l sami-firmware.bin
           # Sanity check: an ESP32 app image starts with the 0xE9 magic byte.
-          test "$(head -c1 micropow-firmware.bin | od -An -tx1 | tr -d ' ')" = "e9"
+          test "$(head -c1 sami-firmware.bin | od -An -tx1 | tr -d ' ')" = "e9"
 
       - name: Keep the file with this run
         uses: actions/upload-artifact@v4
         with:
-          name: micropow-firmware
-          path: micropow-firmware.bin
+          name: sami-firmware
+          path: sami-firmware.bin
 
       - name: Publish a release
         env:
@@ -79,12 +79,12 @@ jobs:
           notes=$(cat <<'EOF'
           Firmware for the Xteink X4, built automatically from this repository.
 
-          **To install:** download `micropow-firmware.bin` below, then flash it with the
+          **To install:** download `sami-firmware.bin` below, then flash it with the
           CrossPoint web flasher (https://crosspointreader.com/#flash-tools) in Chrome or
           Edge, using its option to flash your own firmware file. Choose the X4 model.
           EOF
           )
-          gh release create "$tag" micropow-firmware.bin \
+          gh release create "$tag" sami-firmware.bin \
             --target "${{ github.sha }}" \
-            --title "micropow build ${{ github.run_number }} (${{ github.ref_name }})" \
+            --title "Sami build ${{ github.run_number }} (${{ github.ref_name }})" \
             --notes "$notes"

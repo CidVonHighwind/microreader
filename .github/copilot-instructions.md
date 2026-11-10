@@ -10,7 +10,8 @@ lib/microreader/          ← shared core (platform-agnostic C++17)
     mrb/                  ← MRB binary format (MrbFormat, MrbReader, MrbWriter, MrbConverter)
   display/                ← Canvas, DisplayQueue, Font, Display interface
   screens/                ← IScreen implementations (UI screens)
-  stats/                  ← reading statistics (ReadingStats: recorder, month files, calendar math)
+  stats/                  ← reading statistics (ReadingStats: recorder, month files, calendar math, daily goal)
+  library/                ← FinishedBooks (the Finished shelf)
 platforms/desktop/        ← SDL2 desktop emulator
 platforms/esp32/          ← real hardware (ESP-IDF + PlatformIO)
 test/                     ← Google Test suite (unit + integration)
@@ -96,6 +97,8 @@ All inherit from `IScreen` (`lib/microreader/screens/IScreen.h`): `name()`, `sta
 | `BouncingBallDemo` | `BouncingBallDemo.h/.cpp` | Bouncing ball + random shapes. |
 | `StatsCalendarScreen` | `StatsCalendarScreen.h/.cpp` | Reading-stats month calendar (Settings → Reading Stats). Portrait and landscape layouts. |
 | `DateTimeScreen` | `DateTimeScreen.h/.cpp` | Sets the wall clock (day/month/year/hour/minute). |
+| `FinishedBooksScreen` | `FinishedBooksScreen.h/.cpp` | The Finished shelf (Settings → Finished Books). Select opens the book. |
+| (sleep renderers) | `SleepScreens.h/.cpp` | Not a screen: draws the book-cover and JPEG/PNG sleep screens; `list_sd_images()` scans both sleep folders. |
 
 Screens that don't derive from `ListMenuScreen` get the UI fonts via `ListMenuScreen::shared_font()` / `shared_menu_font()` and the standard battery + hint row via `ListMenuScreen::draw_menu_bottom_bar()`. **Don't include `display/ui_font_*.h` in new .cpp files** — the tables are `static constexpr` arrays, so every TU that uses them gets its own copy in flash (the header font alone is ~110 KB).
 
@@ -105,6 +108,7 @@ Screens that don't derive from `ListMenuScreen` get the UI fonts via `ListMenuSc
 - **Accounting**: time a page is on screen is credited when it's left, capped at `kMaxPageMs` (3 min); a forward turn after ≥ `kMinPageMs` (2 s) counts as a page. Pending data is flushed on book close, sleep, day change, and every `kFlushEveryMs` (10 min).
 - **Storage**: append-only `<data_dir>/stats/YYYY-MM.txt`, lines `day seconds pages title` (`#` = comment). `MonthStats::load()` sums lines and skips malformed/partial ones. Not under `cache/`, so Clear Cache keeps it.
 - **Clock**: `IRuntime::monotonic_ms()`, `local_time()`, `set_local_time()` (defaults: no clock → nothing recorded). The device clock holds **local wall time, no time zone**. ESP32: `time()/settimeofday()` — survives deep sleep, resets to 1970 on cold power-on; `Application::restore_clock_()` then restores `max(saved "clock=" from settings, firmware build time)`. Desktop: host local time plus an offset (`set_local_time` never touches the host clock).
+- **Daily goal**: `Application::goal_seconds()` (0 = off; settings `goal_on=`, `goal_min=`). `DayTotals::counts(goal)`, `MonthStats::days_counted/longest_streak(goal)` and `ReadingStats::current_streak(today, goal)` take it; the calendar bar fills at the goal and goal days get a corner flag.
 - **Sync**: serial `CMND 'E'` + int64 LE local seconds. The browser manager sends it on every connect; `serial_cmd.py --sync-time` / interactive `time`.
 
 
@@ -251,6 +255,20 @@ Test fixtures in `test/fixtures/` (synthetic EPUBs). Real books in `test/books/`
 - **SD card**: FAT32 via SPI (shares bus with display)
 - **Buttons**: ADC-based with hardware auto-repeat
 
+## Finished shelf (`lib/microreader/library/FinishedBooks.h/.cpp`)
+
+- `Application::finished_books()`, stored in `<data_dir>/finished.txt` (`finished_at\tpath\ttitle\tauthor`), loaded in `Application::start()`. Matches by path **or** title+author (BookIndex and MRB both take these from the EPUB metadata), so renamed files stay finished.
+- `MainMenu::populate_list_()` skips finished books. The book menu (`ReaderOptionsScreen`, "Finished: No/Yes") toggles via `set_book_identity()`, which `ReaderScreen` calls before pushing it.
+
+## Chapter bar and sleep screens
+
+- **Chapter bar**: `ReaderSettings::chapter_bar` (settings `chapter_bar=`), toggled in the book menu. `chapter_bar_reserve()` is added to `ReaderScreen::bottom_padding_()`; `draw_bottom_()` draws the bar at the bottom edge and shifts the regular progress indicator (and nav-history hints) up by the reserve. Off = pixel-identical pages.
+- **Sleep modes** (`sleep_image` setting): `""` cycle, `random`, `cover`, `stats`, or a pinned `embedded:N` / `bmp:<path>` / `img:<path>` (JPEG/PNG) / `.mgr` path. See `Application::do_sleep_()`.
+- New sleep screens draw into the normal 1-bit buffer and finish with `full_refresh(Full)` + `deep_sleep()` (`finish_bw_sleep_`). They don't use MGR2. **MGR2 pixel states are 0 = white … 3 = black** (see `tools/image_to_mgr.py`, `BmpSleepConverter`); the "0=black" comment in `DrawBuffer::show_sleep_image` is wrong, so overlays on MGR2 images must draw with inverted polarity.
+- JPEG/PNG files on the SD card are decoded with the EPUB image decoders by wrapping the file as a stored ZIP entry (`PlainImageFile` in `SleepScreens.cpp`: `data_offset` 0 means "parse the local header", so the file is exposed shifted by one byte). Decoded screens are cached as raw panel frames (`DrawBuffer::kBufSize` bytes): covers in `<data_dir>/cache/<book stem>/cover-v1.frame`, images in `<data_dir>/cache/sleep/<name>.frame`.
+- The cover sleep screen uses `Application::last_book_path/title/pct` (settings `last_book=`, `last_title=`, `last_pct=`), updated by `ReaderScreen::save_position_()` only while the book is loaded.
+- Sleep images are read from **both** `/sdcard/.sleep` and `/sdcard/sleep` — the browser manager and serial `SIMG` upload to `sleep/`, which upstream never read.
+
 ## Known issues & gotchas
 
 - **ESP32 CMake source list**: New `.cpp` files MUST be added to `platforms/esp32/CMakeLists.txt` explicitly. PIO's LDF auto-discovery does not work for this project structure.
@@ -261,6 +279,9 @@ Test fixtures in `test/fixtures/` (synthetic EPUBs). Real books in `test/books/`
 - **Heap fragmentation on ESP32**: After `Book::open()`, the largest contiguous block can be much smaller than total free heap (e.g. 59KB largest with 133KB total free). Large single allocations (>50KB) should be split into smaller ones.
 - **SD SPI max 20 MHz**: The SD card on the prototype board fails at 40 MHz (`ESP_ERR_INVALID_RESPONSE` during `sdmmc_enable_hs_mode_and_check`). Keep `max_freq_khz = 20000`.
 - **`uint32_t` is `unsigned long` on ESP-IDF 5** and IDF builds with `-Werror=all`: cast to `unsigned`/`unsigned long` before passing to `%u`/`%lu` (fine on x86, a build error on device).
+- **No 64-bit printf on device**: `CONFIG_NEWLIB_NANO_FORMAT=y` (newlib-nano) has no `%lld`/`%llu`. Write 64-bit values as `%lu` with an `unsigned long` cast (32-bit unsigned seconds last until 2106).
+- **Don't save `BookIndex` while the book list is paused**: `MainMenu::stop()` (also its `pause()`) clears the in-memory index, so `Application::record_book_opened()` from any other screen would save an empty `book_index.dat`. Only call it from `MainMenu`.
+- **App-level tests**: `test/support/AppHarness.h` (`AppFixture`, `FakeRuntime`, `CaptureDisplay` with `black_at(x, y)`) drives the real `Application` with button taps. `STATS_SCREENSHOT_DIR=<dir>` dumps every frame as PBM. Fixtures for covers/sleep images come from `test/fixtures/generate_cover_fixtures.py`.
 - **`Application::set_data_dir()` keeps the raw `const char*`** (firmware passes static strings). Tests must keep the string alive for the Application's lifetime.
 - **Linux/GCC test build**: needs `#include <cstring>` wherever `std::strlen` is used (MSVC pulls it in implicitly).
 - **Do NOT add `setvbuf` to `StdioZipFile`**: Adding a read buffer to the EPUB input `FILE*` causes wasteful 4 KB read-ahead after every seek, making SEEK 3× slower and DECOMP ~12% slower. The `ZipEntryInput` already manages its own efficient input buffering.
