@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sami Reader</title>
+<style>
+:root {
+  --bg: #f6f3ee; --card: #fffdf9; --ink: #1f1d1a; --muted: #6f6a62; --line: #e4ded4;
+  --accent: #2d5a4a; --accent-ink: #ffffff; --accent-soft: #e3ece7; --danger: #a33b2b; --bar: #d9d2c5;
+  --radius: 12px; font-synthesis: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #171614; --card: #201f1c; --ink: #ece7de; --muted: #a39d93; --line: #34312c;
+    --accent: #7fb59f; --accent-ink: #10201a; --accent-soft: #24302b; --danger: #e07b6a; --bar: #3a3732; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+.wrap { max-width: 880px; margin: 0 auto; padding: 20px 16px 48px; }
+header { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.logo { width: 44px; height: 44px; border-radius: 11px; background: var(--accent); color: var(--accent-ink);
+  display: grid; place-items: center; font: 600 24px/1 Georgia, "Times New Roman", serif; flex: none; }
+h1 { font: 600 22px/1.2 Georgia, "Times New Roman", serif; margin: 0; letter-spacing: .2px; }
+.sub { color: var(--muted); font-size: 13px; }
+.storage { margin-left: auto; min-width: 150px; text-align: right; font-size: 12px; color: var(--muted); }
+.storage .track { height: 6px; background: var(--bar); border-radius: 3px; margin-top: 4px; overflow: hidden; }
+.storage .fill { height: 100%; background: var(--accent); width: 0; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px; border-bottom: 1px solid var(--line); }
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; flex: 1 1 260px; min-width: 0; font-weight: 500; }
+.crumbs a { color: var(--ink); text-decoration: none; padding: 4px 6px; border-radius: 6px; }
+.crumbs a:hover { background: var(--accent-soft); }
+.crumbs span { color: var(--muted); }
+button, .btn { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  border-radius: 8px; padding: 7px 12px; cursor: pointer; white-space: nowrap; }
+button:hover, .btn:hover { border-color: var(--muted); }
+button.primary, .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.danger { color: var(--danger); }
+button:disabled { opacity: .5; cursor: default; }
+label.toggle { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; cursor: pointer; }
+table { width: 100%; border-collapse: collapse; }
+td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+td.name { width: 100%; word-break: break-word; }
+td.name a { color: var(--ink); text-decoration: none; font-weight: 500; }
+td.name a:hover { text-decoration: underline; }
+.icon { display: inline-block; width: 22px; color: var(--muted); }
+td.meta { color: var(--muted); font-size: 13px; white-space: nowrap; text-align: right; }
+td.acts { white-space: nowrap; text-align: right; }
+td.acts button { padding: 4px 8px; font-size: 13px; margin-left: 4px; }
+.empty { padding: 36px 12px; text-align: center; color: var(--muted); }
+.drop { border: 2px dashed var(--line); border-radius: var(--radius); padding: 18px; text-align: center;
+  color: var(--muted); margin: 14px 0; transition: background .15s, border-color .15s; }
+body.dragging .drop { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+.queue { margin: 10px 0 0; display: grid; gap: 8px; }
+.job { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 13px; }
+.job .track { grid-column: 1 / -1; height: 5px; background: var(--bar); border-radius: 3px; overflow: hidden; }
+.job .fill { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.job.err .fill { background: var(--danger); }
+.job .state { color: var(--muted); }
+.note { color: var(--muted); font-size: 12px; margin-top: 18px; text-align: center; }
+.toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+  padding: 9px 16px; border-radius: 9px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 90vw; }
+.toast.show { opacity: .95; }
+dialog { border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); color: var(--ink);
+  padding: 18px; width: min(420px, 92vw); }
+dialog::backdrop { background: rgba(0,0,0,.35); }
+dialog h3 { margin: 0 0 10px; font: 600 17px/1.3 Georgia, serif; }
+dialog input { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); color: var(--ink); margin: 6px 0 14px; }
+dialog .row { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 560px) {
+  header { flex-wrap: wrap; }
+  .storage { flex-basis: 100%; margin-left: 0; text-align: left; }
+  /* Each file takes two lines: the name, then its size and buttons. */
+  #rows tr { display: grid; grid-template-columns: 1fr auto; align-items: center; border-bottom: 1px solid var(--line); }
+  #rows tr:last-child { border-bottom: none; }
+  #rows td { border-bottom: none; }
+  #rows td.name, #rows td.empty { grid-column: 1 / -1; }
+  #rows td.name { padding-bottom: 2px; }
+  #rows td.meta { text-align: left; padding-top: 0; }
+  #rows td.acts { padding-top: 0; }
+  td.meta.date { display: none; }
+  td.acts button { padding: 4px 8px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo" aria-hidden="true">S</div>
+    <div>
+      <h1>Sami Reader</h1>
+      <div class="sub">Wi-Fi File Transfer</div>
+    </div>
+    <div class="storage" id="storage"></div>
+  </header>
+
+  <div class="card">
+    <div class="bar">
+      <nav class="crumbs" id="crumbs" aria-label="Folder"></nav>
+      <label class="toggle"><input type="checkbox" id="hidden"> Show hidden</label>
+      <button id="newFolder">New folder</button>
+      <button class="primary" id="uploadBtn">Upload</button>
+      <input type="file" id="picker" multiple hidden>
+    </div>
+    <table><tbody id="rows"><tr><td class="empty">Loading…</td></tr></tbody></table>
+  </div>
+
+  <div class="drop" id="drop">Drop books or images here to upload them to this folder</div>
+  <div class="queue" id="queue"></div>
+
+  <p class="note">New books appear in the reader's book list automatically. Keep the reader on the Wi-Fi Transfer screen while you work.</p>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog">
+    <h3 id="dlgTitle"></h3>
+    <div id="dlgText"></div>
+    <input id="dlgInput" autocomplete="off">
+    <div class="row">
+      <button value="cancel" type="submit">Cancel</button>
+      <button value="ok" type="submit" class="primary" id="dlgOk">OK</button>
+    </div>
+  </form>
+</dialog>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let cwd = "/";
+let entries = [];
+
+function join(dir, name) { return dir === "/" ? "/" + name : dir + "/" + name; }
+function q(params) { return Object.entries(params).map(([k, v]) => k + "=" + encodeURIComponent(v)).join("&"); }
+function fmtSize(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1048576) return Math.round(n / 1024) + " KB";
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + " MB";
+  return (n / 1073741824).toFixed(1) + " GB";
+}
+function fmtDate(t) {
+  if (!t) return "";
+  // The reader's clock has no time zone, so show its time as-is (UTC fields).
+  const d = new Date(t * 1000);
+  const m = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getUTCMonth()];
+  return d.getUTCDate() + " " + m + " " + d.getUTCFullYear() + ", " +
+         String(d.getUTCHours()).padStart(2, "0") + ":" + String(d.getUTCMinutes()).padStart(2, "0");
+}
+function icon(e) {
+  if (e.dir) return "📁";
+  const n = e.name.toLowerCase();
+  if (n.endsWith(".epub")) return "📖";
+  if (/\.(jpe?g|png|bmp|mgr)$/.test(n)) return "🖼";
+  if (n.endsWith(".mfb")) return "🔤";
+  return "📄";
+}
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove("show"), 2600);
+}
+async function api(method, path, params) {
+  const r = await fetch("/api/" + path + (params ? "?" + q(params) : ""), { method });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.error || ("HTTP " + r.status));
+  return body;
+}
+
+function ask(title, text, value, okLabel, danger) {
+  return new Promise((resolve) => {
+    const d = $("dlg");
+    $("dlgTitle").textContent = title;
+    $("dlgText").textContent = text || "";
+    const input = $("dlgInput");
+    input.style.display = value === null ? "none" : "";
+    input.value = value || "";
+    $("dlgOk").textContent = okLabel || "OK";
+    $("dlgOk").className = danger ? "danger" : "primary";
+    d.onclose = () => resolve(d.returnValue === "ok" ? (value === null ? true : input.value.trim()) : null);
+    d.returnValue = "";
+    d.showModal();
+    if (value !== null) { input.focus(); input.select(); }
+  });
+}
+
+async function loadInfo() {
+  try {
+    const i = await api("GET", "info");
+    if (i.total) {
+      const used = i.total - i.free;
+      $("storage").innerHTML = fmtSize(i.free * 1024) + " free of " + fmtSize(i.total * 1024) +
+        '<div class="track"><div class="fill" style="width:' + Math.round(100 * used / i.total) + '%"></div></div>';
+    }
+  } catch (e) { /* storage info is optional */ }
+}
+
+function renderCrumbs() {
+  const c = $("crumbs");
+  c.innerHTML = "";
+  const parts = cwd.split("/").filter(Boolean);
+  const add = (label, path) => {
+    const a = document.createElement("a");
+    a.href = "#" + encodeURIComponent(path); a.textContent = label;
+    c.appendChild(a);
+  };
+  add("SD card", "/");
+  let p = "";
+  for (const part of parts) {
+    const s = document.createElement("span"); s.textContent = "›"; c.appendChild(s);
+    p += "/" + part; add(part, p);
+  }
+}
+
+function render() {
+  renderCrumbs();
+  const showHidden = $("hidden").checked;
+  const list = entries.filter((e) => showHidden || !e.name.startsWith("."))
+    .sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+  const tb = $("rows");
+  tb.innerHTML = "";
+  if (cwd !== "/") {
+    const tr = tb.insertRow();
+    const up = cwd.slice(0, cwd.lastIndexOf("/")) || "/";
+    tr.innerHTML = '<td class="name" colspan="4"><span class="icon">↩</span><a href="#' + encodeURIComponent(up) + '">Up one folder</a></td>';
+  }
+  if (!list.length) {
+    tb.insertRow().innerHTML = '<td class="empty" colspan="4">This folder is empty. Drop files below or press Upload.</td>';
+    return;
+  }
+  for (const e of list) {
+    const tr = tb.insertRow();
+    const path = join(cwd, e.name);
+    const name = tr.insertCell(); name.className = "name";
+    const ic = document.createElement("span"); ic.className = "icon"; ic.textContent = icon(e); name.appendChild(ic);
+    if (e.dir) {
+      const a = document.createElement("a"); a.href = "#" + encodeURIComponent(path); a.textContent = e.name;
+      name.appendChild(a);
+    } else {
+      name.appendChild(document.createTextNode(e.name));
+    }
+    const size = tr.insertCell(); size.className = "meta"; size.textContent = e.dir ? "" : fmtSize(e.size);
+    const date = tr.insertCell(); date.className = "meta date"; date.textContent = fmtDate(e.mtime);
+    const acts = tr.insertCell(); acts.className = "acts";
+    if (!e.dir) {
+      const dl = document.createElement("a"); dl.className = "btn"; dl.textContent = "Download";
+      dl.href = "/api/file?" + q({ path }); dl.setAttribute("download", e.name);
+      dl.style.cssText = "padding:4px 8px;font-size:13px;margin-left:4px;text-decoration:none;display:inline-block";
+      acts.appendChild(dl);
+    }
+    const rn = document.createElement("button"); rn.textContent = "Rename"; rn.onclick = () => rename(e); acts.appendChild(rn);
+    const del = document.createElement("button"); del.textContent = "Delete"; del.className = "danger";
+    del.onclick = () => remove(e); acts.appendChild(del);
+  }
+}
+
+async function load() {
+  const h = decodeURIComponent(location.hash.slice(1) || "/");
+  cwd = h.startsWith("/") ? h.replace(/\/+$/, "") || "/" : "/";
+  try {
+    entries = await api("GET", "list", { path: cwd });
+  } catch (err) {
+    if (cwd !== "/") { location.hash = "#%2F"; return; }
+    entries = [];
+    toast("Couldn't read the folder: " + err.message);
+  }
+  render();
+}
+
+async function newFolder() {
+  const name = await ask("New folder", "", "", "Create");
+  if (!name) return;
+  if (/[\/\\]/.test(name) || name === "." || name === "..") return toast("Folder names can't contain / or \\");
+  try { await api("POST", "mkdir", { path: join(cwd, name) }); toast("Created " + name); load(); }
+  catch (e) { toast(e.message); }
+}
+
+async function rename(e) {
+  const name = await ask("Rename", "", e.name, "Rename");
+  if (!name || name === e.name) return;
+  if (/[\/\\]/.test(name)) return toast("Names can't contain / or \\");
+  try { await api("POST", "rename", { from: join(cwd, e.name), to: join(cwd, name) }); toast("Renamed"); load(); loadInfo(); }
+  catch (err) { toast(err.message); }
+}
+
+async function remove(e) {
+  const ok = await ask("Delete " + (e.dir ? "folder" : "file") + "?",
+    e.dir ? "“" + e.name + "” and everything inside it will be deleted." : "“" + e.name + "” will be deleted.", null, "Delete", true);
+  if (!ok) return;
+  try { await api("POST", "delete", { path: join(cwd, e.name) }); toast("Deleted " + e.name); load(); loadInfo(); }
+  catch (err) { toast(err.message); }
+}
+
+// Uploads go one at a time: the reader has a single small Wi-Fi radio and SD card.
+const pending = [];
+let uploading = false;
+function enqueue(files) {
+  for (const f of files) {
+    const job = document.createElement("div"); job.className = "job";
+    job.innerHTML = '<span class="fname"></span><span class="state">Waiting</span><div class="track"><div class="fill"></div></div>';
+    job.querySelector(".fname").textContent = f.name;
+    $("queue").appendChild(job);
+    pending.push({ file: f, dir: cwd, el: job });
+  }
+  pump();
+}
+function pump() {
+  if (uploading || !pending.length) return;
+  uploading = true;
+  const { file, dir, el } = pending.shift();
+  const state = el.querySelector(".state"), fill = el.querySelector(".fill");
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", "/api/upload?" + q({ path: join(dir, file.name) }));
+  xhr.setRequestHeader("Content-Type", "application/octet-stream");
+  xhr.upload.onprogress = (ev) => {
+    if (ev.lengthComputable) { const p = Math.round(100 * ev.loaded / ev.total); fill.style.width = p + "%"; state.textContent = p + "%"; }
+  };
+  const done = (ok, msg) => {
+    uploading = false;
+    state.textContent = msg; fill.style.width = "100%";
+    if (!ok) el.classList.add("err"); else setTimeout(() => el.remove(), 4000);
+    if (ok && dir === cwd) load();
+    loadInfo();
+    pump();
+  };
+  xhr.onload = () => {
+    let err = "";
+    try { err = JSON.parse(xhr.responseText).error || ""; } catch (e) {}
+    xhr.status === 200 ? done(true, "Uploaded") : done(false, err || ("Failed (" + xhr.status + ")"));
+  };
+  xhr.onerror = () => done(false, "Connection lost");
+  state.textContent = "0%";
+  xhr.send(file);
+}
+
+$("uploadBtn").onclick = () => $("picker").click();
+$("picker").onchange = (e) => { enqueue(e.target.files); e.target.value = ""; };
+$("newFolder").onclick = newFolder;
+$("hidden").onchange = render;
+window.addEventListener("hashchange", load);
+let dragDepth = 0;
+window.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; document.body.classList.add("dragging"); });
+window.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("dragging"); } });
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", (e) => {
+  e.preventDefault(); dragDepth = 0; document.body.classList.remove("dragging");
+  const files = [...(e.dataTransfer.files || [])];
+  if (files.length) enqueue(files);
+});
+load();
+loadInfo();
+</script>
+</body>
+</html>

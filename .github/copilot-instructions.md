@@ -12,6 +12,7 @@ lib/microreader/          ← shared core (platform-agnostic C++17)
   screens/                ← IScreen implementations (UI screens)
   stats/                  ← reading statistics (ReadingStats: recorder, month files, calendar math, daily goal)
   library/                ← FinishedBooks (the Finished shelf), BookProgress (percent read per book)
+  net/                    ← Wi-Fi Transfer: FileServer (HTTP API + embedded page), Dns (mDNS + captive DNS), SavedWifi
 platforms/desktop/        ← SDL2 desktop emulator
 platforms/esp32/          ← real hardware (ESP-IDF + PlatformIO)
 test/                     ← Google Test suite (unit + integration)
@@ -98,6 +99,9 @@ All inherit from `IScreen` (`lib/microreader/screens/IScreen.h`): `name()`, `sta
 | `StatsCalendarScreen` | `StatsCalendarScreen.h/.cpp` | Reading-stats month calendar (Settings → Reading Stats). Portrait and landscape layouts. |
 | `DateTimeScreen` | `DateTimeScreen.h/.cpp` | Sets the wall clock (day/month/year/hour/minute). |
 | `FinishedBooksScreen` | `FinishedBooksScreen.h/.cpp` | The Finished shelf (first row of the book list). Select opens the book. |
+| `WifiMenuScreen` | `WifiMenuScreen.h/.cpp` | Wi-Fi Transfer (book list row 1): "Create a hotspot" or pick a scanned network. |
+| `TextInputScreen` | `TextInputScreen.h/.cpp` | On-screen keyboard (Wi-Fi passwords). `configure()` before push, `take_result()` on resume. |
+| `FileTransferScreen` | `FileTransferScreen.h/.cpp` | Starts Wi-Fi, shows the address/hotspot password and activity; ◀ or 10 idle minutes turn Wi-Fi off. Keeps the reader awake while on. |
 | (sleep renderers) | `SleepScreens.h/.cpp` | Not a screen: draws the book-cover and JPEG/PNG sleep screens; `list_sd_images()` scans both sleep folders. |
 
 Screens that don't derive from `ListMenuScreen` get the UI fonts via `ListMenuScreen::shared_font()` / `shared_menu_font()` and the standard battery + hint row via `ListMenuScreen::draw_menu_bottom_bar()`. **Don't include `display/ui_font_*.h` in new .cpp files** — the tables are `static constexpr` arrays, so every TU that uses them gets its own copy in flash (the header font alone is ~110 KB).
@@ -111,6 +115,12 @@ Screens that don't derive from `ListMenuScreen` get the UI fonts via `ListMenuSc
 - **Daily goal**: `Application::goal_seconds()` (0 = off; settings `goal_on=`, `goal_min=`). `DayTotals::counts(goal)`, `MonthStats::days_counted/longest_streak(goal)` and `ReadingStats::current_streak(today, goal)` take it; the calendar bar fills at the goal and goal days get a corner flag.
 - **Sync**: serial `CMND 'E'` + int64 LE local seconds. The browser manager sends it on every connect; `serial_cmd.py --sync-time` / interactive `time`.
 
+
+## Wi-Fi Transfer (`lib/microreader/net/`, `platforms/esp32/wifi_transfer.h`)
+
+- **Core, platform-independent**: `net::FileServer` handles `HttpRequest`/`HttpResponse` (routes in `FileServer.h`; paths relative to the card, `safe_relative_path()` rejects `..`). The page is `net/web/index.html`, embedded as `net/WebPage.h` — **after editing the HTML run `python tools/embed_web_page.py`** (the `WebPageEmbedded` test checks the CRC). `net/Dns` builds mDNS (`sami.local`) and captive-DNS replies as pure functions. `SavedWifi` = `<data_dir>/wifi.txt`.
+- **Interface**: `IWifiTransfer` (`net/WifiTransfer.h`), set with `Application::set_wifi()`. Desktop has none (the menu says so); tests use a fake.
+- **ESP32** (`wifi_transfer.h`, header-only, included only by `main.cpp` because it shares the file-static index queue and `g_upload_in_progress` from `serial_communication.h`): esp_wifi STA/AP + `esp_http_server` + a DNS task. The Wi-Fi driver is initialised on first use and de-initialised in `stop()` to give the heap back. API requests set `g_upload_in_progress` (main loop skips `app.update`) and wait for `g_ui_drawing` to clear, because the SD card shares SPI with the display. Book changes go through `request_index_op` (waits for a free slot). Wi-Fi IRAM options are off in sdkconfig to keep heap for reading.
 
 ### Screen navigation flow
 

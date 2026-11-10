@@ -52,6 +52,9 @@ void Application::start(DrawBuffer& buf, IRuntime& runtime) {
   stats_screen_.set_app(this);
   date_time_.set_app(this);
   finished_screen_.set_app(this);
+  wifi_menu_.set_app(this);
+  text_input_.set_app(this);
+  file_transfer_.set_app(this);
 
 #ifdef MICROREADER_ENABLE_DEMOS
   bouncing_ball_.set_app(this);
@@ -67,6 +70,7 @@ void Application::start(DrawBuffer& buf, IRuntime& runtime) {
   load_settings_();
   finished_books_.load();
   book_progress_.load();
+  saved_wifi_.load();
 
   // After a cold power-on the wall clock restarts at 1970; continue from the
   // last saved time so reading stats keep a plausible date.
@@ -169,6 +173,9 @@ void Application::do_sleep_(DrawBuffer& buf) {
   // Stop the active screen so it can save state (e.g. reading position).
   if (IScreen* top = screen_mgr_.top())
     top->stop();
+  // Never leave the radio on while asleep (e.g. sleeping from the Wi-Fi menu).
+  if (wifi_)
+    wifi_->stop();
   // Write out reading time not yet saved (e.g. reader paused under its options menu).
   stats_.flush();
 
@@ -322,6 +329,12 @@ IScreen* microreader::Application::screen_for_(ScreenId id) {
       return &date_time_;
     case ScreenId::Finished:
       return &finished_screen_;
+    case ScreenId::Wifi:
+      return &wifi_menu_;
+    case ScreenId::TextInput:
+      return &text_input_;
+    case ScreenId::FileTransfer:
+      return &file_transfer_;
 
 #ifdef MICROREADER_ENABLE_DEMOS
     case ScreenId::BouncingBall:

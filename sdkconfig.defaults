@@ -53,4 +53,13 @@ CONFIG_LIBC_LOCKS_PLACE_IN_IRAM=n
 # --- Internal task stack reductions (heap savings) ---
 # We don't use esp_timer callbacks or event loops heavily
 CONFIG_ESP_TIMER_TASK_STACK_SIZE=2048
-CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=2048
+# 3072: the Wi-Fi/netif event handlers run in this task (Wi-Fi Transfer).
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=3072
+
+# --- Wi-Fi Transfer ---
+# Keep the Wi-Fi driver's code in flash: IRAM placement would permanently take
+# ~20 KB of RAM from the heap, which reading needs more than transfer speed.
+CONFIG_ESP_WIFI_IRAM_OPT=n
+CONFIG_ESP_WIFI_RX_IRAM_OPT=n
+# Long file names in rename requests (from= and to=, percent-encoded).
+CONFIG_HTTPD_MAX_URI_LEN=1024

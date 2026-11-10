@@ -66,6 +66,10 @@ add_library(microreader_content STATIC
     ${CONTENT_DIR}/../stats/ReadingStats.cpp
     ${CONTENT_DIR}/../library/FinishedBooks.cpp
     ${CONTENT_DIR}/../library/BookProgress.cpp
+    # Wi-Fi file transfer (the desktop has no Wi-Fi, but the code must build)
+    ${CONTENT_DIR}/../net/FileServer.cpp
+    ${CONTENT_DIR}/../net/Dns.cpp
+    ${CONTENT_DIR}/../net/SavedWifi.cpp
 )
 target_include_directories(microreader_content PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../../lib
@@ -91,6 +95,9 @@ add_library(microreader_core STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../../lib/microreader/screens/DateTimeScreen.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../lib/microreader/screens/FinishedBooksScreen.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../../lib/microreader/screens/SleepScreens.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../lib/microreader/screens/TextInputScreen.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../lib/microreader/screens/WifiMenuScreen.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../lib/microreader/screens/FileTransferScreen.cpp
 )
 target_include_directories(microreader_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../../lib

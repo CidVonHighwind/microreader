@@ -22,6 +22,7 @@
 #include "runtime.h"
 #include "sdcard.h"
 #include "serial_communication.h"
+#include "wifi_transfer.h"
 
 static void verify_ota() {
   const esp_partition_t* running = esp_ota_get_running_partition();
@@ -97,6 +98,7 @@ extern "C" void app_main(void) {
   static Esp32Runtime runtime(50, input.get_adc_handle());
   static microreader::Application app;
   static microreader::DrawBuffer buf(epd);
+  static Esp32WifiTransfer wifi;  // Wi-Fi Transfer (off until used)
 
 #ifndef QEMU_BUILD
   // After a software reset (post-flash) wait briefly for the serial monitor.
@@ -155,6 +157,7 @@ extern "C" void app_main(void) {
            (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 
   app.set_invalidate_font_fn([]() { FontPartition::invalidate(); });
+  app.set_wifi(&wifi);
 
   app.start(buf, runtime);
 
@@ -326,7 +329,9 @@ extern "C" void app_main(void) {
     strncpy(g_top_screen_name, app.top_screen_name(), sizeof(g_top_screen_name) - 1);
     g_top_screen_name[sizeof(g_top_screen_name) - 1] = '\0';
 
+    g_ui_drawing = true;  // Wi-Fi requests wait for this before using the SD card
     microreader::run_loop_iteration(app, buf, input, runtime);
+    g_ui_drawing = false;
   }
 
   MR_LOGI("app", "Shutting down, entering deep sleep...");

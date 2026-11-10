@@ -1,6 +1,6 @@
 # Sami
 
-Sami is a fork of [Microreader](https://github.com/CidVonHighwind/microreader) that adds reading statistics, a daily reading goal, a Finished shelf, a chapter progress bar and more sleep screen options. Everything below about Microreader applies to Sami too.
+Sami is a fork of [Microreader](https://github.com/CidVonHighwind/microreader) that adds reading statistics, a daily reading goal, a Finished shelf, a chapter progress bar, more sleep screen options and Wi-Fi file transfer. Everything below about Microreader applies to Sami too.
 
 **Installing Sami:** download `sami-firmware.bin` from this repository's [Releases](../../releases/latest) page and flash it with the CrossPoint web flasher's **Custom .bin** option (see [Installation](#installation)). Every change to the code builds a new release automatically.
 
@@ -62,6 +62,17 @@ Open [microreader-manager](https://cidvonhighwind.github.io/microreader/) in Chr
 Also includes a **Font Generator** for building `.mfb` fonts in the browser with live device preview, size presets, and script/range presets.
 
 ![Font Generator](images/Font%20Generator.png)
+
+### Wi-Fi Transfer (Sami)
+
+Manage the SD card from any phone or computer browser, no cable or app needed. On the book list, select **Wi-Fi Transfer**, then either:
+
+- **Join a Wi-Fi network** — pick your network (type its password once with the on-screen keyboard; Sami remembers it), then open **http://sami.local** — or the address shown on the reader, like `http://192.168.1.42` — on a phone or computer on the same Wi-Fi.
+- **Create a hotspot** — the reader makes its own network called **Sami Reader** and shows its password. Join it from your phone, then open **http://sami.local** or **http://192.168.4.1** (many phones open the page by themselves).
+
+The **Sami Reader** page lists the card's folders and files: upload (button or drag and drop, several at once), download, rename, delete and create folders. Hidden files (starting with `.`) appear with **Show hidden**. Books you upload, rename or delete update the book list when you leave the Wi-Fi screen. Press ◀ to stop Wi-Fi; it also turns itself off after 10 minutes without activity, and while it's on the reader won't fall asleep.
+
+Notes: the reader's Wi-Fi is 2.4 GHz only. The page uses plain HTTP and has no password, so anyone on the same network can open it while Wi-Fi Transfer is on — use it at home or on the hotspot. Remembered networks are kept in `.microreader/wifi.txt` (delete a line to forget one).
 
 ### Calibre Plugin
 

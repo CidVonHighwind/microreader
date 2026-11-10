@@ -48,7 +48,8 @@ class ScopedCwd {
 }  // namespace
 
 // Settings item order: 0 Reading Stats, 1 Daily Goal, [2 Goal target], then
-// Date & Time. The book list starts with "Finished Books (N)", a gap, then books.
+// Date & Time. The book list starts with "Finished Books (N)", "Wi-Fi
+// Transfer", a gap, then books.
 
 // ── Daily goal ──────────────────────────────────────────────────────────────
 
@@ -150,7 +151,9 @@ TEST_F(NewFeaturesTest, MarkFinishedFromBookMenuAndShelf) {
   EXPECT_EQ(app_->main_menu()->current_book_path(), book_path("multi_chapter.epub"));
 
   // The book list's first row opens the shelf; selecting the book opens it.
-  tap(Button::Button3);  // ▲ to "Finished Books (1)" (skips the gap)
+  tap(Button::Button3);  // ▲ to "Wi-Fi Transfer" (skips the gap)
+  tap(Button::Button3);  // ▲ to "Finished Books (1)"
+  EXPECT_EQ(app_->main_menu()->selected_index(), 0);
   EXPECT_EQ(app_->main_menu()->current_book_path(), "");
   tap(Button::Button1);
   ASSERT_EQ(top(), "Finished");
@@ -400,16 +403,22 @@ TEST_F(NewFeaturesTest, BookListStartsOnFirstBookBelowFinishedRow) {
   start_app();
   ASSERT_EQ(top(), "Books");
   auto* menu = app_->main_menu();
-  EXPECT_EQ(menu->count(), 4);  // Finished row, gap, 2 books
-  EXPECT_TRUE(menu->is_separator(1));
-  EXPECT_EQ(menu->selected_index(), 2);
+  EXPECT_EQ(menu->count(), 5);  // Finished row, Wi-Fi row, gap, 2 books
+  EXPECT_EQ(menu->get_item_label(1), "Wi-Fi Transfer");
+  EXPECT_TRUE(menu->is_separator(2));
+  EXPECT_FALSE(menu->is_separator(1));
+  EXPECT_EQ(menu->selected_index(), 3);
   EXPECT_FALSE(menu->current_book_path().empty());
-  // Wrapping up from the first book lands on the Finished row, not the gap.
+  // Going up from the first book lands on the Wi-Fi row, not the gap.
+  tap(Button::Button3);
+  EXPECT_EQ(menu->selected_index(), 1);
+  EXPECT_TRUE(menu->current_book_path().empty());
   tap(Button::Button3);
   EXPECT_EQ(menu->selected_index(), 0);
-  // And ▼ goes back to the first book.
+  // And ▼▼ goes back to the first book.
   tap(Button::Button2);
-  EXPECT_EQ(menu->selected_index(), 2);
+  tap(Button::Button2);
+  EXPECT_EQ(menu->selected_index(), 3);
 }
 
 TEST_F(NewFeaturesTest, BookListTitleAndPercentRead) {
@@ -442,7 +451,7 @@ TEST_F(NewFeaturesTest, BookListTitleAndPercentRead) {
 
   auto label_of = [&](const std::string& path) -> std::string {
     for (int i = 0; i < menu->count(); ++i) {
-      if (menu->is_separator(i) || i == 0)
+      if (menu->is_separator(i) || i < MainMenu::kTopRows)
         continue;
       // Select row i and read the highlighted path.
       while (menu->selected_index() != i)

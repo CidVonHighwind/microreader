@@ -11,7 +11,10 @@
 #include "screens/ChapterSelectScreen.h"
 #include "library/BookProgress.h"
 #include "library/FinishedBooks.h"
+#include "net/SavedWifi.h"
+#include "net/WifiTransfer.h"
 #include "screens/DateTimeScreen.h"
+#include "screens/FileTransferScreen.h"
 #include "screens/FinishedBooksScreen.h"
 #include "screens/IScreen.h"
 #include "screens/LinksScreen.h"
@@ -20,6 +23,8 @@
 #include "screens/ReaderScreen.h"
 #include "screens/SettingsScreen.h"
 #include "screens/StatsCalendarScreen.h"
+#include "screens/TextInputScreen.h"
+#include "screens/WifiMenuScreen.h"
 #include "screens/demo/BouncingBallDemo.h"
 #include "screens/demo/GrayscaleDemo.h"
 #include "stats/ReadingStats.h"
@@ -40,6 +45,9 @@ enum class ScreenId : uint8_t {
   Stats,
   DateTime,
   Finished,
+  Wifi,
+  TextInput,
+  FileTransfer,
 };
 
 class Application {
@@ -57,6 +65,7 @@ class Application {
     stats_.set_data_dir(dir);
     finished_books_.set_file(dir ? std::string(dir) + "/finished.txt" : std::string());
     book_progress_.set_file(dir ? std::string(dir) + "/progress.txt" : std::string());
+    saved_wifi_.set_file(dir ? std::string(dir) + "/wifi.txt" : std::string());
   }
 
   // Path to data directory for settings/state persistence
@@ -171,6 +180,27 @@ class Application {
   }
   DateTimeScreen* date_time_screen() {
     return &date_time_;
+  }
+
+  // Wi-Fi Transfer. The platform provides the Wi-Fi (none on desktop: the
+  // menu then says Wi-Fi isn't available).
+  void set_wifi(IWifiTransfer* wifi) {
+    wifi_ = wifi;
+  }
+  IWifiTransfer* wifi() const {
+    return wifi_;
+  }
+  SavedWifi& saved_wifi() {
+    return saved_wifi_;
+  }
+  WifiMenuScreen* wifi_menu() {
+    return &wifi_menu_;
+  }
+  TextInputScreen* text_input() {
+    return &text_input_;
+  }
+  FileTransferScreen* file_transfer() {
+    return &file_transfer_;
   }
 
   bool invert_menu_buttons() const {
@@ -288,6 +318,13 @@ class Application {
     pending_pop_count_ = count;
   }
 
+  // Back to the book list (the bottom of the screen stack).
+  void pop_to_root() {
+    const int n = screen_mgr_.depth() - 1;
+    if (n > 0)
+      pop_screen(n);
+  }
+
   bool has_pending_transition() const {
     return pending_push_ != ScreenId::None || pending_replace_ != ScreenId::None || pending_pop_count_ > 0;
   }
@@ -346,6 +383,11 @@ class Application {
   FinishedBooksScreen finished_screen_;
   FinishedBooks finished_books_;
   BookProgress book_progress_;
+  WifiMenuScreen wifi_menu_;
+  TextInputScreen text_input_;
+  FileTransferScreen file_transfer_;
+  SavedWifi saved_wifi_;
+  IWifiTransfer* wifi_ = nullptr;
 
   std::string last_book_path_;
   std::string last_book_title_;
