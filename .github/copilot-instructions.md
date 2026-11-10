@@ -11,7 +11,7 @@ lib/microreader/          ← shared core (platform-agnostic C++17)
   display/                ← Canvas, DisplayQueue, Font, Display interface
   screens/                ← IScreen implementations (UI screens)
   stats/                  ← reading statistics (ReadingStats: recorder, month files, calendar math, daily goal)
-  library/                ← FinishedBooks (the Finished shelf)
+  library/                ← FinishedBooks (the Finished shelf), BookProgress (percent read per book)
 platforms/desktop/        ← SDL2 desktop emulator
 platforms/esp32/          ← real hardware (ESP-IDF + PlatformIO)
 test/                     ← Google Test suite (unit + integration)
@@ -97,7 +97,7 @@ All inherit from `IScreen` (`lib/microreader/screens/IScreen.h`): `name()`, `sta
 | `BouncingBallDemo` | `BouncingBallDemo.h/.cpp` | Bouncing ball + random shapes. |
 | `StatsCalendarScreen` | `StatsCalendarScreen.h/.cpp` | Reading-stats month calendar (Settings → Reading Stats). Portrait and landscape layouts. |
 | `DateTimeScreen` | `DateTimeScreen.h/.cpp` | Sets the wall clock (day/month/year/hour/minute). |
-| `FinishedBooksScreen` | `FinishedBooksScreen.h/.cpp` | The Finished shelf (Settings → Finished Books). Select opens the book. |
+| `FinishedBooksScreen` | `FinishedBooksScreen.h/.cpp` | The Finished shelf (first row of the book list). Select opens the book. |
 | (sleep renderers) | `SleepScreens.h/.cpp` | Not a screen: draws the book-cover and JPEG/PNG sleep screens; `list_sd_images()` scans both sleep folders. |
 
 Screens that don't derive from `ListMenuScreen` get the UI fonts via `ListMenuScreen::shared_font()` / `shared_menu_font()` and the standard battery + hint row via `ListMenuScreen::draw_menu_bottom_bar()`. **Don't include `display/ui_font_*.h` in new .cpp files** — the tables are `static constexpr` arrays, so every TU that uses them gets its own copy in flash (the header font alone is ~110 KB).
@@ -258,12 +258,13 @@ Test fixtures in `test/fixtures/` (synthetic EPUBs). Real books in `test/books/`
 ## Finished shelf (`lib/microreader/library/FinishedBooks.h/.cpp`)
 
 - `Application::finished_books()`, stored in `<data_dir>/finished.txt` (`finished_at\tpath\ttitle\tauthor`), loaded in `Application::start()`. Matches by path **or** title+author (BookIndex and MRB both take these from the EPUB metadata), so renamed files stay finished.
-- `MainMenu::populate_list_()` skips finished books. The book menu (`ReaderOptionsScreen`, "Finished: No/Yes") toggles via `set_book_identity()`, which `ReaderScreen` calls before pushing it.
+- `MainMenu` (title "Sami") has two top rows: visual 0 = "Finished Books (N)" (opens `ScreenId::Finished`), visual 1 = gap; books start at `kTopRows`. `entries_index_for()`/`visual_for_entries()` handle the offset and the "opened / never opened" gap; `book_count()` is the number of books. `populate_list_()` skips finished books and, without a remembered selection, selects the first book (or the Finished row when returning from the shelf).
+- **Percent read** (`library/BookProgress`, `<data_dir>/progress.txt`, `percent\tpath\ttitle\tauthor`): set by `ReaderScreen::save_position_()` with the metadata title/author (what the book index uses), written by `Application::save_settings_()` only when dirty. Shown by the `BookListFormat::TitleAndPercent` list format (`list_format=3`); `MainMenu::title_with_percent_()` shortens the title so the percent stays visible. The book menu (`ReaderOptionsScreen`, "Finished: No/Yes") toggles via `set_book_identity()`, which `ReaderScreen` calls before pushing it.
 
 ## Chapter bar and sleep screens
 
 - **Chapter bar**: `ReaderSettings::chapter_bar` (settings `chapter_bar=`), toggled in the book menu. `chapter_bar_reserve()` is added to `ReaderScreen::bottom_padding_()`; `draw_bottom_()` draws the bar at the bottom edge and shifts the regular progress indicator (and nav-history hints) up by the reserve. Off = pixel-identical pages.
-- **Sleep modes** (`sleep_image` setting): `""` cycle, `random`, `cover`, `stats`, or a pinned `embedded:N` / `bmp:<path>` / `img:<path>` (JPEG/PNG) / `.mgr` path. See `Application::do_sleep_()`.
+- **Sleep modes** (`sleep_image` setting): Settings offers only `random` (default), `cover` and `stats`; `load_settings_()` turns any other stored value into `random`. `Application::do_sleep_()` still understands `""` (cycle) and pinned `embedded:N` / `bmp:<path>` / `img:<path>` / `.mgr` values if set directly.
 - New sleep screens draw into the normal 1-bit buffer and finish with `full_refresh(Full)` + `deep_sleep()` (`finish_bw_sleep_`). They don't use MGR2. **MGR2 pixel states are 0 = white … 3 = black** (see `tools/image_to_mgr.py`, `BmpSleepConverter`); the "0=black" comment in `DrawBuffer::show_sleep_image` is wrong, so overlays on MGR2 images must draw with inverted polarity.
 - JPEG/PNG files on the SD card are decoded with the EPUB image decoders by wrapping the file as a stored ZIP entry (`PlainImageFile` in `SleepScreens.cpp`: `data_offset` 0 means "parse the local header", so the file is exposed shifted by one byte). Decoded screens are cached as raw panel frames (`DrawBuffer::kBufSize` bytes): covers in `<data_dir>/cache/<book stem>/cover-v1.frame`, images in `<data_dir>/cache/sleep/<name>.frame`.
 - The cover sleep screen uses `Application::last_book_path/title/pct` (settings `last_book=`, `last_title=`, `last_pct=`), updated by `ReaderScreen::save_position_()` only while the book is loaded.

@@ -66,6 +66,7 @@ void Application::start(DrawBuffer& buf, IRuntime& runtime) {
   // before the menu's on_start() (directory scan + selection restore) runs.
   load_settings_();
   finished_books_.load();
+  book_progress_.load();
 
   // After a cold power-on the wall clock restarts at 1970; continue from the
   // last saved time so reading stats keep a plausible date.
@@ -405,6 +406,9 @@ void microreader::Application::save_settings_() {
   std::fprintf(f, "goal_on=%u\n", goal_enabled_ ? 1u : 0u);
   std::fprintf(f, "goal_min=%d\n", goal_minutes_);
 
+  // Per-book percentages (only written when something changed).
+  book_progress_.save();
+
   // Wall clock, so it can be restored after a cold power-on (see restore_clock_).
   if (IRuntime* rt = stats_.clock()) {
     const int64_t now = rt->local_time();
@@ -488,7 +492,7 @@ void microreader::Application::load_settings_() {
     else if (std::sscanf(line, "chapter_bar=%u", &uval) == 1)
       rs.chapter_bar = (uval != 0);
     else if (std::sscanf(line, "list_format=%u", &uval) == 1)
-      menu_.set_list_format(uval <= 2 ? static_cast<BookListFormat>(uval) : BookListFormat::TitleAndAuthor);
+      menu_.set_list_format(uval <= 3 ? static_cast<BookListFormat>(uval) : BookListFormat::TitleAndAuthor);
     else if (std::sscanf(line, "sort_order=%u", &uval) == 1)
       menu_.set_sort_order(uval == 1 ? BookSortOrder::LastOpened : BookSortOrder::Alphabetical);
     else if (std::sscanf(line, "open_counter=%u", &uval) == 1)
@@ -507,8 +511,14 @@ void microreader::Application::load_settings_() {
       custom_font_path_ = sval;
     else if (std::sscanf(line, "inst_font=%511[^\n]", sval) == 1)
       installed_font_path_ = sval;
-    else if (std::sscanf(line, "sleep_image=%511[^\n]", sval) == 1)
-      sleep_image_path_ = sval;
+    else if (std::sscanf(line, "sleep_image=%511[^\n]", sval) == 1) {
+      // Settings only offers random / cover / stats now; anything else (the
+      // old "cycle" mode or a single pinned image) becomes random.
+      const std::string v = sval;
+      sleep_image_path_ = (v == sleep_screens::kModeCover || v == sleep_screens::kModeStats)
+                              ? v
+                              : std::string(sleep_screens::kModeRandom);
+    }
     else if (std::sscanf(line, "sleep_image_idx=%u", &uval) == 1)
       sleep_image_idx_ = static_cast<int>(uval);
     else if (std::sscanf(line, "last_book=%511[^\n]", sval) == 1)

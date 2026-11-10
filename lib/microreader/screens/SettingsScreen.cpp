@@ -69,6 +69,8 @@ static std::string get_list_format_label(BookListFormat fmt) {
     return "Book List: Title";
   if (fmt == BookListFormat::Filename)
     return "Book List: Filename";
+  if (fmt == BookListFormat::TitleAndPercent)
+    return "Book List: Title & Percent Read";
   return "Book List: Title & Author";
 }
 
@@ -163,24 +165,13 @@ void SettingsScreen::on_start() {
     }
   }
 
-  // Sleep image list: first entry is empty string = Auto-cycle.
-  // Custom SD images take priority — embedded ones are only shown when no
-  // custom images are present.
+  // Sleep screen modes. Every image in the sleep folders is covered by
+  // "Random image", so individual images aren't listed.
   sleep_images_.clear();
-  sleep_images_.push_back(sleep_screens::kModeCycle);
   sleep_images_.push_back(sleep_screens::kModeRandom);
   sleep_images_.push_back(sleep_screens::kModeCover);
   sleep_images_.push_back(sleep_screens::kModeStats);
   sleep_image_sel_idx_ = 0;
-  std::vector<std::string> sd_sleep = sleep_screens::list_sd_images(data_dir_ != nullptr);
-  if (sd_sleep.empty()) {
-    sleep_images_.push_back("embedded:0");
-    sleep_images_.push_back("embedded:1");
-    sleep_images_.push_back("embedded:2");
-  } else {
-    for (auto& p : sd_sleep)
-      sleep_images_.push_back(std::move(p));
-  }
   if (app_) {
     const std::string& current = app_->sleep_image_path();
     for (size_t i = 0; i < sleep_images_.size(); ++i) {
@@ -191,15 +182,8 @@ void SettingsScreen::on_start() {
     }
   }
 
-  // --- Library & reading statistics ---
-  idx_finished_ = count();
-  {
-    char label[40];
-    std::snprintf(label, sizeof(label), "Finished Books (%u)",
-                  static_cast<unsigned>(app_ ? app_->finished_books().size() : 0));
-    add_item(label);
-  }
-
+  // --- Reading statistics ---
+  // (Finished Books is the first row of the book list.)
   idx_stats_ = count();
   add_item("Reading Stats");
 
@@ -311,10 +295,6 @@ void SettingsScreen::on_select(int index) {
     return;
   }
 #endif
-  if (index == idx_finished_) {
-    app_->push_screen(ScreenId::Finished);
-    return;
-  }
   if (index == idx_stats_) {
     app_->push_screen(ScreenId::Stats);
     return;
@@ -374,9 +354,12 @@ void SettingsScreen::on_select(int index) {
   if (index == idx_list_format_) {
     if (app_->main_menu()) {
       auto fmt = app_->main_menu()->list_format();
+      // Title → Title & Percent Read → Filename → Title & Author → Title
       if (fmt == BookListFormat::TitleAndAuthor) {
         fmt = BookListFormat::TitleOnly;
       } else if (fmt == BookListFormat::TitleOnly) {
+        fmt = BookListFormat::TitleAndPercent;
+      } else if (fmt == BookListFormat::TitleAndPercent) {
         fmt = BookListFormat::Filename;
       } else {
         fmt = BookListFormat::TitleAndAuthor;

@@ -47,8 +47,8 @@ class ScopedCwd {
 
 }  // namespace
 
-// Settings item order: 0 Finished Books, 1 Reading Stats, 2 Daily Goal,
-// [3 Goal target], then Date & Time.
+// Settings item order: 0 Reading Stats, 1 Daily Goal, [2 Goal target], then
+// Date & Time. The book list starts with "Finished Books (N)", a gap, then books.
 
 // ── Daily goal ──────────────────────────────────────────────────────────────
 
@@ -57,11 +57,11 @@ TEST_F(NewFeaturesTest, GoalEnableAndTargetInSettings) {
   start_app();
   EXPECT_FALSE(app_->goal_enabled());
   open_settings();
-  down(2);
+  down(1);
   tap(Button::Button1);  // Daily Goal: Off → On
   EXPECT_TRUE(app_->goal_enabled());
   EXPECT_EQ(app_->goal_minutes(), 30);
-  EXPECT_EQ(app_->settings()->selected_index(), 2);  // stays on the toggle after the list rebuilds
+  EXPECT_EQ(app_->settings()->selected_index(), 1);  // stays on the toggle after the list rebuilds
   down(1);
   tap(Button::Button1);  // Goal: 30m → 45m
   EXPECT_EQ(app_->goal_minutes(), 45);
@@ -76,7 +76,7 @@ TEST_F(NewFeaturesTest, GoalEnableAndTargetInSettings) {
   EXPECT_TRUE(app_->goal_enabled());
   EXPECT_EQ(app_->goal_minutes(), 45);
   ASSERT_EQ(top(), "Settings");
-  EXPECT_EQ(app_->settings()->selected_index(), 3);
+  EXPECT_EQ(app_->settings()->selected_index(), 2);
 
   // Turning it off removes the target line again and makes goal_seconds 0.
   tap(Button::Button3);  // ▲ to Daily Goal
@@ -125,7 +125,8 @@ TEST_F(NewFeaturesTest, MarkFinishedFromBookMenuAndShelf) {
   use_books({"with_cover.epub", "multi_chapter.epub"});
   start_app();
   ASSERT_EQ(top(), "Books");
-  ASSERT_EQ(app_->main_menu()->count(), 2);
+  ASSERT_EQ(app_->main_menu()->book_count(), 2);
+  EXPECT_EQ(app_->main_menu()->get_item_label(0), "Finished Books (0)");
 
   const std::string book = book_path("with_cover.epub");
   app_->auto_open_book(book.c_str(), buf_, rt_);
@@ -144,11 +145,13 @@ TEST_F(NewFeaturesTest, MarkFinishedFromBookMenuAndShelf) {
   tap(Button::Button0);  // back to the book
   tap(Button::Button0);  // back to the book list
   ASSERT_EQ(top(), "Books");
-  ASSERT_EQ(app_->main_menu()->count(), 1);  // moved off the main list
+  ASSERT_EQ(app_->main_menu()->book_count(), 1);  // moved off the main list
+  EXPECT_EQ(app_->main_menu()->get_item_label(0), "Finished Books (1)");
   EXPECT_EQ(app_->main_menu()->current_book_path(), book_path("multi_chapter.epub"));
 
-  // Settings → Finished Books shows it; selecting it opens the book.
-  open_settings();
+  // The book list's first row opens the shelf; selecting the book opens it.
+  tap(Button::Button3);  // ▲ to "Finished Books (1)" (skips the gap)
+  EXPECT_EQ(app_->main_menu()->current_book_path(), "");
   tap(Button::Button1);
   ASSERT_EQ(top(), "Finished");
   tap(Button::Button1);
@@ -164,9 +167,10 @@ TEST_F(NewFeaturesTest, MarkFinishedFromBookMenuAndShelf) {
   tap(Button::Button0);
   EXPECT_EQ(top(), "Finished");  // now-empty shelf
   tap(Button::Button0);
-  tap(Button::Button0);
   ASSERT_EQ(top(), "Books");
-  EXPECT_EQ(app_->main_menu()->count(), 2);  // back on the main list, and the index is intact
+  EXPECT_EQ(app_->main_menu()->book_count(), 2);  // back on the main list, and the index is intact
+  EXPECT_EQ(app_->main_menu()->selected_index(), 0);  // cursor returns to the Finished row
+  EXPECT_EQ(app_->main_menu()->get_item_label(0), "Finished Books (0)");
 }
 
 TEST_F(NewFeaturesTest, FinishedShelfPersistsAndSurvivesRename) {
@@ -183,7 +187,7 @@ TEST_F(NewFeaturesTest, FinishedShelfPersistsAndSurvivesRename) {
   start_app();
   ASSERT_EQ(top(), "Books");
   EXPECT_EQ(app_->finished_books().size(), 1u);
-  EXPECT_EQ(app_->main_menu()->count(), 1);
+  EXPECT_EQ(app_->main_menu()->book_count(), 1);
   EXPECT_EQ(app_->main_menu()->current_book_path(), book_path("multi_chapter.epub"));
 }
 
@@ -244,22 +248,32 @@ TEST_F(NewFeaturesTest, ChapterBarOffLeavesPageUnchanged) {
 
 // ── Sleep screens ───────────────────────────────────────────────────────────
 
-TEST_F(NewFeaturesTest, SettingsSleepScreenCyclesModes) {
+TEST_F(NewFeaturesTest, SettingsSleepScreenHasThreeModes) {
   start_app();
+  EXPECT_EQ(app_->sleep_image_path(), "random");  // default
   open_settings();
-  // 0 Finished, 1 Stats, 2 Goal, 3 Date, (separator), 5 Display, 6 Menu Size,
-  // 7 Book List, 8 Sort, 9 Font, 10 Sleep Screen.
-  down(9);
-  EXPECT_EQ(app_->settings()->selected_index(), 10);
-  EXPECT_EQ(app_->sleep_image_path(), "");
-  tap(Button::Button1);
-  EXPECT_EQ(app_->sleep_image_path(), "random");
+  // 0 Stats, 1 Goal, 2 Date, (separator), 4 Display, 5 Menu Size,
+  // 6 Book List, 7 Sort, 8 Font, 9 Sleep Screen.
+  down(8);
+  EXPECT_EQ(app_->settings()->selected_index(), 9);
   tap(Button::Button1);
   EXPECT_EQ(app_->sleep_image_path(), "cover");
   tap(Button::Button1);
   EXPECT_EQ(app_->sleep_image_path(), "stats");
   tap(Button::Button1);
-  EXPECT_EQ(app_->sleep_image_path().rfind("embedded:", 0), 0u);  // then the images
+  EXPECT_EQ(app_->sleep_image_path(), "random");  // no per-image entries
+}
+
+TEST_F(NewFeaturesTest, OldSleepSettingsBecomeRandom) {
+  for (const char* old_value : {"embedded:1", "bmp:/sdcard/.sleep/x.bmp", "img:sd/sleep/a.jpg", ""}) {
+    std::ofstream(data_dir_ / "settings") << "v=1\nscreen=menu\nsleep_image=" << old_value << "\n";
+    start_app();
+    EXPECT_EQ(app_->sleep_image_path(), "random") << old_value;
+    app_.reset();
+  }
+  std::ofstream(data_dir_ / "settings") << "v=1\nscreen=menu\nsleep_image=stats\n";
+  start_app();
+  EXPECT_EQ(app_->sleep_image_path(), "stats");
 }
 
 TEST_F(NewFeaturesTest, SleepShowsStatsCalendar) {
@@ -377,4 +391,79 @@ TEST_F(NewFeaturesTest, PinnedJpegSleepImage) {
   EXPECT_FALSE(app_->running());
   EXPECT_GE(display_.full_refreshes, 1);
   EXPECT_GT(display_.black_pixels(), 5000);
+}
+
+// ── Book list ───────────────────────────────────────────────────────────────
+
+TEST_F(NewFeaturesTest, BookListStartsOnFirstBookBelowFinishedRow) {
+  use_books({"multi_chapter.epub", "with_cover.epub"});
+  start_app();
+  ASSERT_EQ(top(), "Books");
+  auto* menu = app_->main_menu();
+  EXPECT_EQ(menu->count(), 4);  // Finished row, gap, 2 books
+  EXPECT_TRUE(menu->is_separator(1));
+  EXPECT_EQ(menu->selected_index(), 2);
+  EXPECT_FALSE(menu->current_book_path().empty());
+  // Wrapping up from the first book lands on the Finished row, not the gap.
+  tap(Button::Button3);
+  EXPECT_EQ(menu->selected_index(), 0);
+  // And ▼ goes back to the first book.
+  tap(Button::Button2);
+  EXPECT_EQ(menu->selected_index(), 2);
+}
+
+TEST_F(NewFeaturesTest, BookListTitleAndPercentRead) {
+  rt_.wall = at(2026, 11, 10, 20, 0);
+  use_books({"with_cover.epub", "long_title.epub", "multi_chapter.epub"});
+  start_app();
+  auto* menu = app_->main_menu();
+
+  // Read a little of two books.
+  for (const char* name : {"with_cover.epub", "long_title.epub"}) {
+    const std::string book = book_path(name);
+    app_->auto_open_book(book.c_str(), buf_, rt_);
+    ASSERT_TRUE(app_->reader()->is_open_ok()) << name;
+    for (int i = 0; i < 5; ++i)
+      tap(Button::Up);
+    tap(Button::Button0);
+  }
+  const int pct_cover = app_->book_progress().get(book_path("with_cover.epub"), "", "");
+  EXPECT_GT(pct_cover, 0);
+
+  // Settings → Book List: Title (default) → Title & Percent Read.
+  EXPECT_EQ(menu->list_format(), BookListFormat::TitleOnly);
+  open_settings();
+  down(5);  // 0 Stats, 1 Goal, 2 Date, (gap), 4 Display, 5 Menu Size, 6 Book List
+  EXPECT_EQ(app_->settings()->selected_index(), 6);
+  tap(Button::Button1);
+  EXPECT_EQ(menu->list_format(), BookListFormat::TitleAndPercent);
+  tap(Button::Button0);
+  ASSERT_EQ(top(), "Books");
+
+  auto label_of = [&](const std::string& path) -> std::string {
+    for (int i = 0; i < menu->count(); ++i) {
+      if (menu->is_separator(i) || i == 0)
+        continue;
+      // Select row i and read the highlighted path.
+      while (menu->selected_index() != i)
+        tap(Button::Button2);
+      if (menu->current_book_path() == path)
+        return std::string(menu->get_item_label(i));
+    }
+    return "";
+  };
+  const std::string cover_label = label_of(book_path("with_cover.epub"));
+  EXPECT_EQ(cover_label, "The Lighthouse Keeper  \xc2\xb7  " + std::to_string(pct_cover) + "%");
+  EXPECT_EQ(label_of(book_path("multi_chapter.epub")).find('%'), std::string::npos);  // never opened
+  const std::string long_label = label_of(book_path("long_title.epub"));
+  EXPECT_NE(long_label.find("...  \xc2\xb7  "), std::string::npos) << long_label;  // title shortened
+  EXPECT_EQ(long_label.back(), '%');                                               // percent kept
+
+  // Percentages are saved and survive a restart.
+  app_.reset();
+  start_app();
+  EXPECT_EQ(app_->book_progress().get(book_path("with_cover.epub"), "", ""), pct_cover);
+  EXPECT_EQ(app_->main_menu()->list_format(), BookListFormat::TitleAndPercent);
+  // Matched by title + author too, e.g. after the file was renamed.
+  EXPECT_EQ(app_->book_progress().get("/elsewhere/renamed.epub", "The Lighthouse Keeper", "Ada Marlow"), pct_cover);
 }

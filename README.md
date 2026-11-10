@@ -80,11 +80,9 @@ The device shows a sleep screen when it enters deep sleep. Choose it in **Settin
 
 | Option | What it shows |
 |--------|---------------|
-| **Cycle images** | Your sleep images in turn (the original behaviour) |
-| **Random image** | A random sleep image each time, never the same one twice in a row |
-| **Book cover** | The cover of the book you're reading, with its title and how far through you are. Books without a cover image fall back to your sleep images. |
+| **Random image** (default) | A random image from your sleep folder each time, never the same one twice in a row |
+| **Book cover** | The cover of the book you're reading, with its title and how far through you are. Books without a cover image fall back to a random image. |
 | **Reading stats** | The Reading Stats calendar with today selected |
-| *an image name* | Always that one image |
 
 Several images are built into the firmware; add your own by putting them in the `sleep/` or `.sleep/` folder on the SD card, or upload them with the browser manager (which uses `sleep/`). When you have your own images, the built-in ones are skipped.
 
@@ -113,7 +111,11 @@ Open **Settings → Reading Stats** for a month calendar of your reading. Each d
 
 ## Finished Books
 
-While reading, press ▶ to open the book menu and select **Finished: No** to mark the book as finished. It moves off the main book list onto its own shelf, **Settings → Finished Books**, which lists finished books with the date you finished them, newest first. Select a book there to open it again; select **Finished: Yes** in its menu to put it back on the main list. The shelf is stored in `.microreader/finished.txt` and recognises a book by its title and author, so renaming or moving the file keeps it on the shelf.
+While reading, press ▶ to open the book menu and select **Finished: No** to mark the book as finished. It moves off the main book list onto its own shelf: **Finished Books (N)**, the first row of the book list, which lists finished books with the date you finished them, newest first. Select a book there to open it again; select **Finished: Yes** in its menu to put it back on the main list. The shelf is stored in `.microreader/finished.txt` and recognises a book by its title and author, so renaming or moving the file keeps it on the shelf.
+
+## Book List
+
+The book list (titled **Sami**) starts with **Finished Books (N)**, then your books. **Settings → Book List** chooses how books are shown: *Title*, *Title & Percent Read* (e.g. "The Hobbit · 42%" — the percentage appears once you've opened a book with Sami), *Filename* or *Title & Author*.
 
 ## Chapter Progress Bar
 

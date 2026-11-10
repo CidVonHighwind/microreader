@@ -44,7 +44,7 @@ static bool ci_less(std::string_view a, std::string_view b) {
 }
 
 void MainMenu::on_start() {
-  title_ = "Microreader";
+  title_ = "Sami";
 
   if (!app_->data_dir_) {
     needs_scan_ = false;
@@ -87,8 +87,13 @@ void MainMenu::update(const ButtonState& buttons, DrawBuffer& buf, IRuntime& run
 }
 
 void MainMenu::on_select(int index) {
+  if (index == kFinishedRow) {
+    app_->push_screen(ScreenId::Finished);
+    return;
+  }
   if (is_separator(index)) return;
   int real = entries_index_for(index);
+  if (real < 0 || real >= static_cast<int>(entries_.size())) return;
   last_selected_path_ = entries_[real].path;
   app_->record_book_opened(entries_[real].path);
   app_->reader()->set_path(entries_[real].path.c_str());
@@ -101,6 +106,7 @@ void MainMenu::stop() {
     initial_selection_ = cur;
     last_selected_path_ = cur;
   }
+  return_to_finished_row_ = (selected() == kFinishedRow);
 
   { std::vector<BookEntry> tmp; entries_.swap(tmp); }
   free_items_storage();
@@ -127,16 +133,52 @@ void MainMenu::scan_directory_(DrawBuffer& buf) {
 }
 
 int MainMenu::count() const {
-  int n = static_cast<int>(entries_.size());
+  int n = static_cast<int>(entries_.size()) + kTopRows;
   if (separator_visual_index_ >= 0) ++n;
   return n;
 }
 
 bool MainMenu::is_separator(int index) const {
-  return separator_visual_index_ >= 0 && index == separator_visual_index_;
+  if (index == kTopRows - 1)
+    return true;  // gap under the Finished row
+  return separator_visual_index_ >= 0 && index - kTopRows == separator_visual_index_;
+}
+
+std::string_view MainMenu::title_with_percent_(std::string_view title, int percent) const {
+  char suffix[16];
+  std::snprintf(suffix, sizeof(suffix), "  \xc2\xb7  %d%%", percent);
+  label_buf_.assign(title.data(), title.size());
+  label_buf_ += suffix;
+  if (!ui_font_.valid())
+    return label_buf_;
+  // Same width limit ListMenuScreen uses for centred items.
+  const int max_w = (buf_ ? buf_->width() : DrawBuffer::kWidth) - 48;
+  if (ui_font_.word_width(label_buf_.data(), label_buf_.size(), FontStyle::Regular) <= max_w)
+    return label_buf_;
+  // Shorten the title (on a UTF-8 boundary) and add "..." before the percent.
+  const std::string tail = std::string("...") + suffix;
+  const int budget = max_w - ui_font_.word_width(tail.data(), tail.size(), FontStyle::Regular);
+  size_t fit = 0;
+  while (fit < title.size()) {
+    const uint8_t b = static_cast<uint8_t>(title[fit]);
+    const size_t cb = b < 0x80 ? 1u : b < 0xE0 ? 2u : b < 0xF0 ? 3u : 4u;
+    if (fit + cb > title.size() || ui_font_.word_width(title.data(), fit + cb, FontStyle::Regular) > budget)
+      break;
+    fit += cb;
+  }
+  label_buf_.assign(title.data(), fit);
+  label_buf_ += tail;
+  return label_buf_;
 }
 
 std::string_view MainMenu::get_item_label(int index) const {
+  if (index == kFinishedRow) {
+    char buf[40];
+    std::snprintf(buf, sizeof(buf), "Finished Books (%u)",
+                  static_cast<unsigned>(app_ ? app_->finished_books().size() : 0));
+    finished_label_ = buf;
+    return finished_label_;
+  }
   if (is_separator(index)) return {};
   int real = entries_index_for(index);
   if (real < 0 || real >= static_cast<int>(entries_.size()))
@@ -145,6 +187,12 @@ std::string_view MainMenu::get_item_label(int index) const {
   const BookEntry& e = entries_[real];
   if (list_format_ == BookListFormat::TitleOnly) {
     return e.title_ref.view(pool);
+  } else if (list_format_ == BookListFormat::TitleAndPercent) {
+    const std::string_view title = e.title_ref.view(pool);
+    const int pct = app_ ? app_->book_progress().get(e.path, title, e.author_ref.view(pool)) : -1;
+    if (pct < 0)
+      return title;  // never opened
+    return title_with_percent_(title, pct);
   } else if (list_format_ == BookListFormat::Filename) {
     return filename_sv(e.path);
   } else {
@@ -202,15 +250,26 @@ void MainMenu::populate_list_() {
                      });
   }
 
+  bool matched = false;
   if (!initial_selection_.empty()) {
     for (int i = 0; i < static_cast<int>(entries_.size()); ++i) {
       if (entries_[i].path == initial_selection_) {
         set_selected(visual_for_entries(i));
+        matched = true;
         break;
       }
     }
     initial_selection_.clear();
   }
+  if (!matched) {
+    // Back from the Finished shelf: stay on its row. Otherwise start on the
+    // first book rather than the Finished row.
+    if (return_to_finished_row_ || entries_.empty())
+      set_selected(kFinishedRow);
+    else
+      set_selected(kTopRows);
+  }
+  return_to_finished_row_ = false;
 }
 
 }  // namespace microreader

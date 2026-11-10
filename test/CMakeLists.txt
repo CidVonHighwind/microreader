@@ -78,6 +78,7 @@ add_library(microreader_content STATIC
     # Reading statistics (platform-agnostic, no screen deps)
     ${LIB_DIR}/stats/ReadingStats.cpp
     ${LIB_DIR}/library/FinishedBooks.cpp
+    ${LIB_DIR}/library/BookProgress.cpp
 )
 target_include_directories(microreader_content PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../lib
@@ -131,6 +132,7 @@ add_executable(unit_tests
     unit/BookIndexTest.cpp
     unit/ReadingStatsTest.cpp
     unit/FinishedBooksTest.cpp
+    unit/BookProgressTest.cpp
 )
 target_include_directories(unit_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/support
@@ -175,6 +177,7 @@ add_executable(microreader_tests
     unit/BookIndexTest.cpp
     unit/ReadingStatsTest.cpp
     unit/FinishedBooksTest.cpp
+    unit/BookProgressTest.cpp
     unit/StatsScreensTest.cpp
     unit/NewFeaturesTest.cpp
 )

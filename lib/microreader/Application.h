@@ -9,6 +9,7 @@
 #include "ScreenManager.h"
 #include "display/DrawBuffer.h"
 #include "screens/ChapterSelectScreen.h"
+#include "library/BookProgress.h"
 #include "library/FinishedBooks.h"
 #include "screens/DateTimeScreen.h"
 #include "screens/FinishedBooksScreen.h"
@@ -55,6 +56,7 @@ class Application {
     settings_.set_data_dir(dir);
     stats_.set_data_dir(dir);
     finished_books_.set_file(dir ? std::string(dir) + "/finished.txt" : std::string());
+    book_progress_.set_file(dir ? std::string(dir) + "/progress.txt" : std::string());
   }
 
   // Path to data directory for settings/state persistence
@@ -139,6 +141,10 @@ class Application {
   // Books marked as finished (hidden from the book list, shown on their shelf).
   FinishedBooks& finished_books() {
     return finished_books_;
+  }
+  // Percent read per book, for the "Title & Percent Read" book list.
+  BookProgress& book_progress() {
+    return book_progress_;
   }
   // Current local time, or 0 when there is no valid clock.
   int64_t local_time_now() const {
@@ -321,7 +327,10 @@ class Application {
 
   std::string custom_font_path_;
   std::string installed_font_path_;
-  std::string sleep_image_path_;  // empty = auto-cycle
+  // Sleep screen mode: "random" (image from the sleep folders), "cover" or
+  // "stats". Older settings files may hold "" (cycle) or a pinned image path;
+  // load_settings_() turns those into "random".
+  std::string sleep_image_path_ = "random";
   int sleep_image_idx_ = 0;
 
   ScreenManager screen_mgr_;
@@ -336,6 +345,7 @@ class Application {
   DateTimeScreen date_time_;
   FinishedBooksScreen finished_screen_;
   FinishedBooks finished_books_;
+  BookProgress book_progress_;
 
   std::string last_book_path_;
   std::string last_book_title_;

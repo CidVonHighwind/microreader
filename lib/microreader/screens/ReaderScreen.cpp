@@ -1108,7 +1108,10 @@ void ReaderScreen::save_position_() {
   // progress_pct() would read 0.
   if (app_ && open_ok_ && chapter_src_ && mrb_.paragraph_count() > 0) {
     const std::string& title = mrb_.metadata().title;
-    app_->note_reading_progress(path_, title.empty() ? book_stem_() : title, progress_pct());
+    const int pct = progress_pct();
+    app_->note_reading_progress(path_, title.empty() ? book_stem_() : title, pct);
+    // Same title/author the book list gets from the book index.
+    app_->book_progress().set(path_, title, mrb_.metadata().author.value_or(""), pct);
   }
   const std::string& path = pos_path_;
   FILE* f = std::fopen(path.c_str(), "w");

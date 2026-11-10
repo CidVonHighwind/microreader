@@ -65,6 +65,7 @@ add_library(microreader_content STATIC
     # Reading statistics (platform-agnostic, no screen deps; kept here so unit tests can link it)
     ${CONTENT_DIR}/../stats/ReadingStats.cpp
     ${CONTENT_DIR}/../library/FinishedBooks.cpp
+    ${CONTENT_DIR}/../library/BookProgress.cpp
 )
 target_include_directories(microreader_content PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../../lib

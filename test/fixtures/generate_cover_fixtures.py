@@ -8,6 +8,7 @@ Writes (next to this script):
     with_cover_epub3.epub  EPUB 3 book whose cover is declared with properties="cover-image"
     sleep_landscape.jpg    baseline JPEG, landscape (rotated to fill the portrait screen)
     sleep_portrait.png     PNG, portrait
+    long_title.epub        no cover, very long title (book list truncation)
 
 Needs Pillow.
 """
@@ -60,8 +61,11 @@ def write_epub(path, title, author, cover_bytes, cover_name, media_type, epub3):
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
   <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
 </container>"""
-    cover_meta = "" if epub3 else '<meta name="cover" content="cover-img"/>'
+    has_cover = cover_bytes is not None
+    cover_meta = '<meta name="cover" content="cover-img"/>' if has_cover and not epub3 else ""
     cover_props = ' properties="cover-image"' if epub3 else ""
+    cover_item = (f'<item id="cover-img" href="images/{cover_name}" media-type="{media_type}"{cover_props}/>'
+                  if has_cover else "")
     opf = f"""<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="{'3.0' if epub3 else '2.0'}" unique-identifier="id">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -69,7 +73,7 @@ def write_epub(path, title, author, cover_bytes, cover_name, media_type, epub3):
     <dc:identifier id="id">{title}</dc:identifier>{cover_meta}
   </metadata>
   <manifest>
-    <item id="cover-img" href="images/{cover_name}" media-type="{media_type}"{cover_props}/>
+    {cover_item}
     <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
@@ -93,7 +97,8 @@ def write_epub(path, title, author, cover_bytes, cover_name, media_type, epub3):
         z.writestr("OEBPS/toc.ncx", ncx, zipfile.ZIP_DEFLATED)
         z.writestr("OEBPS/ch1.xhtml", chapter(1), zipfile.ZIP_DEFLATED)
         z.writestr("OEBPS/ch2.xhtml", chapter(2), zipfile.ZIP_DEFLATED)
-        z.writestr(f"OEBPS/images/{cover_name}", cover_bytes, zipfile.ZIP_STORED)
+        if has_cover:
+            z.writestr(f"OEBPS/images/{cover_name}", cover_bytes, zipfile.ZIP_STORED)
 
 
 def main():
@@ -103,6 +108,10 @@ def main():
     write_epub(os.path.join(HERE, "with_cover_epub3.epub"), "Small Hours", "Ben Okafor",
                encode(cover_image(300, 450, "SMALL HOURS", "Ben Okafor"), "PNG"), "front.png", "image/png",
                epub3=True)
+
+    write_epub(os.path.join(HERE, "long_title.epub"),
+               "The Remarkably Long and Winding Chronicle of an Unusually Patient Lighthouse Keeper", "C. Long",
+               None, None, None, epub3=False)
 
     land = Image.new("L", (800, 500), 255)
     d = ImageDraw.Draw(land)
