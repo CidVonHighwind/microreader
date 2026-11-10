@@ -45,6 +45,7 @@ class SettingsScreen final : public ListMenuScreen {
   int idx_grayscale_demo_ = -1;
 #endif
 
+  int idx_wifi_ = -1;
   int idx_stats_ = -1;
   int idx_goal_ = -1;
   int idx_goal_target_ = -1;

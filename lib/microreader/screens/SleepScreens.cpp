@@ -279,17 +279,6 @@ std::vector<std::string> list_sd_images(bool with_converted) {
   return out;
 }
 
-void draw_sleeping_label(DrawBuffer& buf) {
-  const BitmapFont& small = ui(UiFont::Small);
-  static const char kText[] = "sleeping...";
-  const int tw = text_w(small, kText);
-  const int bh = small.y_advance() + 4;
-  const int bx = (buf.width() - tw) / 2 - 8;
-  const int by = buf.height() - bh - 6;
-  buf.fill_rect(bx, by, tw + 16, bh, true);
-  text_at(buf, small, bx + 8, by + 2, kText);
-}
-
 bool draw_image_file(DrawBuffer& buf, const std::string& path, const char* data_dir) {
   std::string cache;
   if (data_dir && *data_dir) {
@@ -376,7 +365,9 @@ bool draw_book_cover(DrawBuffer& buf, const std::string& book_path, const std::s
   char pct_text[8];
   std::snprintf(pct_text, sizeof(pct_text), "%d%%", pct);
   const int pct_w = text_w(large, pct_text);
-  const int top = cover_h + 8;
+  constexpr int kBarH = 10;
+  const int block_h = large.y_advance() + 6 + kBarH;
+  const int top = cover_h + std::max(4, (kStripH - block_h) / 2);
   buf.fill_rect(0, cover_h, W, H - cover_h, true);
   const std::string shown = fit_text(medium, title.empty() ? stem(book_path) : title, W - 2 * margin - pct_w - 16);
   text_at(buf, medium, margin, top + 4, shown);
@@ -384,7 +375,6 @@ bool draw_book_cover(DrawBuffer& buf, const std::string& book_path, const std::s
 
   const int bar_y = top + large.y_advance() + 6;
   const int bar_w = W - 2 * margin;
-  constexpr int kBarH = 10;
   buf.fill_rect(margin, bar_y, bar_w, 1, false);
   buf.fill_rect(margin, bar_y + kBarH - 1, bar_w, 1, false);
   buf.fill_rect(margin, bar_y, 1, kBarH, false);
@@ -392,10 +382,6 @@ bool draw_book_cover(DrawBuffer& buf, const std::string& book_path, const std::s
   const int fill = (bar_w - 4) * pct / 100;
   if (fill > 0)
     buf.fill_rect(margin + 2, bar_y + 2, fill, kBarH - 4, false);
-
-  const BitmapFont& small = ui(UiFont::Small);
-  static const char kSleeping[] = "sleeping...";
-  text_at(buf, small, (W - text_w(small, kSleeping)) / 2, H - small.y_advance() - 4, kSleeping);
   return true;
 }
 

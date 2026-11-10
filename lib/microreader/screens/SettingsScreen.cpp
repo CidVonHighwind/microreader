@@ -182,6 +182,11 @@ void SettingsScreen::on_start() {
     }
   }
 
+  // --- Wi-Fi Transfer ---
+  idx_wifi_ = count();
+  add_item("Wi-Fi Transfer");
+  add_separator();
+
   // --- Reading statistics ---
   // (Finished Books is the first row of the book list.)
   idx_stats_ = count();
@@ -295,6 +300,10 @@ void SettingsScreen::on_select(int index) {
     return;
   }
 #endif
+  if (index == idx_wifi_) {
+    app_->push_screen(ScreenId::Wifi);
+    return;
+  }
   if (index == idx_stats_) {
     app_->push_screen(ScreenId::Stats);
     return;

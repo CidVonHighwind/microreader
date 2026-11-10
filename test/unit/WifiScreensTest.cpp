@@ -1,4 +1,4 @@
-// Wi-Fi Transfer on the reader: the book list row, the network menu, the
+// Wi-Fi Transfer on the reader: the Settings item, the network menu, the
 // keyboard and the transfer screen. Driven through the real Application with
 // button presses and a fake Wi-Fi.
 
@@ -98,12 +98,14 @@ class WifiScreensTest : public AppFixture {
     app_->start(buf_, rt_);
     tick();
   }
-  // From the book list: highlight "Wi-Fi Transfer" and open it.
+  // From the book list: ◀ to Settings, then its first item, "Wi-Fi Transfer".
   void open_wifi_menu() {
     ASSERT_EQ(top(), "Books");
-    for (int guard = 0; guard < 20 && app_->main_menu()->selected_index() != MainMenu::kWifiRow; ++guard)
+    tap(Button::Button0);
+    ASSERT_EQ(top(), "Settings");
+    for (int guard = 0; guard < 40 && app_->settings()->selected_index() != 0; ++guard)
       tap(Button::Button3);
-    ASSERT_EQ(app_->main_menu()->selected_index(), MainMenu::kWifiRow);
+    ASSERT_EQ(app_->settings()->selected_index(), 0);
     tap(Button::Button1);
     ASSERT_EQ(top(), "Wi-Fi");
     tick();  // scans
@@ -153,16 +155,17 @@ class WifiScreensTest : public AppFixture {
 
 }  // namespace
 
-TEST_F(WifiScreensTest, BookListRowOpensTheWifiMenu) {
+TEST_F(WifiScreensTest, FirstSettingsItemOpensTheWifiMenu) {
   use_books({"multi_chapter.epub"});
   start_with_wifi(false);  // like the desktop emulator: no Wi-Fi
+  EXPECT_EQ(app_->main_menu()->count(), MainMenu::kTopRows + 1);  // no Wi-Fi row on the book list
   open_wifi_menu();
   const auto labels = wifi_labels();
   ASSERT_EQ(labels.size(), 2u);
   EXPECT_EQ(labels[0], "Wi-Fi isn't available here");
   tap(Button::Button0);
-  ASSERT_EQ(top(), "Books");
-  EXPECT_EQ(app_->main_menu()->selected_index(), MainMenu::kWifiRow);  // back on its row
+  ASSERT_EQ(top(), "Settings");
+  EXPECT_EQ(app_->settings()->selected_index(), 0);  // back on its item
 }
 
 TEST_F(WifiScreensTest, ScansAndLabelsNetworks) {
@@ -183,7 +186,7 @@ TEST_F(WifiScreensTest, ScansAndLabelsNetworks) {
 
   // Leaving turns the radio off again.
   tap(Button::Button0);
-  EXPECT_EQ(top(), "Books");
+  EXPECT_EQ(top(), "Settings");
   EXPECT_FALSE(wifi_.radio_on);
 }
 
@@ -219,7 +222,6 @@ TEST_F(WifiScreensTest, JoinWithPasswordShowsAddressAndRemembersIt) {
   tap(Button::Button0);
   EXPECT_EQ(top(), "Books");
   EXPECT_FALSE(wifi_.radio_on);
-  EXPECT_EQ(app_->main_menu()->selected_index(), MainMenu::kWifiRow);
 }
 
 TEST_F(WifiScreensTest, SavedAndOpenNetworksConnectWithoutTheKeyboard) {

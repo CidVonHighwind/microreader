@@ -157,7 +157,6 @@ bool Application::show_sleep_entry_(const std::string& path, DrawBuffer& buf) {
   if (path.rfind("img:", 0) == 0) {
     if (!sleep_screens::draw_image_file(buf, path.substr(4), data_dir_))
       return false;
-    sleep_screens::draw_sleeping_label(buf);
     finish_bw_sleep_(buf);
     return true;
   }

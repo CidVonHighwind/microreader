@@ -395,7 +395,9 @@ TEST_F(StatsScreensTest, SettingsHasStatsEntries) {
   start_app();
   tap(Button::Button0);  // book list ◀ → Settings
   ASSERT_EQ(top(), "Settings");
-  tap(Button::Button1);  // first item: Reading Stats
+  EXPECT_EQ(app_->settings()->selected_index(), 0);  // first item: Wi-Fi Transfer
+  tap(Button::Button2);  // ▼ Reading Stats (skips the gap)
+  tap(Button::Button1);
   EXPECT_EQ(top(), "Stats");
   tap(Button::Button0);
   ASSERT_EQ(top(), "Settings");

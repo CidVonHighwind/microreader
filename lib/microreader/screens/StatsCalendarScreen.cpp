@@ -280,10 +280,8 @@ void StatsCalendarScreen::draw_(DrawBuffer& buf, std::optional<uint8_t> battery)
   draw_grid_(buf, L);
   draw_info_(buf, L);
 
-  if (sleep_mode_) {
-    text_center(buf, small, L.content_w / 2, buf.height() - small.y_advance() - 4, "sleeping...");
-    return;
-  }
+  if (sleep_mode_)
+    return;  // no button hints on the sleep screen
   ListMenuScreen::draw_menu_bottom_bar(buf, ListMenuScreen::shared_menu_font(), app_ && app_->invert_menu_buttons(),
                                        battery);
 }

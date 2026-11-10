@@ -48,9 +48,6 @@ bool draw_image_file(DrawBuffer& buf, const std::string& path, const char* data_
 bool draw_book_cover(DrawBuffer& buf, const std::string& book_path, const std::string& title, int progress_pct,
                      const char* data_dir);
 
-// Small "sleeping..." label centred at the bottom, on a white box.
-void draw_sleeping_label(DrawBuffer& buf);
-
 // Decode an image ZIP entry (or a plain file wrapped as one) into the box
 // (x, y, w, h), scaled to fit up or down and centred. allow_rotate turns a
 // landscape image 90° when the box is portrait. work/work_size: >= 45 KB.

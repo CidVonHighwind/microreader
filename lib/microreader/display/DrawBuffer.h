@@ -820,10 +820,8 @@ class DrawBuffer {
     };
 
     decode_pass(false);
-    draw_text_centered(kWidth / 2, kHeight - 24, "sleeping...", false, false);
     display_.write_ram_bw(inactive_());
     decode_pass(true);
-    draw_text_centered(kWidth / 2, kHeight - 24, "sleeping...", false, false);
     display_.write_ram_red(inactive_());
     display_.grayscale_refresh_1pass(/*turnOffScreen=*/true);
     if (deep_sleep_after)

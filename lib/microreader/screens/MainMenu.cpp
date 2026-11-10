@@ -91,10 +91,6 @@ void MainMenu::on_select(int index) {
     app_->push_screen(ScreenId::Finished);
     return;
   }
-  if (index == kWifiRow) {
-    app_->push_screen(ScreenId::Wifi);
-    return;
-  }
   if (is_separator(index)) return;
   int real = entries_index_for(index);
   if (real < 0 || real >= static_cast<int>(entries_.size())) return;
@@ -110,7 +106,7 @@ void MainMenu::stop() {
     initial_selection_ = cur;
     last_selected_path_ = cur;
   }
-  return_to_row_ = (selected() == kFinishedRow || selected() == kWifiRow) ? selected() : -1;
+  return_to_row_ = selected() == kFinishedRow ? kFinishedRow : -1;
 
   { std::vector<BookEntry> tmp; entries_.swap(tmp); }
   free_items_storage();
@@ -144,7 +140,7 @@ int MainMenu::count() const {
 
 bool MainMenu::is_separator(int index) const {
   if (index == kTopRows - 1)
-    return true;  // gap under the top rows
+    return true;  // gap under the Finished row
   return separator_visual_index_ >= 0 && index - kTopRows == separator_visual_index_;
 }
 
@@ -183,8 +179,6 @@ std::string_view MainMenu::get_item_label(int index) const {
     finished_label_ = buf;
     return finished_label_;
   }
-  if (index == kWifiRow)
-    return "Wi-Fi Transfer";
   if (is_separator(index)) return {};
   int real = entries_index_for(index);
   if (real < 0 || real >= static_cast<int>(entries_.size()))
@@ -268,8 +262,8 @@ void MainMenu::populate_list_() {
     initial_selection_.clear();
   }
   if (!matched) {
-    // Back from the Finished shelf or Wi-Fi Transfer: stay on that row.
-    // Otherwise start on the first book rather than the top rows.
+    // Back from the Finished shelf: stay on its row. Otherwise start on the
+    // first book rather than the Finished row.
     if (return_to_row_ >= 0)
       set_selected(return_to_row_);
     else if (entries_.empty())

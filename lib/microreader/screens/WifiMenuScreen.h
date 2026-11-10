@@ -8,7 +8,7 @@
 
 namespace microreader {
 
-// Wi-Fi Transfer (from the book list): start a hotspot, or pick a network.
+// Wi-Fi Transfer (first item in Settings): start a hotspot, or pick a network.
 // Scans when opened; networks with a remembered password connect straight
 // away, others ask for the password on the keyboard screen.
 class WifiMenuScreen final : public ListMenuScreen {

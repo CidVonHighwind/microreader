@@ -99,7 +99,7 @@ All inherit from `IScreen` (`lib/microreader/screens/IScreen.h`): `name()`, `sta
 | `StatsCalendarScreen` | `StatsCalendarScreen.h/.cpp` | Reading-stats month calendar (Settings → Reading Stats). Portrait and landscape layouts. |
 | `DateTimeScreen` | `DateTimeScreen.h/.cpp` | Sets the wall clock (day/month/year/hour/minute). |
 | `FinishedBooksScreen` | `FinishedBooksScreen.h/.cpp` | The Finished shelf (first row of the book list). Select opens the book. |
-| `WifiMenuScreen` | `WifiMenuScreen.h/.cpp` | Wi-Fi Transfer (book list row 1): "Create a hotspot" or pick a scanned network. |
+| `WifiMenuScreen` | `WifiMenuScreen.h/.cpp` | Wi-Fi Transfer (first Settings item): "Create a hotspot" or pick a scanned network. ◀ returns to Settings; ◀ on the transfer screen returns to the book list. |
 | `TextInputScreen` | `TextInputScreen.h/.cpp` | On-screen keyboard (Wi-Fi passwords). `configure()` before push, `take_result()` on resume. |
 | `FileTransferScreen` | `FileTransferScreen.h/.cpp` | Starts Wi-Fi, shows the address/hotspot password and activity; ◀ or 10 idle minutes turn Wi-Fi off. Keeps the reader awake while on. |
 | (sleep renderers) | `SleepScreens.h/.cpp` | Not a screen: draws the book-cover and JPEG/PNG sleep screens; `list_sd_images()` scans both sleep folders. |

@@ -23,6 +23,15 @@ class NewFeaturesTest : public AppFixture {
     tap(Button::Button0);  // book list ◀ → Settings
     ASSERT_EQ(top(), "Settings");
   }
+  // True if the bottom `rows` rows of the last frame are all white (no
+  // "sleeping..." label).
+  bool bottom_blank(int rows) const {
+    for (int ly = buf_.height() - rows; ly < buf_.height(); ++ly)
+      for (int lx = 0; lx < buf_.width(); ++lx)
+        if (display_.black_at(lx, ly))
+          return false;
+    return true;
+  }
   // ▼ n times (front Button2 with the default Menu Nav).
   void down(int n) {
     for (int i = 0; i < n; ++i)
@@ -47,9 +56,9 @@ class ScopedCwd {
 
 }  // namespace
 
-// Settings item order: 0 Reading Stats, 1 Daily Goal, [2 Goal target], then
-// Date & Time. The book list starts with "Finished Books (N)", "Wi-Fi
-// Transfer", a gap, then books.
+// Settings item order: 0 Wi-Fi Transfer, (1 gap), 2 Reading Stats, 3 Daily
+// Goal, [4 Goal target], then Date & Time. The book list starts with
+// "Finished Books (N)", a gap, then books.
 
 // ── Daily goal ──────────────────────────────────────────────────────────────
 
@@ -58,11 +67,11 @@ TEST_F(NewFeaturesTest, GoalEnableAndTargetInSettings) {
   start_app();
   EXPECT_FALSE(app_->goal_enabled());
   open_settings();
-  down(1);
+  down(2);
   tap(Button::Button1);  // Daily Goal: Off → On
   EXPECT_TRUE(app_->goal_enabled());
   EXPECT_EQ(app_->goal_minutes(), 30);
-  EXPECT_EQ(app_->settings()->selected_index(), 1);  // stays on the toggle after the list rebuilds
+  EXPECT_EQ(app_->settings()->selected_index(), 3);  // stays on the toggle after the list rebuilds
   down(1);
   tap(Button::Button1);  // Goal: 30m → 45m
   EXPECT_EQ(app_->goal_minutes(), 45);
@@ -77,7 +86,7 @@ TEST_F(NewFeaturesTest, GoalEnableAndTargetInSettings) {
   EXPECT_TRUE(app_->goal_enabled());
   EXPECT_EQ(app_->goal_minutes(), 45);
   ASSERT_EQ(top(), "Settings");
-  EXPECT_EQ(app_->settings()->selected_index(), 2);
+  EXPECT_EQ(app_->settings()->selected_index(), 4);
 
   // Turning it off removes the target line again and makes goal_seconds 0.
   tap(Button::Button3);  // ▲ to Daily Goal
@@ -151,8 +160,7 @@ TEST_F(NewFeaturesTest, MarkFinishedFromBookMenuAndShelf) {
   EXPECT_EQ(app_->main_menu()->current_book_path(), book_path("multi_chapter.epub"));
 
   // The book list's first row opens the shelf; selecting the book opens it.
-  tap(Button::Button3);  // ▲ to "Wi-Fi Transfer" (skips the gap)
-  tap(Button::Button3);  // ▲ to "Finished Books (1)"
+  tap(Button::Button3);  // ▲ to "Finished Books (1)" (skips the gap)
   EXPECT_EQ(app_->main_menu()->selected_index(), 0);
   EXPECT_EQ(app_->main_menu()->current_book_path(), "");
   tap(Button::Button1);
@@ -255,10 +263,10 @@ TEST_F(NewFeaturesTest, SettingsSleepScreenHasThreeModes) {
   start_app();
   EXPECT_EQ(app_->sleep_image_path(), "random");  // default
   open_settings();
-  // 0 Stats, 1 Goal, 2 Date, (separator), 4 Display, 5 Menu Size,
-  // 6 Book List, 7 Sort, 8 Font, 9 Sleep Screen.
-  down(8);
-  EXPECT_EQ(app_->settings()->selected_index(), 9);
+  // 0 Wi-Fi, (gap), 2 Stats, 3 Goal, 4 Date, (gap), 6 Display, 7 Menu Size,
+  // 8 Book List, 9 Sort, 10 Font, 11 Sleep Screen.
+  down(9);
+  EXPECT_EQ(app_->settings()->selected_index(), 11);
   tap(Button::Button1);
   EXPECT_EQ(app_->sleep_image_path(), "cover");
   tap(Button::Button1);
@@ -291,6 +299,7 @@ TEST_F(NewFeaturesTest, SleepShowsStatsCalendar) {
   EXPECT_EQ(display_.full_refreshes, refreshes + 1);
   EXPECT_GE(display_.deep_sleeps, 1);
   EXPECT_GT(display_.black_pixels(), 4000);
+  EXPECT_TRUE(bottom_blank(22));  // no "sleeping..." label
 }
 
 TEST_F(NewFeaturesTest, SleepShowsBookCoverWithProgress) {
@@ -316,6 +325,7 @@ TEST_F(NewFeaturesTest, SleepShowsBookCoverWithProgress) {
   ASSERT_TRUE(fs::exists(cache));
   EXPECT_EQ(fs::file_size(cache), DrawBuffer::kBufSize);
   EXPECT_GT(display_.black_pixels(), 20000);  // a real picture, not a blank page
+  EXPECT_TRUE(bottom_blank(16));               // no "sleeping..." label
   const auto first = display_.last;
 
   // Next sleep uses the cache — even with the book file gone.
@@ -403,22 +413,16 @@ TEST_F(NewFeaturesTest, BookListStartsOnFirstBookBelowFinishedRow) {
   start_app();
   ASSERT_EQ(top(), "Books");
   auto* menu = app_->main_menu();
-  EXPECT_EQ(menu->count(), 5);  // Finished row, Wi-Fi row, gap, 2 books
-  EXPECT_EQ(menu->get_item_label(1), "Wi-Fi Transfer");
-  EXPECT_TRUE(menu->is_separator(2));
-  EXPECT_FALSE(menu->is_separator(1));
-  EXPECT_EQ(menu->selected_index(), 3);
+  EXPECT_EQ(menu->count(), 4);  // Finished row, gap, 2 books
+  EXPECT_TRUE(menu->is_separator(1));
+  EXPECT_EQ(menu->selected_index(), 2);
   EXPECT_FALSE(menu->current_book_path().empty());
-  // Going up from the first book lands on the Wi-Fi row, not the gap.
-  tap(Button::Button3);
-  EXPECT_EQ(menu->selected_index(), 1);
-  EXPECT_TRUE(menu->current_book_path().empty());
+  // Wrapping up from the first book lands on the Finished row, not the gap.
   tap(Button::Button3);
   EXPECT_EQ(menu->selected_index(), 0);
-  // And ▼▼ goes back to the first book.
+  // And ▼ goes back to the first book.
   tap(Button::Button2);
-  tap(Button::Button2);
-  EXPECT_EQ(menu->selected_index(), 3);
+  EXPECT_EQ(menu->selected_index(), 2);
 }
 
 TEST_F(NewFeaturesTest, BookListTitleAndPercentRead) {
@@ -442,8 +446,8 @@ TEST_F(NewFeaturesTest, BookListTitleAndPercentRead) {
   // Settings → Book List: Title (default) → Title & Percent Read.
   EXPECT_EQ(menu->list_format(), BookListFormat::TitleOnly);
   open_settings();
-  down(5);  // 0 Stats, 1 Goal, 2 Date, (gap), 4 Display, 5 Menu Size, 6 Book List
-  EXPECT_EQ(app_->settings()->selected_index(), 6);
+  down(6);  // 0 Wi-Fi, (gap), 2 Stats, 3 Goal, 4 Date, (gap), 6 Display, 7 Menu Size, 8 Book List
+  EXPECT_EQ(app_->settings()->selected_index(), 8);
   tap(Button::Button1);
   EXPECT_EQ(menu->list_format(), BookListFormat::TitleAndPercent);
   tap(Button::Button0);

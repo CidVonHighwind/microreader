@@ -65,7 +65,7 @@ Also includes a **Font Generator** for building `.mfb` fonts in the browser with
 
 ### Wi-Fi Transfer (Sami)
 
-Manage the SD card from any phone or computer browser, no cable or app needed. On the book list, select **Wi-Fi Transfer**, then either:
+Manage the SD card from any phone or computer browser, no cable or app needed. Open **Settings** (◀ on the book list) and select **Wi-Fi Transfer**, the first item, then either:
 
 - **Join a Wi-Fi network** — pick your network (type its password once with the on-screen keyboard; Sami remembers it), then open **http://sami.local** — or the address shown on the reader, like `http://192.168.1.42` — on a phone or computer on the same Wi-Fi.
 - **Create a hotspot** — the reader makes its own network called **Sami Reader** and shows its password. Join it from your phone, then open **http://sami.local** or **http://192.168.4.1** (many phones open the page by themselves).

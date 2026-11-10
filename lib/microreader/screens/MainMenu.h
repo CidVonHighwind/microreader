@@ -17,8 +17,8 @@ enum class BookSortOrder { Alphabetical, LastOpened };
 
 // Main screen — lists EPUB books from a directory.
 // Button1 = open book, Button0 = settings.
-// The first rows open the Finished shelf ("Finished Books (N)") and Wi-Fi
-// Transfer; a gap row separates them from the books.
+// The first row, "Finished Books (N)", opens the Finished shelf; a gap row
+// separates it from the books.
 class MainMenu final : public ListMenuScreen {
  public:
   MainMenu() = default;
@@ -126,14 +126,13 @@ class MainMenu final : public ListMenuScreen {
   mutable std::string finished_label_;
   // Index (among the book rows) of the "opened / never opened" gap, or -1.
   int separator_visual_index_ = -1;
-  // The top row (Finished / Wi-Fi) that was highlighted, to return to it; -1 if none.
+  // The Finished row was highlighted, to return to it; -1 if not.
   int return_to_row_ = -1;
 
  public:
-  // Rows above the books: "Finished Books (N)", "Wi-Fi Transfer" and a gap.
-  static constexpr int kTopRows = 3;
+  // Rows above the books: "Finished Books (N)" and a gap.
+  static constexpr int kTopRows = 2;
   static constexpr int kFinishedRow = 0;
-  static constexpr int kWifiRow = 1;
 
  private:
   // Visual list index → entries_ index (-1 for the top rows and gaps).
