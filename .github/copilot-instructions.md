@@ -1,6 +1,6 @@
 # Microreader2 — Project Summary
 
-E-ink ebook reader targeting **ESP32-C3 + SSD1677 e-paper** (800×480 physical, rotated 90° → **480×800 portrait**) with a **desktop SDL2 emulator** for rapid development.
+E-ink ebook reader targeting the Xteink X4 — **ESP32-C3 + SSD1677 e-paper** (800×480 physical, rotated 90° → **480×786 portrait**) — with a **desktop SDL2 emulator** for rapid development. An experimental **X3 build** (`pio run -e esp32c3-x3`, define `MICROREADER_X3`) retargets the same code to the X3's 792×528 panel: `DisplayFrame` switches dimensions, `platforms/esp32/epd_x3.h` replaces the SSD1677 driver (UC8253/UC8279, probed at boot, BUSY active-low, LUTs sent per refresh, rows mirrored), the battery is a BQ27220 I2C gauge (SDA 20/SCL 0), and the SD card sits behind a power switch on GPIO 13. UC grayscale is a tint pass over a displayed B&W frame (see `IDisplay::uc_grayscale()`); the X3 has no AA reader font and no partial-region updates. Desktop and tests default to X4 dimensions; CI builds both firmwares.
 
 ## Architecture
 

@@ -21,11 +21,19 @@
 // But you may need to adjust the exact channel or unit if different
 #define BATTERY_ADC_CHANNEL ADC_CHANNEL_0
 
+#ifdef MICROREADER_X3
+// The X3 has no battery voltage divider; a BQ27220 fuel gauge reports the
+// state of charge over I2C (SDA = GPIO20, SCL = GPIO0, address 0x55).
+#include "driver/i2c_master.h"
+#endif
+
 class Esp32Runtime final : public microreader::IRuntime {
  public:
   explicit Esp32Runtime(uint32_t frame_time_ms, adc_oneshot_unit_handle_t adc_handle)
       : frame_time_ms_(frame_time_ms), frame_start_ms_(0), adc1_handle_(adc_handle) {
-    init_battery_adc();
+#ifndef MICROREADER_X3
+    init_battery_adc();  // X3: GPIO0 is the fuel gauge's I2C clock, not an ADC pin
+#endif
   }
 
   ~Esp32Runtime() override {
@@ -55,6 +63,59 @@ class Esp32Runtime final : public microreader::IRuntime {
   }
 
   std::optional<uint8_t> battery_percentage() const override {
+#ifdef MICROREADER_X3
+    return bq27220_percentage_();
+#else
+    return adc_percentage_();
+#endif
+  }
+
+#ifdef MICROREADER_X3
+  std::optional<uint8_t> bq27220_percentage_() const {
+    // The gauge keeps its own reading; polling more than every few seconds
+    // only adds I2C traffic.
+    const uint32_t now = millis();
+    if (last_pct_.has_value() && now - last_gauge_poll_ms_ < 5000)
+      return last_pct_;
+    if (!gauge_ && !init_gauge_())
+      return last_pct_;
+    uint8_t reg = 0x2C;  // StateOfCharge(), 16-bit little endian, percent
+    uint8_t raw[2] = {};
+    if (i2c_master_transmit_receive(gauge_, &reg, 1, raw, 2, 50) != ESP_OK)
+      return last_pct_;
+    const uint16_t soc = static_cast<uint16_t>(raw[0] | (raw[1] << 8));
+    if (soc > 100)
+      return last_pct_;
+    last_gauge_poll_ms_ = now;
+    last_pct_ = static_cast<uint8_t>(soc);
+    return last_pct_;
+  }
+
+  bool init_gauge_() const {
+    i2c_master_bus_config_t bus{};
+    bus.i2c_port = I2C_NUM_0;
+    bus.sda_io_num = GPIO_NUM_20;
+    bus.scl_io_num = GPIO_NUM_0;
+    bus.clk_source = I2C_CLK_SRC_DEFAULT;
+    bus.glitch_ignore_cnt = 7;
+    bus.flags.enable_internal_pullup = true;
+    if (i2c_new_master_bus(&bus, &gauge_bus_) != ESP_OK) {
+      gauge_bus_ = nullptr;
+      return false;
+    }
+    i2c_device_config_t dev{};
+    dev.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    dev.device_address = 0x55;
+    dev.scl_speed_hz = 400000;
+    if (i2c_master_bus_add_device(gauge_bus_, &dev, &gauge_) != ESP_OK) {
+      gauge_ = nullptr;
+      return false;
+    }
+    return true;
+  }
+#endif
+
+  std::optional<uint8_t> adc_percentage_() const {
     if (!adc1_handle_)
       return std::nullopt;
 
@@ -113,6 +174,12 @@ class Esp32Runtime final : public microreader::IRuntime {
   }
 
  private:
+#ifdef MICROREADER_X3
+  mutable i2c_master_bus_handle_t gauge_bus_ = nullptr;
+  mutable i2c_master_dev_handle_t gauge_ = nullptr;
+  mutable uint32_t last_gauge_poll_ms_ = 0;
+#endif
+
   void init_battery_adc() {
     // Configuration for ESP32-C3 ADC1 Channel 0 (GPIO0)
     adc_oneshot_chan_cfg_t config = {

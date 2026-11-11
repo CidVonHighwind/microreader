@@ -1028,6 +1028,8 @@ void ReaderScreen::render_text_(DrawBuffer& buf, const BitmapFontSet& fset, Gray
 }
 
 void ReaderScreen::apply_grayscale_(DrawBuffer& buf) {
+  if (buf.uc_grayscale())
+    return;  // X3: no anti-aliased text (its planes mean something else); text stays plain B&W
   const BitmapFontSet* fset = ext_font_set_ ? ext_font_set_ : (font_set_.valid() ? &font_set_ : nullptr);
   if (!fset || !fset->has_grayscale())
     return;

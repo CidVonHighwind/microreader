@@ -25,13 +25,23 @@ enum class RefreshMode { Full, Half };
 enum class GrayPlane { BW, LSB, MSB };
 
 // Physical screen constants and bit-packed pixel helpers (used internally by DrawBuffer).
+// Two devices share this firmware; the X3 build defines MICROREADER_X3.
 struct DisplayFrame {
+#ifdef MICROREADER_X3
+  // Xteink X3: 792x528 panel (UC8253/UC8279 controller), every column visible.
+  static constexpr int kPhysicalWidth = 792;  // visible app-space width
+  static constexpr int kPanelOffsetX = 0;     // no hidden columns
+  static constexpr int kPanelWidth = 792;
+  static constexpr int kPhysicalHeight = 528;
+#else
+  // Xteink X4: 800x480 panel (SSD1677), hidden area at the panel edges.
   static constexpr int kPhysicalWidth = 786;  // visible app-space width (panel has hidden area at the top and bottom)
   static constexpr int kPanelOffsetX = 10;    // hidden columns at the left edge of the 800px panel
   static constexpr int kPanelWidth = 800;
   static constexpr int kPhysicalHeight = 480;
-  static constexpr int kStride = kPanelWidth / 8;  // 100 bytes/row (800 divisible by 8)
-  static constexpr std::size_t kPixelBytes = static_cast<std::size_t>(kStride) * kPhysicalHeight;  // 48000
+#endif
+  static constexpr int kStride = kPanelWidth / 8;  // bytes per row (panel width divisible by 8)
+  static constexpr std::size_t kPixelBytes = static_cast<std::size_t>(kStride) * kPhysicalHeight;
 };
 
 // Display driver interface implemented by each platform.
@@ -102,6 +112,15 @@ class IDisplay {
   // Returns true if the display hardware is currently busy refreshing.
   // Default: always ready. Platforms may override for non-blocking region updates.
   virtual bool is_busy() const {
+    return false;
+  }
+
+  // True for UC-style controllers (the X3), whose 4-level grayscale is a tint
+  // pass over an already-displayed black & white frame rather than the
+  // SSD1677's two bit-planes. It changes what the staging calls carry:
+  // write_ram_bw() gets the "dark gray" mask, write_ram_red() the "any gray"
+  // mask, and the caller shows the B&W frame first.
+  virtual bool uc_grayscale() const {
     return false;
   }
 };
@@ -403,6 +422,10 @@ class DrawBuffer {
   // -------------------------------------
 
   // Write the inactive buffer to BW RAM only (no refresh).
+  bool uc_grayscale() const {
+    return display_.uc_grayscale();
+  }
+
   void write_ram_bw() {
     display_.write_ram_bw(inactive_());
   }
@@ -563,7 +586,9 @@ class DrawBuffer {
 
   // kLoadPhysX must satisfy: (kLoadPhysX + kPanelOffsetX) % 8 == 0 for byte-aligned hardware writes.
   // With kPanelOffsetX=10: 750+10=760 ✓  (box ends at 782, 4px from logical bottom edge 786).
-  static constexpr int kLoadPhysX = 750;
+  // Largest such value that keeps the box on the panel (750 on the X4, 760 on the X3).
+  static constexpr int kLoadPhysX =
+      (DisplayFrame::kPhysicalWidth - kLoadLogH + DisplayFrame::kPanelOffsetX) / 8 * 8 - DisplayFrame::kPanelOffsetX;
   static constexpr int kLoadPhysY = DisplayFrame::kPhysicalHeight - kLoadLogX - kLoadLogW;  // 112
   static constexpr int kLoadPhysW = kLoadLogH;                                              // 32
   static constexpr int kLoadPhysH = kLoadLogW;                                              // 256
@@ -806,24 +831,40 @@ class DrawBuffer {
   };
 
   void show_mgr2_sleep_(Mgr2Source_& src, bool deep_sleep_after) {
-    auto decode_pass = [&](bool red_bit) {
+    // Decode one bit per pixel into the inactive buffer; the bit is set where
+    // pred(state) holds (MGR2 states: 0=white, 1=light gray, 2=dark, 3=black).
+    auto decode = [&](auto pred) {
       fill(false);
       for (uint16_t y = 0; y < src.h && y < DisplayFrame::kPhysicalHeight; ++y) {
         const uint8_t* src_row = src.get_row(y);
         uint8_t* dst = inactive_() + static_cast<size_t>(y) * DisplayFrame::kStride;
         for (int x = 0; x < static_cast<int>(src.w); x++) {
           int state = (src_row[x / 4] >> (6 - (x % 4) * 2)) & 0x3;
-          if (red_bit ? (state >> 1) : (state & 1))
+          if (pred(state))
             dst[x / 8] |= static_cast<uint8_t>(0x80 >> (x % 8));
         }
       }
     };
 
-    decode_pass(false);
-    display_.write_ram_bw(inactive_());
-    decode_pass(true);
-    display_.write_ram_red(inactive_());
-    display_.grayscale_refresh_1pass(/*turnOffScreen=*/true);
+    if (display_.uc_grayscale()) {
+      // UC-style (X3): show the black & white frame first, then one tint pass
+      // pulls chosen pixels up from black to dark or light gray.
+      decode([](int s) { return s == 0; });  // white only; grays start out black
+      display_.full_refresh(inactive_(), RefreshMode::Half, false);
+      decode([](int s) { return s == 2; });  // dark gray mask
+      display_.write_ram_bw(inactive_());
+      decode([](int s) { return s == 1 || s == 2; });  // any-gray mask
+      display_.write_ram_red(inactive_());
+      display_.grayscale_refresh_1pass(/*turnOffScreen=*/true);
+    } else {
+      // SSD1677 (X4): the two MGR2 bit-planes go to BW/RED RAM and the
+      // factory-quality waveform renders all four levels in one pass.
+      decode([](int s) { return (s & 1) != 0; });
+      display_.write_ram_bw(inactive_());
+      decode([](int s) { return (s >> 1) != 0; });
+      display_.write_ram_red(inactive_());
+      display_.grayscale_refresh_1pass(/*turnOffScreen=*/true);
+    }
     if (deep_sleep_after)
       display_.deep_sleep();
   }

@@ -50,6 +50,12 @@ set(lib_sources
 # to avoid IDF applying C++-only flags (-fuse-cxa-atexit) to .c files.
 set(MINIZ_DIR ${CMAKE_CURRENT_LIST_DIR}/../../third_party/miniz)
 
+# Belt and braces: make sure every translation unit of an X3 build sees the
+# define, whether it arrived via PlatformIO build_flags or cmake_extra_args.
+if(MICROREADER_X3_BUILD)
+    idf_build_set_property(COMPILE_DEFINITIONS "-DMICROREADER_X3" APPEND)
+endif()
+
 idf_component_register(
     SRCS ${app_sources} ${lib_sources} ${CMAKE_CURRENT_LIST_DIR}/miniz_wrapper.cpp
          ${CMAKE_CURRENT_LIST_DIR}/assets_embedded.S

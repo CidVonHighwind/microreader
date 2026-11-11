@@ -2,7 +2,10 @@
 
 Sami is a fork of [Microreader](https://github.com/CidVonHighwind/microreader) that adds reading statistics, a daily reading goal, a Finished shelf, a chapter progress bar, more sleep screen options and Wi-Fi file transfer. Everything below about Microreader applies to Sami too.
 
-**Installing Sami:** download `sami-firmware.bin` from this repository's [Releases](../../releases/latest) page and flash it with the CrossPoint web flasher's **Custom .bin** option (see [Installation](#installation)). Every change to the code builds a new release automatically.
+**Installing Sami:** download the firmware from this repository's [Releases](../../releases/latest) page and flash it with the CrossPoint web flasher's **Custom .bin** option (see [Installation](#installation)). Every change to the code builds a new release automatically.
+
+- `sami-firmware.bin` — Xteink **X4**
+- `sami-firmware-x3.bin` — Xteink **X3** (**experimental**: built for the X3's 792×528 screen, two possible display controllers, battery gauge and SD power switch, but not yet verified on a real X3)
 
 ---
 

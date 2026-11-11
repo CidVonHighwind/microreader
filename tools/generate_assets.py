@@ -13,7 +13,8 @@ esp32_dir = os.path.join(project_dir, "platforms", "esp32")
 bin_path = os.path.join(esp32_dir, "assets.bin")
 asm_path = os.path.join(esp32_dir, "assets_embedded.S")
 
-build_assets.build(project_dir, bin_path)
+is_x3 = "x3" in env["PIOENV"]
+build_assets.build(project_dir, bin_path, build_assets.X3_ASSETS if is_x3 else build_assets.DEFAULT_ASSETS)
 print(f"[generate_assets] assets.bin written ({os.path.getsize(bin_path):,} bytes)")
 
 # Embed an MD5 of assets.bin as a comment so CMake detects content changes

@@ -55,21 +55,34 @@ jobs:
           python tools/patch_ffconf.py
           grep -q "patched by tools/patch_ffconf.py" ~/.platformio/packages/framework-espidf/components/fatfs/src/ffconf.h
 
-      - name: Build
+      - name: Build (X4)
         run: pio run -e esp32c3
 
-      - name: Collect the firmware file
+      - name: Collect the X4 firmware file
         run: |
           cp .pio/build/esp32c3/firmware.bin sami-firmware.bin
           ls -l sami-firmware.bin
           # Sanity check: an ESP32 app image starts with the 0xE9 magic byte.
           test "$(head -c1 sami-firmware.bin | od -An -tx1 | tr -d ' ')" = "e9"
 
-      - name: Keep the file with this run
+      - name: Build (X3, experimental)
+        run: pio run -e esp32c3-x3
+
+      - name: Collect the X3 firmware file
+        run: |
+          cp .pio/build/esp32c3-x3/firmware.bin sami-firmware-x3.bin
+          ls -l sami-firmware-x3.bin
+          test "$(head -c1 sami-firmware-x3.bin | od -An -tx1 | tr -d ' ')" = "e9"
+          # The two devices must not get each other's firmware.
+          cmp -s sami-firmware.bin sami-firmware-x3.bin && exit 1 || true
+
+      - name: Keep the files with this run
         uses: actions/upload-artifact@v4
         with:
           name: sami-firmware
-          path: sami-firmware.bin
+          path: |
+            sami-firmware.bin
+            sami-firmware-x3.bin
 
       - name: Publish a release
         env:
@@ -77,14 +90,17 @@ jobs:
         run: |
           tag="build-${{ github.run_number }}"
           notes=$(cat <<'EOF'
-          Firmware for the Xteink X4, built automatically from this repository.
+          Firmware for the Xteink X4 and X3, built automatically from this repository.
 
-          **To install:** download `sami-firmware.bin` below, then flash it with the
+          **To install:** download the file for your device below, then flash it with the
           CrossPoint web flasher (https://crosspointreader.com/#flash-tools) in Chrome or
-          Edge, using its option to flash your own firmware file. Choose the X4 model.
+          Edge, using its option to flash your own firmware file. Choose your device's model.
+
+          - `sami-firmware.bin` — Xteink **X4**
+          - `sami-firmware-x3.bin` — Xteink **X3** (experimental: not yet tested on hardware)
           EOF
           )
-          gh release create "$tag" sami-firmware.bin \
+          gh release create "$tag" sami-firmware.bin sami-firmware-x3.bin \
             --target "${{ github.sha }}" \
             --title "Sami build ${{ github.run_number }} (${{ github.ref_name }})" \
             --notes "$notes"

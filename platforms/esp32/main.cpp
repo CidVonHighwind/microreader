@@ -3,7 +3,11 @@
 #include "asset_blob.h"
 #include "driver/gpio.h"
 #include "driver/usb_serial_jtag.h"
+#ifdef MICROREADER_X3
+#include "epd_x3.h"
+#else
 #include "epd.h"
+#endif
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
@@ -44,10 +48,17 @@ static constexpr uint32_t kPowerWakeupMs = 250;
 
 static void verify_wakeup_press() {
 #ifndef QEMU_BUILD
+#ifdef MICROREADER_X3
+  // The X3 uses GPIO20 for the battery gauge's I2C bus, so USB can't be
+  // sensed there; the native USB serial/JTAG knows whether a host is attached.
+  if (usb_serial_jtag_is_connected())
+    return;
+#else
   // If USB is connected (GPIO20/U0RXD reads HIGH), boot immediately.
   gpio_set_direction(GPIO_NUM_20, GPIO_MODE_INPUT);
   if (gpio_get_level(GPIO_NUM_20) == 1)
     return;
+#endif
 
   // Only require a hold check on a clean power-on (battery, no USB).
   // Crashes, panics, watchdog resets, SW resets — all boot immediately.
@@ -337,6 +348,12 @@ extern "C" void app_main(void) {
   MR_LOGI("app", "Shutting down, entering deep sleep...");
 
 #ifndef QEMU_BUILD
+#ifdef MICROREADER_X3
+  // Keep the SD power switch (GPIO 13) in its current state through deep
+  // sleep; letting it float can cut power on the X3.
+  gpio_hold_en(GPIO_NUM_13);
+  gpio_deep_sleep_hold_en();
+#endif
   // Enter deep sleep; wake on power button press (active LOW, GPIO 3).
   esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown(1ULL << kPowerPin, ESP_GPIO_WAKEUP_GPIO_LOW);
   esp_deep_sleep_start();

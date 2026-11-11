@@ -30,6 +30,16 @@ DEFAULT_ASSETS = [
     ("sleep_2.mgr", "resources/sleep/sleep_2.mgr"),
 ]
 
+# The X3 build embeds 792x528 versions of the sleep images
+# (made by tools/make_x3_sleep_images.py).
+X3_ASSETS = [
+    ("bookerly.bin", "resources/fonts/bookerly.bin"),
+    ("alegreya.bin", "resources/fonts/alegreya.bin"),
+    ("sleep_0.mgr", "resources/sleep/x3/sleep_0.mgr"),
+    ("sleep_1.mgr", "resources/sleep/x3/sleep_1.mgr"),
+    ("sleep_2.mgr", "resources/sleep/x3/sleep_2.mgr"),
+]
+
 NAME_LEN = 32
 ENTRY_SIZE = NAME_LEN + 12  # name + offset + length + crc32 == 44
 HEADER_FIXED = 16  # magic + version + count + total_size

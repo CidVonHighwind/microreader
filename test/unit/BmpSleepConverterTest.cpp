@@ -7,6 +7,12 @@
 #include <vector>
 
 #include "microreader/content/BmpSleepConverter.h"
+#include "microreader/display/DrawBuffer.h"
+// The converter targets the device panel: 800x480 on the X4, 792x528 on the X3.
+static constexpr int kOutW = microreader::DisplayFrame::kPanelWidth;
+static constexpr int kOutH = microreader::DisplayFrame::kPhysicalHeight;
+static constexpr int kOutStride = (kOutW + 3) / 4;
+
 
 // ---------------------------------------------------------------------------
 // BMP writing helpers
@@ -264,9 +270,9 @@ TEST_F(BmpConverterTest, Output800x480ForLandscapeSource) {
     ASSERT_TRUE(microreader::convert_bmp_to_mgr2(src.c_str(), dst.c_str()));
     auto m = read_mgr2(dst);
     ASSERT_TRUE(m.valid);
-    EXPECT_EQ(m.w, 800);
-    EXPECT_EQ(m.h, 480);
-    EXPECT_EQ((int)m.pixels.size(), 200 * 480);
+    EXPECT_EQ(m.w, kOutW);
+    EXPECT_EQ(m.h, kOutH);
+    EXPECT_EQ((int)m.pixels.size(), kOutStride * kOutH);
 }
 
 TEST_F(BmpConverterTest, Output800x480ForPortraitSource) {
@@ -275,8 +281,8 @@ TEST_F(BmpConverterTest, Output800x480ForPortraitSource) {
     ASSERT_TRUE(microreader::convert_bmp_to_mgr2(src.c_str(), dst.c_str()));
     auto m = read_mgr2(dst);
     ASSERT_TRUE(m.valid);
-    EXPECT_EQ(m.w, 800);
-    EXPECT_EQ(m.h, 480);
+    EXPECT_EQ(m.w, kOutW);
+    EXPECT_EQ(m.h, kOutH);
 }
 
 // ── Format coverage ────────────────────────────────────────────────────────
@@ -390,8 +396,8 @@ TEST_F(BmpConverterTest, Format1bppPortraitMonochrome) {
     ASSERT_TRUE(microreader::convert_bmp_to_mgr2(src.c_str(), dst.c_str()));
     auto m = read_mgr2(dst);
     ASSERT_TRUE(m.valid);
-    EXPECT_EQ(m.w, 800);
-    EXPECT_EQ(m.h, 480);
+    EXPECT_EQ(m.w, kOutW);
+    EXPECT_EQ(m.h, kOutH);
     EXPECT_EQ(mgr2_pixel(m, 400, 240), 0);  // white → state 0
 }
 
@@ -410,8 +416,8 @@ TEST_F(BmpConverterTest, TopDownBmp) {
     ASSERT_TRUE(microreader::convert_bmp_to_mgr2(src.c_str(), dst.c_str()));
     auto m = read_mgr2(dst);
     ASSERT_TRUE(m.valid);
-    EXPECT_EQ(m.w, 800);
-    EXPECT_EQ(m.h, 480);
+    EXPECT_EQ(m.w, kOutW);
+    EXPECT_EQ(m.h, kOutH);
 }
 
 // ── Error cases ─────────────────────────────────────────────────────────────
@@ -480,6 +486,6 @@ TEST_F(BmpConverterTest, PortraitRotationDirectionIsCorrect) {
     ASSERT_TRUE(m.valid);
     // Left edge of output (out_x=0) → white (state 0)
     // Right edge of output (out_x=799) → black (state 3)
-    EXPECT_EQ(mgr2_pixel(m, 0, 240), 0);    // white
-    EXPECT_EQ(mgr2_pixel(m, 799, 240), 3);  // black
+    EXPECT_EQ(mgr2_pixel(m, 0, kOutH / 2), 0);           // white
+    EXPECT_EQ(mgr2_pixel(m, kOutW - 1, kOutH / 2), 3);    // black
 }
