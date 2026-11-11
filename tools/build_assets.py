@@ -31,14 +31,57 @@ DEFAULT_ASSETS = [
 ]
 
 # The X3 build embeds 792x528 versions of the sleep images
-# (made by tools/make_x3_sleep_images.py).
+# (made by tools/make_x3_sleep_images.py) and its reader fonts READY TO USE:
+# uncompressed font bundles the firmware reads straight from flash. The X3's
+# own partition table usually has only a 1 MB "spiffs" partition — too small
+# for the 2.4-2.9 MB bundles the X4 unpacks there — so the X3 never unpacks
+# them. To keep the firmware small, the bundles leave out the anti-aliasing
+# (grayscale) planes, which the X3 doesn't use (see strip_gray_planes).
 X3_ASSETS = [
-    ("bookerly.bin", "resources/fonts/bookerly.bin"),
-    ("alegreya.bin", "resources/fonts/alegreya.bin"),
+    ("bookerly.fnt", "resources/fonts/bookerly.mfb", "strip_gray"),
+    ("alegreya.fnt", "resources/fonts/alegreya.mfb", "strip_gray"),
     ("sleep_0.mgr", "resources/sleep/x3/sleep_0.mgr"),
     ("sleep_1.mgr", "resources/sleep/x3/sleep_1.mgr"),
     ("sleep_2.mgr", "resources/sleep/x3/sleep_2.mgr"),
 ]
+
+
+def strip_gray_planes(bundle: bytes) -> bytes:
+    """Remove the grayscale (anti-aliasing) planes from an FNTS v2 bundle.
+
+    Each inner MBF4 font stores its two grayscale planes at the very end
+    (gray_lsb_offset .. gray_msb_offset .. end); everything the black & white
+    renderer needs comes before them. Truncate each font there and clear the
+    two offsets so the firmware treats the font as having no grayscale.
+    """
+    if bundle[:4] != b"FNTS" or bundle[5] != 2:
+        raise SystemExit("strip_gray_planes: not an FNTS v2 bundle")
+    num = bundle[4]
+    sizes = [struct.unpack_from("<I", bundle, 40 + 4 * i)[0] for i in range(num)]
+    off = 40 + 4 * num
+    fonts = []
+    for size in sizes:
+        font = bytearray(bundle[off:off + size])
+        off += size
+        if font[:4] != b"MBF4":
+            raise SystemExit("strip_gray_planes: inner font is not MBF4")
+        (bitmaps, bold, italic, bold_italic, kerning, gray_lsb, gray_msb) = struct.unpack_from("<7I", font, 20)
+        if gray_lsb:
+            others = [x for x in (bitmaps, bold, italic, bold_italic, kerning) if x]
+            if not (max(others) < gray_lsb < gray_msb <= len(font)):
+                raise SystemExit("strip_gray_planes: unexpected font layout")
+            font = font[:gray_lsb]
+            struct.pack_into("<II", font, 40, 0, 0)  # gray_lsb_offset, gray_msb_offset
+        fonts.append(bytes(font))
+    out = bytearray(bundle[:40])
+    for f in fonts:
+        out += struct.pack("<I", len(f))
+    for f in fonts:
+        out += f
+    return bytes(out)
+
+
+TRANSFORMS = {"strip_gray": strip_gray_planes}
 
 NAME_LEN = 32
 ENTRY_SIZE = NAME_LEN + 12  # name + offset + length + crc32 == 44
@@ -47,10 +90,12 @@ HEADER_FIXED = 16  # magic + version + count + total_size
 
 def build(project_dir: str, out_path: str, assets=DEFAULT_ASSETS) -> int:
     files = []
-    for name, rel in assets:
+    for name, rel, *transform in assets:
         path = os.path.join(project_dir, rel.replace("/", os.sep))
         with open(path, "rb") as f:
             data = f.read()
+        if transform:
+            data = TRANSFORMS[transform[0]](data)
         if len(name.encode("utf-8")) > NAME_LEN - 1:
             raise SystemExit(f"asset name too long: {name!r}")
         files.append((name, data))

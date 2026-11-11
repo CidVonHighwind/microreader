@@ -251,7 +251,11 @@ void SettingsScreen::on_start() {
     add_item("Rebuild Book Index");
   }
 
-#ifdef ESP_PLATFORM
+// Developer tools for the X4's font space and firmware slots. Not on the X3:
+// its built-in fonts don't use the font space (which may hold the original
+// firmware's data there), and booting the other firmware slot from here
+// isn't safe on its layout — the web flasher is the way to switch.
+#if defined(ESP_PLATFORM) && !defined(MICROREADER_X3)
   if (app_ && app_->has_invalidate_font_fn()) {
     idx_invalidate_font_ = count();
     add_item("Invalidate Font");
