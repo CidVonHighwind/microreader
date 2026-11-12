@@ -1,3 +1,14 @@
+# Sami
+
+Sami is a fork of [Microreader](https://github.com/CidVonHighwind/microreader) that adds a cover home page, reading statistics, a daily reading goal, a Finished shelf, a chapter progress bar, more sleep screen options, Wi-Fi file transfer and two more built-in fonts (Literata and Atkinson Hyperlegible). Everything below about Microreader applies to Sami too.
+
+**Installing Sami:** download the firmware from this repository's [Releases](../../releases/latest) page and flash it with the CrossPoint web flasher's **Custom .bin** option (see [Installation](#installation)). Every change to the code builds a new release automatically.
+
+- `sami-firmware.bin` — Xteink **X4**
+- `sami-firmware-x3.bin` — Xteink **X3** (**experimental**: built for the X3's 792×528 screen, two possible display controllers, battery gauge and SD power switch, but not yet verified on a real X3)
+
+---
+
 # Microreader
 
 An EPUB reader for the [Xteink X4](https://xteink.com), written from scratch.
@@ -55,6 +66,17 @@ Also includes a **Font Generator** for building `.mfb` fonts in the browser with
 
 ![Font Generator](images/Font%20Generator.png)
 
+### Wi-Fi Transfer (Sami)
+
+Manage the SD card from any phone or computer browser, no cable or app needed. Open **Settings** (◀ on the book list) and select **Wi-Fi Transfer**, the first item, then either:
+
+- **Join a Wi-Fi network** — pick your network (type its password once with the on-screen keyboard; Sami remembers it), then open **http://sami.local** — or the address shown on the reader, like `http://192.168.1.42` — on a phone or computer on the same Wi-Fi.
+- **Create a hotspot** — the reader makes its own network called **Sami Reader** and shows its password. Join it from your phone, then open **http://sami.local** or **http://192.168.4.1** (many phones open the page by themselves).
+
+The **Sami Reader** page lists the card's folders and files: upload (button or drag and drop, several at once), download, rename, delete and create folders. Hidden files (starting with `.`) appear with **Show hidden**. Books you upload, rename or delete update the book list when you leave the Wi-Fi screen. Press ◀ to stop Wi-Fi; it also turns itself off after 10 minutes without activity, and while it's on the reader won't fall asleep.
+
+Notes: the reader's Wi-Fi is 2.4 GHz only. The page uses plain HTTP and has no password, so anyone on the same network can open it while Wi-Fi Transfer is on — use it at home or on the hotspot. Remembered networks are kept in `.microreader/wifi.txt` (delete a line to forget one).
+
 ### Calibre Plugin
 
 Install the plugin to send books directly from [Calibre](https://calibre-ebook.com):
@@ -68,13 +90,60 @@ The device is detected automatically. Books on the device show checkmarks in the
 
 ## Sleep Screen
 
-The device shows an image when it enters deep sleep. Several images are built into the firmware; add your own by placing BMP files in the `.sleep/` folder on the SD card, or upload them via the browser manager.
+The device shows a sleep screen when it enters deep sleep. Choose it in **Settings → Sleep Screen** (press ▶ to step through the options):
 
-**Supported formats:** 1 bpp monochrome, 4/8 bpp indexed, 16 bpp RGB565/BGR555, 24 bpp BGR, 32 bpp BGRA. Use 800×480 (landscape) or 480×800 for best quality — other sizes are scaled to fit.
+| Option | What it shows |
+|--------|---------------|
+| **Random image** (default) | A random image from your sleep folder each time, never the same one twice in a row |
+| **Book cover** | The cover of the book you're reading, with its title and how far through you are. Books without a cover image fall back to a random image. |
+| **Reading stats** | The Reading Stats calendar with today selected |
 
-The first time an image is shown it is converted and cached; subsequent sleeps load the cache directly. Clear the cache via **Settings → Clear Cache**.
+Several images are built into the firmware; add your own by putting them in the `sleep/` or `.sleep/` folder on the SD card, or upload them with the browser manager (which uses `sleep/`). When you have your own images, the built-in ones are skipped.
 
-Configure in **Settings → Sleep Image**: **Auto** cycles through all images in `.sleep/`; selecting a specific filename pins the device to that image.
+**Supported formats:** JPEG (`.jpg`, `.jpeg`), PNG, and BMP (1 bpp monochrome, 4/8 bpp indexed, 16 bpp RGB565/BGR555, 24 bpp BGR, 32 bpp BGRA). Images are scaled to fit; landscape images are turned sideways to fill the screen. Use 480×800 (or 800×480) for best quality. Very large photos can take a while to convert or fail for lack of memory — resize them first if they don't show.
+
+The first time an image or cover is shown it is converted and cached; later sleeps load the cache directly. Clear the cache via **Settings → Clear Cache**.
+
+## Reading Stats
+
+Open **Settings → Reading Stats** for a month calendar of your reading. Each day shows the time spent reading and a bar that fills at one hour; the selected day lists the books you read, and the panel below shows the month's total time, days read, pages, daily average and current/longest streaks.
+
+| Button | Action |
+|--------|--------|
+| ▲ / ▼ (front, follows *Menu Nav*) | Previous / next day |
+| Side up / down | Previous / next month |
+| ▶ | Set date & time |
+| ◀ | Back |
+
+**How it's counted:** the time a page stays on screen is credited when you turn it, capped at 3 minutes so leaving the device on doesn't count. A forward page turn after at least 2 seconds counts as a page read, so skimming or holding the button doesn't inflate the numbers. Time spent in menus over the book is not counted.
+
+**The clock:** stats are dated with the device clock, which keeps running through sleep. Set it in **Settings → Date & Time** (or press ▶ in the calendar); connecting the browser manager, or running `python tools/serial_cmd.py --sync-time`, sets it from your computer automatically. If the battery is ever fully drained the clock resumes from the last time it was saved — check the date shown on the *Today* line and correct it if needed.
+
+**Daily goal:** turn on **Settings → Daily Goal** and pick a target under it (10 minutes to 2 hours a day). Each day's bar then fills at your goal instead of at one hour, days that reach it get a small flag in the corner, the day summary says whether you met it, "Days read" becomes "Goals met", and streaks only count days that reached the goal.
+
+**Storage:** one small text file per month in `.microreader/stats/` on the SD card (`YYYY-MM.txt`, one `day seconds pages title` line per reading session). **Clear Cache** does not touch it; delete the folder to reset your stats.
+
+## Home page
+
+Sami starts on a cover home page: **Sami** at the top, a **Finished Books (N)** link, the covers of the three books you opened most recently (finished books are left out) with how far through each you are, and a **Library** link to the full book list. **▲/▼** move through them (the first cover is selected to begin with, and the selected book's title is written out under the covers), **▶** opens the selection and **◀** opens Settings; in the Library, **◀** comes back here. Books without a cover show their title on a plain card. Each cover is decoded once and kept as a small picture in the book's cache folder, so the page draws quickly afterwards.
+
+**Settings → Home Screen** switches between *Covers* and *Book List* (the plain list as the start page, as before).
+
+## Fonts and font size
+
+**Settings → Font** offers four built-in fonts — *Bookerly*, *Alegreya*, *Literata* (serif, cut at its small-text optical size) and *Atkinson Hyperlegible* (sans, designed for legibility) — plus any `.mfb` fonts in the memory card's `fonts` folder. Literata and Atkinson Hyperlegible are under the SIL Open Font License (see `THIRD_PARTY.md`). **Settings → Font Size** sets the text size of books (20–32 px); it's the same setting as *Font Size* in the book menu.
+
+## Finished Books
+
+While reading, press ▶ to open the book menu and select **Finished: No** to mark the book as finished. It moves off the main book list onto its own shelf: **Finished Books (N)**, the first row of the book list, which lists finished books with the date you finished them, newest first. Select a book there to open it again; select **Finished: Yes** in its menu to put it back on the main list. The shelf is stored in `.microreader/finished.txt` and recognises a book by its title and author, so renaming or moving the file keeps it on the shelf.
+
+## Book List
+
+The book list (titled **Library** when opened from the home page, **Sami** when it's the start page) starts with **Finished Books (N)**, then your books. **Settings → Book List** chooses how books are shown: *Title*, *Title & Percent Read* (e.g. "The Hobbit · 42%" — the percentage appears once you've opened a book with Sami), *Filename* or *Title & Author*.
+
+## Chapter Progress Bar
+
+In the book menu (▶ while reading), **Chapter Bar: On** adds an outlined bar along the very bottom of the page that fills as you read through the current chapter. It works alongside the regular **Progress** indicator, which moves up above it — for example *Progress: Percent* with *Scope: Book* shows both the whole-book percentage and the chapter bar.
 
 ## Building
 
@@ -166,6 +235,7 @@ python tools/serial_cmd.py --port COM5 --upload-dir "path/to/dir"    # upload al
 python tools/serial_cmd.py --port COM5 --upload-sleep "image.bmp"    # upload a sleep image
 python tools/serial_cmd.py --port COM5 --upload-sd-font "font.mfb"   # upload a font to SD card
 python tools/serial_cmd.py --port COM5 --list                        # list books on device
+python tools/serial_cmd.py --port COM5 --sync-time                   # set the device clock from this PC
 ```
 
 **Interactive** — a REPL for manual control:

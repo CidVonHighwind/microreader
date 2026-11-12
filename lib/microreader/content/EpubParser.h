@@ -131,6 +131,12 @@ class Epub {
     return toc_;
   }
 
+  // ZIP entry index of the cover image (EPUB 2 <meta name="cover"> or EPUB 3
+  // properties="cover-image"), or -1 if the book doesn't declare one.
+  int cover_entry_index() const {
+    return cover_idx_;
+  }
+
   // Access the zip reader (for image extraction etc)
   const ZipReader& zip() const {
     return zip_;

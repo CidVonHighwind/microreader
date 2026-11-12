@@ -24,6 +24,7 @@
 
 #include <dirent.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 
 #include <cerrno>
 #include <cstdint>
@@ -472,6 +473,8 @@ static void handle_font_upload() {
 //   'B' + 1B mask             → inject button press(es)
 //   'C'                       → clear .mrb cache in /sdcard/.microreader/cache/
 //   'D' + 2B path_len + path  → image-decode benchmark
+//   'E' + 8B LE int64 seconds → set wall clock (LOCAL time since 1970; used by
+//                                Reading Stats). Response "OK\n".
 //   'F'                       → invalidate font partition
 //   'G'                       → flash erase+write benchmark
 //   'I' + 2B path_len + path  → image-size benchmark
@@ -554,6 +557,31 @@ static void handle_serial_cmd() {
       }
       g_serial_buttons |= mask;
       ESP_LOGI(kCmdTag, "button inject: 0x%02x", mask);
+      serial_write("OK\n");
+      break;
+    }
+    case 'E': {
+      // Set the wall clock. The device keeps local wall time with no time
+      // zone, so the host sends its local time as seconds since 1970.
+      uint8_t tb[8];
+      if (!serial_read_exact(tb, 8, 1000)) {
+        serial_write("ERR:time_read\n");
+        return;
+      }
+      int64_t secs = 0;
+      for (int i = 7; i >= 0; --i)
+        secs = (secs << 8) | tb[i];
+      if (secs < 1704067200LL) {  // before 2024-01-01: reject obviously bad input
+        serial_write("ERR:time_range\n");
+        return;
+      }
+      struct timeval tv = {};
+      tv.tv_sec = static_cast<time_t>(secs);
+      if (settimeofday(&tv, nullptr) != 0) {
+        serial_write("ERR:settime\n");
+        return;
+      }
+      ESP_LOGI(kCmdTag, "clock set: %lu", (unsigned long)secs);
       serial_write("OK\n");
       break;
     }

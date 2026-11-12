@@ -1,5 +1,7 @@
 ﻿#include <gtest/gtest.h>
 
+#include <cstring>
+
 #include "microreader/content/Font.h"
 #include "microreader/content/hyphenation/Hyphenation.h"
 

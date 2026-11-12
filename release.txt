@@ -1,0 +1,4 @@
+Build 10 - homepage options and fonts
+- New cover home page: Sami at the top, then Finished Books, the covers of the 3 books you read most recently with how far through each you are, and Library. Settings → Home Screen switches between Covers and Book List.
+- Two new built-in fonts made for small text: Literata (serif) and Atkinson Hyperlegible (sans). Settings → Font.
+- Font Size in Settings (the same setting as Font Size in the book menu).

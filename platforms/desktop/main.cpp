@@ -53,6 +53,10 @@ class DesktopFontManager : public microreader::FontManager {
         path = "bookerly.mfb";
       else if (path == "Alegreya")
         path = "alegreya.mfb";
+      else if (path == "Literata")
+        path = (std::filesystem::path(MICROREADER_SD_DIR) / ".." / "resources" / "fonts" / "literata.mfb").string();
+      else if (path == "Atkinson Hyperlegible")
+        path = (std::filesystem::path(MICROREADER_SD_DIR) / ".." / "resources" / "fonts" / "atkinson.mfb").string();
 
       // Allow relative paths inside sd/fonts/ for testing,
       // or absolute paths if provided.

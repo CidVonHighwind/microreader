@@ -9,14 +9,26 @@
 #include "ScreenManager.h"
 #include "display/DrawBuffer.h"
 #include "screens/ChapterSelectScreen.h"
+#include "library/BookProgress.h"
+#include "library/FinishedBooks.h"
+#include "net/SavedWifi.h"
+#include "net/WifiTransfer.h"
+#include "screens/DateTimeScreen.h"
+#include "screens/FileTransferScreen.h"
+#include "screens/FinishedBooksScreen.h"
+#include "screens/HomeScreen.h"
 #include "screens/IScreen.h"
 #include "screens/LinksScreen.h"
 #include "screens/MainMenu.h"
 #include "screens/ReaderOptionsScreen.h"
 #include "screens/ReaderScreen.h"
 #include "screens/SettingsScreen.h"
+#include "screens/StatsCalendarScreen.h"
+#include "screens/TextInputScreen.h"
+#include "screens/WifiMenuScreen.h"
 #include "screens/demo/BouncingBallDemo.h"
 #include "screens/demo/GrayscaleDemo.h"
+#include "stats/ReadingStats.h"
 
 namespace microreader {
 
@@ -31,6 +43,13 @@ enum class ScreenId : uint8_t {
   Links,
   BouncingBall,
   GrayscaleDemo,
+  Stats,
+  DateTime,
+  Finished,
+  Wifi,
+  TextInput,
+  FileTransfer,
+  Home,
 };
 
 class Application {
@@ -45,6 +64,10 @@ class Application {
     data_dir_ = dir;
     reader_.set_data_dir(dir ? dir : "");
     settings_.set_data_dir(dir);
+    stats_.set_data_dir(dir);
+    finished_books_.set_file(dir ? std::string(dir) + "/finished.txt" : std::string());
+    book_progress_.set_file(dir ? std::string(dir) + "/progress.txt" : std::string());
+    saved_wifi_.set_file(dir ? std::string(dir) + "/wifi.txt" : std::string());
   }
 
   // Path to data directory for settings/state persistence
@@ -63,6 +86,8 @@ class Application {
   void load_settings_();
   // Common sleep sequence (save state, show sleep image, set running_=false)
   void do_sleep_(DrawBuffer& buf);
+  bool show_sleep_entry_(const std::string& path, DrawBuffer& buf);
+  void finish_bw_sleep_(DrawBuffer& buf);
 
   // Font management. set_reader_font() also propagates to the reader screen.
   void set_reader_font(const BitmapFontSet* fonts) {
@@ -117,6 +142,87 @@ class Application {
   MainMenu* main_menu() {
     return &menu_;
   }
+  HomeScreen* home_screen() {
+    return &home_;
+  }
+  // True when `screen` is the bottom of the screen stack (the start page).
+  bool is_root_screen(const IScreen* screen) const {
+    return screen_mgr_.bottom() == screen;
+  }
+
+  // Start page (Settings → Home Screen): the cover home page, or the plain
+  // book list as before.
+  bool home_covers() const {
+    return home_covers_;
+  }
+  void set_home_covers(bool v) {
+    home_covers_ = v;
+    // Settings sits on top of the start page: swap the page underneath.
+    screen_mgr_.replace_bottom(v ? static_cast<IScreen*>(&home_) : static_cast<IScreen*>(&menu_));
+    save_settings_();
+  }
+  // Reading statistics recorder (fed by ReaderScreen, shown by StatsCalendarScreen).
+  ReadingStats& stats() {
+    return stats_;
+  }
+  StatsCalendarScreen* stats_screen() {
+    return &stats_screen_;
+  }
+  // Books marked as finished (hidden from the book list, shown on their shelf).
+  FinishedBooks& finished_books() {
+    return finished_books_;
+  }
+  // Percent read per book, for the "Title & Percent Read" book list.
+  BookProgress& book_progress() {
+    return book_progress_;
+  }
+  // Current local time, or 0 when there is no valid clock.
+  int64_t local_time_now() const {
+    IRuntime* rt = stats_.clock();
+    const int64_t t = rt ? rt->local_time() : 0;
+    return clock_is_valid(t) ? t : 0;
+  }
+
+  // The book most recently read and how far through it is, for the
+  // "Book cover" sleep screen. Updated by ReaderScreen as pages turn.
+  void note_reading_progress(const std::string& path, const std::string& title, int pct) {
+    last_book_path_ = path;
+    last_book_title_ = title;
+    last_book_pct_ = pct;
+  }
+  const std::string& last_book_path() const {
+    return last_book_path_;
+  }
+  const std::string& last_book_title() const {
+    return last_book_title_;
+  }
+  int last_book_pct() const {
+    return last_book_pct_;
+  }
+  DateTimeScreen* date_time_screen() {
+    return &date_time_;
+  }
+
+  // Wi-Fi Transfer. The platform provides the Wi-Fi (none on desktop: the
+  // menu then says Wi-Fi isn't available).
+  void set_wifi(IWifiTransfer* wifi) {
+    wifi_ = wifi;
+  }
+  IWifiTransfer* wifi() const {
+    return wifi_;
+  }
+  SavedWifi& saved_wifi() {
+    return saved_wifi_;
+  }
+  WifiMenuScreen* wifi_menu() {
+    return &wifi_menu_;
+  }
+  TextInputScreen* text_input() {
+    return &text_input_;
+  }
+  FileTransferScreen* file_transfer() {
+    return &file_transfer_;
+  }
 
   bool invert_menu_buttons() const {
     return invert_menu_buttons_;
@@ -137,6 +243,27 @@ class Application {
   }
   void set_invert_side_buttons(bool v) {
     invert_side_buttons_ = v;
+  }
+
+  // Daily reading goal (Settings → Daily Goal). When enabled, the Reading
+  // Stats calendar bar fills at the goal and streaks count days that reach it.
+  bool goal_enabled() const {
+    return goal_enabled_;
+  }
+  void set_goal_enabled(bool v) {
+    goal_enabled_ = v;
+    save_settings_();
+  }
+  int goal_minutes() const {
+    return goal_minutes_;
+  }
+  void set_goal_minutes(int minutes) {
+    goal_minutes_ = minutes;
+    save_settings_();
+  }
+  // Goal in seconds, or 0 when the goal is disabled.
+  uint32_t goal_seconds() const {
+    return goal_enabled_ ? static_cast<uint32_t>(goal_minutes_) * 60u : 0u;
   }
 
   bool rotate_display() const {
@@ -212,6 +339,13 @@ class Application {
     pending_pop_count_ = count;
   }
 
+  // Back to the book list (the bottom of the screen stack).
+  void pop_to_root() {
+    const int n = screen_mgr_.depth() - 1;
+    if (n > 0)
+      pop_screen(n);
+  }
+
   bool has_pending_transition() const {
     return pending_push_ != ScreenId::None || pending_replace_ != ScreenId::None || pending_pop_count_ > 0;
   }
@@ -242,24 +376,51 @@ class Application {
   bool invert_menu_buttons_ = false;
   bool invert_bottom_paging_ = true;
   bool invert_side_buttons_ = false;
+  bool goal_enabled_ = false;
+  int goal_minutes_ = kDefaultGoalMinutes;
   bool rotate_display_ = false;
+  bool home_covers_ = true;
 
   int menu_font_size_ = 0;
   uint16_t open_counter_ = 0;  // monotonically increasing; incremented each time a book is opened
 
   std::string custom_font_path_;
   std::string installed_font_path_;
-  std::string sleep_image_path_;  // empty = auto-cycle
+  // Sleep screen mode: "random" (image from the sleep folders), "cover" or
+  // "stats". Older settings files may hold "" (cycle) or a pinned image path;
+  // load_settings_() turns those into "random".
+  std::string sleep_image_path_ = "random";
   int sleep_image_idx_ = 0;
 
   ScreenManager screen_mgr_;
 
   MainMenu menu_;
+  HomeScreen home_;
   ReaderScreen reader_;
   SettingsScreen settings_;
   ReaderOptionsScreen reader_options_;
   ChapterSelectScreen chapter_select_;
   LinksScreen links_screen_;
+  StatsCalendarScreen stats_screen_;
+  DateTimeScreen date_time_;
+  FinishedBooksScreen finished_screen_;
+  FinishedBooks finished_books_;
+  BookProgress book_progress_;
+  WifiMenuScreen wifi_menu_;
+  TextInputScreen text_input_;
+  FileTransferScreen file_transfer_;
+  SavedWifi saved_wifi_;
+  IWifiTransfer* wifi_ = nullptr;
+
+  std::string last_book_path_;
+  std::string last_book_title_;
+  int last_book_pct_ = 0;
+
+  ReadingStats stats_;
+  // Last wall-clock time written to the settings file ("clock="). Used to
+  // restore the clock after a cold power-on, when the ESP32 RTC restarts at 1970.
+  int64_t saved_clock_ = 0;
+  void restore_clock_(IRuntime& runtime);
 
 #ifdef MICROREADER_ENABLE_DEMOS
   BouncingBallDemo bouncing_ball_;

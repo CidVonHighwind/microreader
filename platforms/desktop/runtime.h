@@ -2,12 +2,14 @@
 
 #include <SDL.h>
 
+#include <ctime>
 #include <stdexcept>
 #include <string>
 
 #include "microreader/Input.h"
 #include "microreader/Runtime.h"
 #include "microreader/display/DrawBuffer.h"
+#include "microreader/stats/ReadingStats.h"
 
 // Window scale factor: each display pixel becomes kScale×kScale screen pixels.
 static constexpr int kDisplayScale = 1;
@@ -175,7 +177,33 @@ class DesktopRuntime final : public microreader::IRuntime {
     SDL_Delay(frame_time_ms_);
   }
 
+  // Clocks (Reading Stats). set_local_time() only shifts the emulator's view
+  // of the time; the host clock is never touched.
+  uint32_t monotonic_ms() const override {
+    return SDL_GetTicks();
+  }
+  int64_t local_time() const override {
+    return host_local_time_() + clock_offset_;
+  }
+  bool set_local_time(int64_t seconds) override {
+    clock_offset_ = seconds - host_local_time_();
+    return true;
+  }
+
  private:
+  static int64_t host_local_time_() {
+    const std::time_t now = std::time(nullptr);
+    std::tm lt{};
+#ifdef _WIN32
+    localtime_s(&lt, &now);
+#else
+    localtime_r(&now, &lt);
+#endif
+    return microreader::days_from_civil(lt.tm_year + 1900, lt.tm_mon + 1, lt.tm_mday) * 86400 +
+           lt.tm_hour * 3600 + lt.tm_min * 60 + lt.tm_sec;
+  }
+
+  int64_t clock_offset_ = 0;
   static constexpr uint8_t kNumButtons = microreader::ButtonState::kButtonCount;
   static constexpr uint8_t kQueueSize = 32;
 

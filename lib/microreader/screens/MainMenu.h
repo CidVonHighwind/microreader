@@ -11,11 +11,14 @@
 
 namespace microreader {
 
-enum class BookListFormat { TitleOnly, TitleAndAuthor, Filename };
+// Values are stored in the settings file (list_format=): only append.
+enum class BookListFormat { TitleOnly, TitleAndAuthor, Filename, TitleAndPercent };
 enum class BookSortOrder { Alphabetical, LastOpened };
 
 // Main screen — lists EPUB books from a directory.
 // Button1 = open book, Button0 = settings.
+// The first row, "Finished Books (N)", opens the Finished shelf; a gap row
+// separates it from the books.
 class MainMenu final : public ListMenuScreen {
  public:
   MainMenu() = default;
@@ -35,7 +38,13 @@ class MainMenu final : public ListMenuScreen {
     return last_selected_path_;
   }
 
+  // Number of books on the list (excluding the Finished row and gaps).
+  int book_count() const {
+    return static_cast<int>(entries_.size());
+  }
+
   // The full path of the currently highlighted entry (even if not yet opened).
+  // Empty when the Finished row is highlighted.
   const std::string& current_book_path() const {
     int idx = entries_index_for(selected());
     if (idx >= 0 && idx < static_cast<int>(entries_.size()))
@@ -114,17 +123,34 @@ class MainMenu final : public ListMenuScreen {
   };
   std::vector<BookEntry> entries_;
   mutable std::string label_buf_;
+  mutable std::string finished_label_;
+  // Index (among the book rows) of the "opened / never opened" gap, or -1.
   int separator_visual_index_ = -1;
+  // The Finished row was highlighted, to return to it; -1 if not.
+  int return_to_row_ = -1;
 
+ public:
+  // Rows above the books: "Finished Books (N)" and a gap.
+  static constexpr int kTopRows = 2;
+  static constexpr int kFinishedRow = 0;
+
+ private:
+  // Visual list index → entries_ index (-1 for the top rows and gaps).
   int entries_index_for(int visual) const {
-    if (separator_visual_index_ < 0 || visual < separator_visual_index_) return visual;
-    return visual - 1;
+    const int v = visual - kTopRows;
+    if (v < 0) return -1;
+    if (separator_visual_index_ < 0 || v < separator_visual_index_) return v;
+    if (v == separator_visual_index_) return -1;
+    return v - 1;
   }
 
   int visual_for_entries(int real) const {
-    if (separator_visual_index_ < 0 || real < separator_visual_index_) return real;
-    return real + 1;
+    if (separator_visual_index_ < 0 || real < separator_visual_index_) return real + kTopRows;
+    return real + 1 + kTopRows;
   }
+
+  // Title + " · N%" fitted to the row width (the title is shortened, never the percent).
+  std::string_view title_with_percent_(std::string_view title, int percent) const;
 
   void scan_directory_(DrawBuffer& buf);
   void populate_list_();

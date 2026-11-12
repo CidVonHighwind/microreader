@@ -48,12 +48,28 @@ inline bool sd_mounted() {
 // -----------------------------------------------------------------------
 #include "driver/gpio.h"
 #include "driver/sdspi_host.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "sdmmc_cmd.h"
 
 #define SD_CS GPIO_NUM_12
+#ifdef MICROREADER_X3
+// The X3's SD card is behind a power switch on GPIO 13 (the X4 powers it
+// directly). It must be on before the card is mounted and stay on afterwards.
+#define SD_POWER GPIO_NUM_13
+#endif
 static sdmmc_card_t* sd_card_ = nullptr;
 
 inline bool sd_init() {
+#ifdef MICROREADER_X3
+  // Drive the power switch high BEFORE releasing any hold left over from the
+  // last deep sleep, so the rail never glitches low.
+  gpio_set_direction(SD_POWER, GPIO_MODE_OUTPUT);
+  gpio_set_level(SD_POWER, 1);
+  gpio_hold_dis(SD_POWER);
+  gpio_set_level(SD_POWER, 1);
+  vTaskDelay(pdMS_TO_TICKS(10));  // let the card power up
+#endif
   // CS pin: default-high so the SD card stays deselected until we talk to it.
   gpio_set_direction(SD_CS, GPIO_MODE_OUTPUT);
   gpio_set_level(SD_CS, 1);

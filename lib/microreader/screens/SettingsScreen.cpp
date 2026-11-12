@@ -5,8 +5,10 @@
 #include <string>
 
 #include "../Application.h"
+#include "../BuiltinFonts.h"
 #include "../content/BookIndex.h"
 #include "../version.h"
+#include "SleepScreens.h"
 
 #ifdef ESP_PLATFORM
 #include <dirent.h>
@@ -25,6 +27,27 @@
 #include "../resources/spiffs_image_data.h"
 
 namespace microreader {
+
+static std::string get_date_time_label(Application* app) {
+  IRuntime* rt = app ? app->stats().clock() : nullptr;
+  const int64_t now = rt ? rt->local_time() : 0;
+  if (!clock_is_valid(now))
+    return "Date & Time: not set";
+  const CivilDate d = date_from_local_time(now);
+  const int sod = seconds_of_day(now);
+  char buf[64];
+  std::snprintf(buf, sizeof(buf), "Date: %d %s %d, %02d:%02d", d.day, month_abbrev(d.month), d.year, sod / 3600,
+                (sod / 60) % 60);
+  return buf;
+}
+
+static std::string get_goal_label(bool enabled) {
+  return std::string("Daily Goal: ") + (enabled ? "On" : "Off");
+}
+
+static std::string get_goal_target_label(int minutes) {
+  return "Goal: " + format_duration(static_cast<uint32_t>(minutes) * 60u) + " a day";
+}
 
 static std::string get_menu_nav_label(bool inverted) {
   return std::string("Menu Nav: ") + (inverted ? "Right=Down" : "Right=Up");
@@ -47,6 +70,8 @@ static std::string get_list_format_label(BookListFormat fmt) {
     return "Book List: Title";
   if (fmt == BookListFormat::Filename)
     return "Book List: Filename";
+  if (fmt == BookListFormat::TitleAndPercent)
+    return "Book List: Title & Percent Read";
   return "Book List: Title & Author";
 }
 
@@ -59,14 +84,20 @@ static std::string get_menu_font_label(int size) {
 }
 
 static std::string get_sleep_image_label(const std::string& path) {
-  if (path.empty())
-    return "Sleep Image: Auto";
-  std::string label = "Sleep Image: ";
+  std::string label = "Sleep Screen: ";
+  if (path == sleep_screens::kModeCycle)
+    return label + "Cycle images";
+  if (path == sleep_screens::kModeRandom)
+    return label + "Random image";
+  if (path == sleep_screens::kModeCover)
+    return label + "Book cover";
+  if (path == sleep_screens::kModeStats)
+    return label + "Reading stats";
   if (path.rfind("embedded:", 0) == 0) {
     int idx = std::atoi(path.c_str() + 9);
     label += (idx == 0 ? "bird" : (idx == 1 ? "stone" : "bebop"));
   } else {
-    const char* p = path.rfind("bmp:", 0) == 0 ? path.c_str() + 4 : path.c_str();
+    const char* p = (path.rfind("bmp:", 0) == 0 || path.rfind("img:", 0) == 0) ? path.c_str() + 4 : path.c_str();
     const char* slash = nullptr;
     for (const char* c = p; *c; ++c)
       if (*c == '/' || *c == '\\')
@@ -76,9 +107,39 @@ static std::string get_sleep_image_label(const std::string& path) {
   return label;
 }
 
+static std::string get_home_label(bool covers) {
+  return std::string("Home Screen: ") + (covers ? "Covers" : "Book List");
+}
+
+// Number of reader text sizes, and the pixel size of one of them. All the
+// built-in fonts come in the same sizes (20 to 32 px, in steps of 2).
+static int font_size_count(Application* app) {
+  if (app && app->font_manager() && app->font_manager()->valid()) {
+    const BitmapFontSet* fonts = app->font_manager()->font_set();
+    if (fonts && fonts->num_fonts() > 0)
+      return fonts->num_fonts();
+  }
+  return 7;
+}
+
+static std::string get_font_size_label(Application* app, int idx) {
+  int px = 20 + 2 * idx;
+  if (app && app->font_manager() && app->font_manager()->valid()) {
+    const BitmapFontSet* fonts = app->font_manager()->font_set();
+    if (fonts && idx < fonts->num_fonts())
+      if (const BitmapFont* f = fonts->get_font(idx))
+        px = f->nominal_size();
+  }
+  const int n = font_size_count(app);
+  const char* hint = idx == 0 ? "  (smallest)" : idx == n - 1 ? "  (largest)" : "";
+  char buf[48];
+  std::snprintf(buf, sizeof(buf), "Font Size: %d%s", px, hint);
+  return buf;
+}
+
 static std::string get_font_label(const std::string& font_path) {
   std::string label = "Font: ";
-  if (font_path == "Bookerly" || font_path == "Alegreya") {
+  if (is_builtin_font(font_path)) {
     label += font_path;
   } else {
     const char* p = font_path.c_str();
@@ -93,11 +154,16 @@ static std::string get_font_label(const std::string& font_path) {
 
 void SettingsScreen::on_start() {
   title_ = "Settings";
+#ifdef MICROREADER_BUILD_NAME
+  // "Build 10 (2.0-dev.390)": the release name from release.txt, then the version.
+  subtitle_ = sizeof(MICROREADER_BUILD_NAME) > 1 ? MICROREADER_BUILD_NAME " (" MICROREADER_VERSION ")" : MICROREADER_VERSION;
+#else
   subtitle_ = MICROREADER_VERSION;
+#endif
 
   sd_fonts_.clear();
-  sd_fonts_.push_back("Bookerly");
-  sd_fonts_.push_back("Alegreya");
+  for (const char* f : kBuiltinFonts)
+    sd_fonts_.push_back(f);
   font_sel_idx_ = 0;
 #ifdef ESP_PLATFORM
   DIR* d = opendir("/sdcard/fonts");
@@ -135,50 +201,13 @@ void SettingsScreen::on_start() {
     }
   }
 
-  // Sleep image list: first entry is empty string = Auto-cycle.
-  // Custom SD images take priority — embedded ones are only shown when no
-  // custom images are present.
+  // Sleep screen modes. Every image in the sleep folders is covered by
+  // "Random image", so individual images aren't listed.
   sleep_images_.clear();
-  sleep_images_.push_back("");  // Auto
+  sleep_images_.push_back(sleep_screens::kModeRandom);
+  sleep_images_.push_back(sleep_screens::kModeCover);
+  sleep_images_.push_back(sleep_screens::kModeStats);
   sleep_image_sel_idx_ = 0;
-  std::vector<std::string> sd_sleep;
-#ifdef ESP_PLATFORM
-  {
-    DIR* sd = opendir("/sdcard/.sleep");
-    if (sd) {
-      struct dirent* ent;
-      while ((ent = readdir(sd)) != nullptr) {
-        if (ent->d_name[0] == '.')
-          continue;
-        const char* ext = std::strrchr(ent->d_name, '.');
-        if (!ext) continue;
-        if (strcmp(ext, ".mgr") == 0)
-          sd_sleep.push_back(std::string("/sdcard/.sleep/") + ent->d_name);
-        else if (strcmp(ext, ".bmp") == 0)
-          sd_sleep.push_back(std::string("bmp:/sdcard/.sleep/") + ent->d_name);
-      }
-      closedir(sd);
-    }
-  }
-#else
-  try {
-    for (const auto& entry : fs::directory_iterator("sd/.sleep")) {
-      const auto& p = entry.path();
-      if (p.extension() == ".mgr")
-        sd_sleep.push_back(p.string());
-      else if (p.extension() == ".bmp")
-        sd_sleep.push_back("bmp:" + p.string());
-    }
-  } catch (...) {}
-#endif
-  if (sd_sleep.empty()) {
-    sleep_images_.push_back("embedded:0");
-    sleep_images_.push_back("embedded:1");
-    sleep_images_.push_back("embedded:2");
-  } else {
-    for (auto& p : sd_sleep)
-      sleep_images_.push_back(std::move(p));
-  }
   if (app_) {
     const std::string& current = app_->sleep_image_path();
     for (size_t i = 0; i < sleep_images_.size(); ++i) {
@@ -189,7 +218,34 @@ void SettingsScreen::on_start() {
     }
   }
 
+  // --- Wi-Fi Transfer ---
+  idx_wifi_ = count();
+  add_item("Wi-Fi Transfer");
+  add_separator();
+
+  // --- Reading statistics ---
+  // (Finished Books is the first row of the book list.)
+  idx_stats_ = count();
+  add_item("Reading Stats");
+
+  idx_goal_ = count();
+  add_item(get_goal_label(app_ && app_->goal_enabled()));
+
+  idx_goal_target_ = -1;
+  if (app_ && app_->goal_enabled()) {
+    idx_goal_target_ = count();
+    add_item(get_goal_target_label(app_->goal_minutes()), 1);
+  }
+
+  idx_date_time_ = count();
+  add_item(get_date_time_label(app_));
+
+  add_separator();
+
   // --- Appearance ---
+  idx_home_ = count();
+  add_item(get_home_label(app_ && app_->home_covers()));
+
   idx_rotate_display_ = count();
   add_item(get_rotate_display_label(app_ && app_->rotate_display()));
 
@@ -208,6 +264,9 @@ void SettingsScreen::on_start() {
 
   idx_font_ = count();
   add_item(get_font_label(sd_fonts_[font_sel_idx_]));
+
+  idx_font_size_ = count();
+  add_item(get_font_size_label(app_, app_ ? app_->reader()->reader_settings().font_size_idx : 1));
 
   idx_sleep_image_ = count();
   add_item(get_sleep_image_label(sleep_images_[sleep_image_sel_idx_]));
@@ -234,7 +293,11 @@ void SettingsScreen::on_start() {
     add_item("Rebuild Book Index");
   }
 
-#ifdef ESP_PLATFORM
+// Developer tools for the X4's font space and firmware slots. Not on the X3:
+// its built-in fonts don't use the font space (which may hold the original
+// firmware's data there), and booting the other firmware slot from here
+// isn't safe on its layout — the web flasher is the way to switch.
+#if defined(ESP_PLATFORM) && !defined(MICROREADER_X3)
   if (app_ && app_->has_invalidate_font_fn()) {
     idx_invalidate_font_ = count();
     add_item("Invalidate Font");
@@ -283,6 +346,36 @@ void SettingsScreen::on_select(int index) {
     return;
   }
 #endif
+  if (index == idx_wifi_) {
+    app_->push_screen(ScreenId::Wifi);
+    return;
+  }
+  if (index == idx_stats_) {
+    app_->push_screen(ScreenId::Stats);
+    return;
+  }
+  if (index == idx_date_time_) {
+    app_->push_screen(ScreenId::DateTime);
+    return;
+  }
+  if (index == idx_goal_) {
+    app_->set_goal_enabled(!app_->goal_enabled());
+    restart();  // adds/removes the "Goal: ..." line under this one
+    return;
+  }
+  if (index == idx_goal_target_) {
+    // Step to the next preset; a custom value from the settings file restarts at the first.
+    int next = kGoalPresetMinutes[0];
+    for (int i = 0; i < kNumGoalPresets; ++i) {
+      if (kGoalPresetMinutes[i] == app_->goal_minutes()) {
+        next = kGoalPresetMinutes[(i + 1) % kNumGoalPresets];
+        break;
+      }
+    }
+    app_->set_goal_minutes(next);
+    set_item_label(idx_goal_target_, get_goal_target_label(next));
+    return;
+  }
   if (index == idx_clear_cache_) {
     clear_cache_();
     toast_original_label_ = get_item_label(idx_clear_cache_);
@@ -316,9 +409,12 @@ void SettingsScreen::on_select(int index) {
   if (index == idx_list_format_) {
     if (app_->main_menu()) {
       auto fmt = app_->main_menu()->list_format();
+      // Title → Title & Percent Read → Filename → Title & Author → Title
       if (fmt == BookListFormat::TitleAndAuthor) {
         fmt = BookListFormat::TitleOnly;
       } else if (fmt == BookListFormat::TitleOnly) {
+        fmt = BookListFormat::TitleAndPercent;
+      } else if (fmt == BookListFormat::TitleAndPercent) {
         fmt = BookListFormat::Filename;
       } else {
         fmt = BookListFormat::TitleAndAuthor;
@@ -367,6 +463,25 @@ void SettingsScreen::on_select(int index) {
       int v = (app_->menu_font_size() + 1) % 3;
       app_->set_menu_font_size(v);
       restart();  // rebuilds items with the new font size immediately
+    }
+    return;
+  }
+  if (index == idx_home_) {
+    if (app_) {
+      const bool v = !app_->home_covers();
+      app_->set_home_covers(v);
+      set_item_label(idx_home_, get_home_label(v));
+    }
+    return;
+  }
+  if (index == idx_font_size_) {
+    if (app_) {
+      // Same setting as Font Size in the book menu (▶ while reading).
+      ReaderSettings& rs = app_->reader()->reader_settings();
+      const int n = font_size_count(app_);
+      rs.font_size_idx = static_cast<uint8_t>((rs.font_size_idx + 1) % n);
+      app_->save_settings_();
+      set_item_label(idx_font_size_, get_font_size_label(app_, rs.font_size_idx));
     }
     return;
   }

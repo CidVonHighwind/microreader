@@ -1,5 +1,7 @@
 #include "BmpSleepConverter.h"
 
+#include "../display/DrawBuffer.h"
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -68,8 +70,8 @@ static uint16_t le16(const uint8_t* p)  { return (uint16_t)p[0] | ((uint16_t)p[1
 namespace microreader {
 
 bool convert_bmp_to_mgr2(const char* bmp_path, const char* mgr_out_path) {
-    static constexpr int OUT_W      = 800;
-    static constexpr int OUT_H      = 480;
+    static constexpr int OUT_W      = DisplayFrame::kPanelWidth;
+    static constexpr int OUT_H      = DisplayFrame::kPhysicalHeight;
     static constexpr int OUT_STRIDE = (OUT_W + 3) / 4;  // 200 bytes per row
 
     FILE* f = std::fopen(bmp_path, "rb");

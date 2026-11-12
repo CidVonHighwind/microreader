@@ -45,6 +45,11 @@ class SettingsScreen final : public ListMenuScreen {
   int idx_grayscale_demo_ = -1;
 #endif
 
+  int idx_wifi_ = -1;
+  int idx_stats_ = -1;
+  int idx_goal_ = -1;
+  int idx_goal_target_ = -1;
+  int idx_date_time_ = -1;
   int idx_clear_cache_ = -1;
   int idx_rebuild_index_ = -1;
   int idx_list_format_ = -1;
@@ -58,6 +63,8 @@ class SettingsScreen final : public ListMenuScreen {
   int idx_rotate_display_ = -1;
   int idx_menu_font_ = -1;
   int idx_font_ = -1;
+  int idx_font_size_ = -1;
+  int idx_home_ = -1;
   int idx_sleep_image_ = -1;
   DrawBuffer* buf_ = nullptr;
   std::vector<std::string> sd_fonts_;

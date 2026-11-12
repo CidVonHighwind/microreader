@@ -58,6 +58,19 @@ class ScreenManager {
   IScreen* top() const {
     return depth_ > 0 ? stack_[depth_ - 1] : nullptr;
   }
+  IScreen* bottom() const {
+    return depth_ > 0 ? stack_[0] : nullptr;
+  }
+
+  // Swap the bottom (root) screen while another screen is on top of it. The
+  // root is paused then, so the new one simply starts when it's uncovered.
+  // Returns false when the root is the active screen (nothing is swapped).
+  bool replace_bottom(IScreen* screen) {
+    if (depth_ < 2 || !screen)
+      return false;
+    stack_[0] = screen;
+    return true;
+  }
   bool contains(const IScreen* screen) const {
     for (int i = 0; i < depth_; ++i)
       if (stack_[i] == screen)

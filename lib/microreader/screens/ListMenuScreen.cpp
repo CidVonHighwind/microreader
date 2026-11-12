@@ -15,6 +15,38 @@ namespace microreader {
 
 int ListMenuScreen::font_size_idx_ = 0;
 
+const BitmapFont& ListMenuScreen::shared_font(UiFont which) {
+  // Function-local statics: initialised on first use, zero-heap (BitmapFont
+  // only keeps pointers into the embedded tables of this translation unit).
+  switch (which) {
+    case UiFont::Medium: {
+      static BitmapFont f(kFontData_ui_medium_mbf, kFontData_ui_medium_mbf_size);
+      return f;
+    }
+    case UiFont::Large: {
+      static BitmapFont f(kFontData_ui_large_mbf, kFontData_ui_large_mbf_size);
+      return f;
+    }
+    case UiFont::Header: {
+      static BitmapFont f(kFontData_ui_header_mbf, kFontData_ui_header_mbf_size);
+      return f;
+    }
+    case UiFont::Small:
+    default: {
+      static BitmapFont f(kFontData_ui_small_mbf, kFontData_ui_small_mbf_size);
+      return f;
+    }
+  }
+}
+
+const BitmapFont& ListMenuScreen::shared_menu_font() {
+  if (font_size_idx_ == 1)
+    return shared_font(UiFont::Medium);
+  if (font_size_idx_ == 2)
+    return shared_font(UiFont::Large);
+  return shared_font(UiFont::Small);
+}
+
 static constexpr int kHeaderY = 15;         // top padding before the title text
 static constexpr int kHeaderBottomGap = 4;  // gap between last header line and first list item
 // The hint row (nav glyphs + battery bar) is centred on a line kHintCenterY pixels above the
@@ -181,6 +213,15 @@ int ListMenuScreen::draw_header_(DrawBuffer& buf, int W, int H) const {
 //    Returns bottom_h = pixels reserved at the bottom (list must stay above).
 // ─────────────────────────────────────────────────────────────────────────────
 int ListMenuScreen::draw_bottom_(DrawBuffer& buf, int W, int H, std::optional<uint8_t> battery_pct) const {
+  (void)W;
+  (void)H;
+  return draw_menu_bottom_bar(buf, ui_font_, app_ && app_->invert_menu_buttons(), battery_pct);
+}
+
+int ListMenuScreen::draw_menu_bottom_bar(DrawBuffer& buf, const BitmapFont& font, bool inv_menu,
+                                         std::optional<uint8_t> battery_pct) {
+  const int W = buf.width();
+  const int H = buf.height();
   if (battery_pct.has_value()) {
     const int bat_pct = battery_pct.value();
     const int kBarW = 26;
@@ -205,7 +246,7 @@ int ListMenuScreen::draw_bottom_(DrawBuffer& buf, int W, int H, std::optional<ui
     }
   }
 
-  draw_button_hints_(buf);
+  draw_nav_hints_(buf, font, inv_menu);
   return kBottomAreaH;
 }
 
@@ -366,14 +407,17 @@ void ListMenuScreen::draw_list_(DrawBuffer& buf, int W, int H, int header_h, int
 }
 
 void ListMenuScreen::draw_button_hints_(DrawBuffer& buf) const {
-  if (!ui_font_.valid())
+  draw_nav_hints_(buf, ui_font_, app_ && app_->invert_menu_buttons());
+}
+
+void ListMenuScreen::draw_nav_hints_(DrawBuffer& buf, const BitmapFont& font, bool inv_menu) {
+  if (!font.valid())
     return;
   const int W = buf.width();
   const int H = buf.height();
-  const int baseline = ui_font_.baseline();
+  const int baseline = font.baseline();
 
   // Four labels: back=◀, select=▶, down=▼, up=▲
-  bool inv_menu = app_ && app_->invert_menu_buttons();
   const char* lbl_down = "\xe2\x96\xbc";
   const char* lbl_up = "\xe2\x96\xb2";
   const char* kLabels[4] = {"\xe2\x97\x80", "\xe2\x96\xb6", inv_menu ? lbl_up : lbl_down, inv_menu ? lbl_down : lbl_up};
@@ -387,7 +431,7 @@ void ListMenuScreen::draw_button_hints_(DrawBuffer& buf) const {
   const int btns[4] = {pair0 - gap, pair0 + gap, pair1 - gap, pair1 + gap};
 
   for (int i = 0; i < 4; ++i) {
-    const int lw = ui_font_.word_width(kLabels[i], kLens[i], FontStyle::Regular);
+    const int lw = font.word_width(kLabels[i], kLens[i], FontStyle::Regular);
     if (!sideways) {
       const int text_x = W - kHintCenterY - lw / 2;
       // In landscape, if derived from portrait by rotating -90 deg,
@@ -395,14 +439,14 @@ void ListMenuScreen::draw_button_hints_(DrawBuffer& buf) const {
       // So we map i -> 3 - i if we need to reverse the order on the Y axis
       // because pair0 is smaller and pair1 is larger.
       int mapped_i = 3 - i;
-      const int text_y = btns[mapped_i] - ui_font_.y_advance() / 2 + baseline;
-      buf.draw_text_proportional(text_x, text_y, kLabels[i], kLens[i], ui_font_, false);
+      const int text_y = btns[mapped_i] - font.y_advance() / 2 + baseline;
+      buf.draw_text_proportional(text_x, text_y, kLabels[i], kLens[i], font, false);
     } else {
       // Per-size vertical nudge to keep glyphs visually centred on kHintCenterY.
       static constexpr int kHintGlyphNudge[3] = {1, 0, 0};
       const int nudge = kHintGlyphNudge[std::min(font_size_idx_, 2)];
-      const int text_y = H - kHintCenterY - (ui_font_.y_advance() + 1) / 2 + baseline + nudge;
-      buf.draw_text_proportional(btns[i] - lw / 2, text_y, kLabels[i], kLens[i], ui_font_, false);
+      const int text_y = H - kHintCenterY - (font.y_advance() + 1) / 2 + baseline + nudge;
+      buf.draw_text_proportional(btns[i] - lw / 2, text_y, kLabels[i], kLens[i], font, false);
     }
   }
 }
