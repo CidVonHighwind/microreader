@@ -94,6 +94,7 @@ All inherit from `IScreen` (`lib/microreader/screens/IScreen.h`): `name()`, `sta
 | Screen | File | Description |
 |--------|------|-------------|
 | `MainMenu` | `MainMenu.h/.cpp` | Main navigation menu. Owns all child screens. |
+| `HomeScreen` | `HomeScreen.h/.cpp` | Cover home page (start page when `home=covers`): Finished link, 3 recent covers with %, Library link. |
 | `ReaderScreen` | `ReaderScreen.h/.cpp` | EPUB page viewer. 2×-scaled 8×8 bitmap font (16×16 glyphs). Next/prev page, chapter transitions. |
 | `BouncingBallDemo` | `BouncingBallDemo.h/.cpp` | Bouncing ball + random shapes. |
 | `StatsCalendarScreen` | `StatsCalendarScreen.h/.cpp` | Reading-stats month calendar (Settings → Reading Stats). Portrait and landscape layouts. |
@@ -127,7 +128,7 @@ Screens that don't derive from `ListMenuScreen` get the UI fonts via `ListMenuSc
 ```
 Application
   └─ ScreenManager (push/pop stack, max depth 8)
-       └─ MainMenu (always at bottom)
+       └─ HomeScreen or MainMenu (always at bottom; Settings → Home Screen)
             ├─ "Select Book" → push BookSelectScreen
             │     └─ user picks → push ReaderScreen (via Application chain)
             └─ "Bouncing Ball" → push BouncingBallDemo
@@ -291,7 +292,9 @@ Test fixtures in `test/fixtures/` (synthetic EPUBs). Real books in `test/books/`
 - **SD SPI max 20 MHz**: The SD card on the prototype board fails at 40 MHz (`ESP_ERR_INVALID_RESPONSE` during `sdmmc_enable_hs_mode_and_check`). Keep `max_freq_khz = 20000`.
 - **`uint32_t` is `unsigned long` on ESP-IDF 5** and IDF builds with `-Werror=all`: cast to `unsigned`/`unsigned long` before passing to `%u`/`%lu` (fine on x86, a build error on device).
 - **No 64-bit printf on device**: `CONFIG_NEWLIB_NANO_FORMAT=y` (newlib-nano) has no `%lld`/`%llu`. Write 64-bit values as `%lu` with an `unsigned long` cast (32-bit unsigned seconds last until 2106).
-- **Don't save `BookIndex` while the book list is paused**: `MainMenu::stop()` (also its `pause()`) clears the in-memory index, so `Application::record_book_opened()` from any other screen would save an empty `book_index.dat`. Only call it from `MainMenu`.
+- **Don't save `BookIndex` while the book list is paused**: `MainMenu::stop()` (also its `pause()`) clears the in-memory index, so `Application::record_book_opened()` from any other screen would save an empty `book_index.dat`. Only call it from `MainMenu` or `HomeScreen` (which also keeps the index loaded while it's active, and checks it's non-empty first).
+- **Start page**: `Application::home_covers()` (`home=covers|list` in settings, default covers) picks the bottom screen: `HomeScreen` or `MainMenu`. `set_home_covers()` swaps it under Settings via `ScreenManager::replace_bottom()`. `MainMenu` as root is titled "Sami" and ◀ opens Settings; pushed from the home page it's "Library" and ◀ pops. `HomeScreen` caches cover thumbnails as `<data_dir>/cache/<stem>/thumb-WxH.bin` ("SMT1", u16 w, u16 h, 1-bit rows; 0x0 = no cover), made in `update()` with both draw buffers as scratch (then a full refresh). Covers within 12% of the slot's 2:3 shape are cropped to fill it (`draw_image_entry(..., crop_pct)`).
+- **Built-in reader fonts** are listed in `lib/microreader/BuiltinFonts.h` (Settings order) and mapped to assets in `platforms/esp32/font_manager.h` (X4: `<name>.bin` zlib bundles unpacked into spiffs; X3: `<name>.fnt` gray-stripped bundles read in place) and `tools/build_assets.py`. Literata/Atkinson are rebuilt with `tools/make_extra_fonts.py`. The X3 build uses `platforms/esp32/x3_16MB.csv` (0x770000 app slots); CI fails if a firmware outgrows its slot.
 - **App-level tests**: `test/support/AppHarness.h` (`AppFixture`, `FakeRuntime`, `CaptureDisplay` with `black_at(x, y)`) drives the real `Application` with button taps. `STATS_SCREENSHOT_DIR=<dir>` dumps every frame as PBM. Fixtures for covers/sleep images come from `test/fixtures/generate_cover_fixtures.py`.
 - **`Application::set_data_dir()` keeps the raw `const char*`** (firmware passes static strings). Tests must keep the string alive for the Application's lifetime.
 - **Linux/GCC test build**: needs `#include <cstring>` wherever `std::strlen` is used (MSVC pulls it in implicitly).

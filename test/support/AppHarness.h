@@ -128,6 +128,9 @@ class AppFixture : public ::testing::Test {
   DrawBuffer buf_{display_};
   FakeRuntime rt_;
   std::unique_ptr<Application> app_;
+  // Start page: most tests drive the book list directly; the cover home page
+  // has its own tests (HomeScreenTest).
+  bool covers_home_ = false;
 
   void SetUp() override {
     const std::string name = ::testing::UnitTest::GetInstance()->current_test_info()->name();
@@ -162,6 +165,7 @@ class AppFixture : public ::testing::Test {
     if (!books_dir_str_.empty())
       app_->set_books_dir(books_dir_str_.c_str());
     app_->set_data_dir(data_dir_str_.c_str());
+    app_->set_home_covers(covers_home_);
     app_->start(buf_, rt_);
     tick();  // let the main menu settle (and scan books if needed)
   }

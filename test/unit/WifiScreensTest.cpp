@@ -93,6 +93,7 @@ class WifiScreensTest : public AppFixture {
     if (!books_dir_str_.empty())
       app_->set_books_dir(books_dir_str_.c_str());
     app_->set_data_dir(data_dir_str_.c_str());
+    app_->set_home_covers(false);  // these tests start from the book list
     if (with_wifi)
       app_->set_wifi(&wifi_);
     app_->start(buf_, rt_);

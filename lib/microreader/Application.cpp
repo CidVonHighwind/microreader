@@ -44,6 +44,7 @@ void Application::start(DrawBuffer& buf, IRuntime& runtime) {
     reader_.set_fonts(reader_font_);
 
   menu_.set_app(this);
+  home_.set_app(this);
   reader_.set_app(this);
   settings_.set_app(this);
   reader_options_.set_app(this);
@@ -82,7 +83,11 @@ void Application::start(DrawBuffer& buf, IRuntime& runtime) {
   // Apply persisted display rotation.
   buf.set_rotation(rotate_display_ ? Rotation::Deg0 : Rotation::Deg90);
 
-  screen_mgr_.push(&menu_, buf, runtime);
+  // The start page: the cover home page or the book list.
+  if (home_covers_)
+    screen_mgr_.push(&home_, buf, runtime);
+  else
+    screen_mgr_.push(&menu_, buf, runtime);
 
   // Auto-open last book if one was active at shutdown — but only if the font
   // is valid. cache_only=true tells the reader not to convert if the MRB is
@@ -312,6 +317,8 @@ IScreen* microreader::Application::screen_for_(ScreenId id) {
   switch (id) {
     case ScreenId::MainMenu:
       return &menu_;
+    case ScreenId::Home:
+      return &home_;
     case ScreenId::Reader:
       return &reader_;
     case ScreenId::Settings:
@@ -402,6 +409,7 @@ void microreader::Application::save_settings_() {
   std::fprintf(f, "inv_side=%u\n", invert_side_buttons_ ? 1u : 0u);
   std::fprintf(f, "rotate_display=%u\n", rotate_display_ ? 1u : 0u);
   std::fprintf(f, "menu_font_size=%d\n", menu_font_size_);
+  std::fprintf(f, "home=%s\n", home_covers_ ? "covers" : "list");
 
   if (!custom_font_path_.empty())
     std::fprintf(f, "custom_font=%s\n", custom_font_path_.c_str());
@@ -519,6 +527,8 @@ void microreader::Application::load_settings_() {
       rotate_display_ = (uval != 0);
     else if (std::sscanf(line, "menu_font_size=%u", &uval) == 1)
       menu_font_size_ = static_cast<int>(uval > 2 ? 2 : uval);
+    else if (std::sscanf(line, "home=%511s", sval) == 1)
+      home_covers_ = std::strcmp(sval, "list") != 0;
     else if (std::sscanf(line, "custom_font=%511[^\n]", sval) == 1)
       custom_font_path_ = sval;
     else if (std::sscanf(line, "inst_font=%511[^\n]", sval) == 1)

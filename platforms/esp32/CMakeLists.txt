@@ -22,6 +22,7 @@ set(lib_sources
     ${LIB}/library/FinishedBooks.cpp
     ${LIB}/library/BookProgress.cpp
     ${LIB}/screens/FinishedBooksScreen.cpp
+    ${LIB}/screens/HomeScreen.cpp
     ${LIB}/screens/SleepScreens.cpp
     ${LIB}/screens/TextInputScreen.cpp
     ${LIB}/screens/WifiMenuScreen.cpp

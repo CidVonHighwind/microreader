@@ -290,6 +290,27 @@ class DrawBuffer {
       buf[bidx] &= static_cast<uint8_t>(~bit);
   }
 
+  // Read a single logical pixel from the inactive (being drawn) buffer.
+  // True = white. Out-of-range pixels read as white.
+  bool get_pixel(int lx, int ly) {
+    int px, py;
+    if (rotation_ == Rotation::Deg0) {
+      if (lx < 0 || lx >= DisplayFrame::kPhysicalWidth || ly < 0 || ly >= DisplayFrame::kPhysicalHeight)
+        return true;
+      px = lx;
+      py = ly;
+    } else {
+      if (lx < 0 || lx >= kWidth || ly < 0 || ly >= kHeight)
+        return true;
+      px = ly;
+      py = DisplayFrame::kPhysicalHeight - 1 - lx;
+    }
+    const uint8_t* buf = inactive_();
+    const int px_buf = px + DisplayFrame::kPanelOffsetX;
+    const size_t bidx = static_cast<size_t>(py * DisplayFrame::kStride + px_buf / 8);
+    return (buf[bidx] & static_cast<uint8_t>(0x80u >> (px_buf & 7))) != 0;
+  }
+
   // Blit a horizontal row of 1-bit packed pixels at logical position (lx, ly).
   // data_1bit is MSB-first packed, width pixels long.
   void blit_1bit_row(int lx, int ly, const uint8_t* data_1bit, int width) {

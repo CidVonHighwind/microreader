@@ -5,6 +5,7 @@
 #include <string>
 
 #include "../Application.h"
+#include "../BuiltinFonts.h"
 #include "../content/BookIndex.h"
 #include "../version.h"
 #include "SleepScreens.h"
@@ -106,9 +107,39 @@ static std::string get_sleep_image_label(const std::string& path) {
   return label;
 }
 
+static std::string get_home_label(bool covers) {
+  return std::string("Home Screen: ") + (covers ? "Covers" : "Book List");
+}
+
+// Number of reader text sizes, and the pixel size of one of them. All the
+// built-in fonts come in the same sizes (20 to 32 px, in steps of 2).
+static int font_size_count(Application* app) {
+  if (app && app->font_manager() && app->font_manager()->valid()) {
+    const BitmapFontSet* fonts = app->font_manager()->font_set();
+    if (fonts && fonts->num_fonts() > 0)
+      return fonts->num_fonts();
+  }
+  return 7;
+}
+
+static std::string get_font_size_label(Application* app, int idx) {
+  int px = 20 + 2 * idx;
+  if (app && app->font_manager() && app->font_manager()->valid()) {
+    const BitmapFontSet* fonts = app->font_manager()->font_set();
+    if (fonts && idx < fonts->num_fonts())
+      if (const BitmapFont* f = fonts->get_font(idx))
+        px = f->nominal_size();
+  }
+  const int n = font_size_count(app);
+  const char* hint = idx == 0 ? "  (smallest)" : idx == n - 1 ? "  (largest)" : "";
+  char buf[48];
+  std::snprintf(buf, sizeof(buf), "Font Size: %d%s", px, hint);
+  return buf;
+}
+
 static std::string get_font_label(const std::string& font_path) {
   std::string label = "Font: ";
-  if (font_path == "Bookerly" || font_path == "Alegreya") {
+  if (is_builtin_font(font_path)) {
     label += font_path;
   } else {
     const char* p = font_path.c_str();
@@ -123,11 +154,16 @@ static std::string get_font_label(const std::string& font_path) {
 
 void SettingsScreen::on_start() {
   title_ = "Settings";
+#ifdef MICROREADER_BUILD_NAME
+  // "Build 10 (2.0-dev.390)": the release name from release.txt, then the version.
+  subtitle_ = sizeof(MICROREADER_BUILD_NAME) > 1 ? MICROREADER_BUILD_NAME " (" MICROREADER_VERSION ")" : MICROREADER_VERSION;
+#else
   subtitle_ = MICROREADER_VERSION;
+#endif
 
   sd_fonts_.clear();
-  sd_fonts_.push_back("Bookerly");
-  sd_fonts_.push_back("Alegreya");
+  for (const char* f : kBuiltinFonts)
+    sd_fonts_.push_back(f);
   font_sel_idx_ = 0;
 #ifdef ESP_PLATFORM
   DIR* d = opendir("/sdcard/fonts");
@@ -207,6 +243,9 @@ void SettingsScreen::on_start() {
   add_separator();
 
   // --- Appearance ---
+  idx_home_ = count();
+  add_item(get_home_label(app_ && app_->home_covers()));
+
   idx_rotate_display_ = count();
   add_item(get_rotate_display_label(app_ && app_->rotate_display()));
 
@@ -225,6 +264,9 @@ void SettingsScreen::on_start() {
 
   idx_font_ = count();
   add_item(get_font_label(sd_fonts_[font_sel_idx_]));
+
+  idx_font_size_ = count();
+  add_item(get_font_size_label(app_, app_ ? app_->reader()->reader_settings().font_size_idx : 1));
 
   idx_sleep_image_ = count();
   add_item(get_sleep_image_label(sleep_images_[sleep_image_sel_idx_]));
@@ -421,6 +463,25 @@ void SettingsScreen::on_select(int index) {
       int v = (app_->menu_font_size() + 1) % 3;
       app_->set_menu_font_size(v);
       restart();  // rebuilds items with the new font size immediately
+    }
+    return;
+  }
+  if (index == idx_home_) {
+    if (app_) {
+      const bool v = !app_->home_covers();
+      app_->set_home_covers(v);
+      set_item_label(idx_home_, get_home_label(v));
+    }
+    return;
+  }
+  if (index == idx_font_size_) {
+    if (app_) {
+      // Same setting as Font Size in the book menu (▶ while reading).
+      ReaderSettings& rs = app_->reader()->reader_settings();
+      const int n = font_size_count(app_);
+      rs.font_size_idx = static_cast<uint8_t>((rs.font_size_idx + 1) % n);
+      app_->save_settings_();
+      set_item_label(idx_font_size_, get_font_size_label(app_, rs.font_size_idx));
     }
     return;
   }

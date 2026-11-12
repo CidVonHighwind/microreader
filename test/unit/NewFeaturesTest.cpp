@@ -263,10 +263,10 @@ TEST_F(NewFeaturesTest, SettingsSleepScreenHasThreeModes) {
   start_app();
   EXPECT_EQ(app_->sleep_image_path(), "random");  // default
   open_settings();
-  // 0 Wi-Fi, (gap), 2 Stats, 3 Goal, 4 Date, (gap), 6 Display, 7 Menu Size,
-  // 8 Book List, 9 Sort, 10 Font, 11 Sleep Screen.
-  down(9);
-  EXPECT_EQ(app_->settings()->selected_index(), 11);
+  // 0 Wi-Fi, (gap), 2 Stats, 3 Goal, 4 Date, (gap), 6 Home Screen, 7 Display,
+  // 8 Menu Size, 9 Book List, 10 Sort, 11 Font, 12 Font Size, 13 Sleep Screen.
+  down(11);
+  EXPECT_EQ(app_->settings()->selected_index(), 13);
   tap(Button::Button1);
   EXPECT_EQ(app_->sleep_image_path(), "cover");
   tap(Button::Button1);
@@ -446,8 +446,8 @@ TEST_F(NewFeaturesTest, BookListTitleAndPercentRead) {
   // Settings → Book List: Title (default) → Title & Percent Read.
   EXPECT_EQ(menu->list_format(), BookListFormat::TitleOnly);
   open_settings();
-  down(6);  // 0 Wi-Fi, (gap), 2 Stats, 3 Goal, 4 Date, (gap), 6 Display, 7 Menu Size, 8 Book List
-  EXPECT_EQ(app_->settings()->selected_index(), 8);
+  down(7);  // 0 Wi-Fi, (gap), 2 Stats, 3 Goal, 4 Date, (gap), 6 Home Screen, 7 Display, 8 Menu Size, 9 Book List
+  EXPECT_EQ(app_->settings()->selected_index(), 9);
   tap(Button::Button1);
   EXPECT_EQ(menu->list_format(), BookListFormat::TitleAndPercent);
   tap(Button::Button0);

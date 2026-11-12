@@ -131,6 +131,7 @@ class StatsScreensTest : public ::testing::Test {
   void start_app() {
     app_ = std::make_unique<Application>();
     app_->set_data_dir(data_dir_str_.c_str());
+    app_->set_home_covers(false);  // these tests start from the book list
     app_->start(buf_, rt_);
     tick();  // let the main menu settle
   }

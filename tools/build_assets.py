@@ -25,6 +25,8 @@ import zlib
 DEFAULT_ASSETS = [
     ("bookerly.bin", "resources/fonts/bookerly.bin"),
     ("alegreya.bin", "resources/fonts/alegreya.bin"),
+    ("literata.bin", "resources/fonts/literata.bin"),
+    ("atkinson.bin", "resources/fonts/atkinson.bin"),
     ("sleep_0.mgr", "resources/sleep/sleep_0.mgr"),
     ("sleep_1.mgr", "resources/sleep/sleep_1.mgr"),
     ("sleep_2.mgr", "resources/sleep/sleep_2.mgr"),
@@ -40,6 +42,8 @@ DEFAULT_ASSETS = [
 X3_ASSETS = [
     ("bookerly.fnt", "resources/fonts/bookerly.mfb", "strip_gray"),
     ("alegreya.fnt", "resources/fonts/alegreya.mfb", "strip_gray"),
+    ("literata.fnt", "resources/fonts/literata.mfb", "strip_gray"),
+    ("atkinson.fnt", "resources/fonts/atkinson.mfb", "strip_gray"),
     ("sleep_0.mgr", "resources/sleep/x3/sleep_0.mgr"),
     ("sleep_1.mgr", "resources/sleep/x3/sleep_1.mgr"),
     ("sleep_2.mgr", "resources/sleep/x3/sleep_2.mgr"),

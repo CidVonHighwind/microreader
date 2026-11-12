@@ -1,6 +1,6 @@
 # Sami
 
-Sami is a fork of [Microreader](https://github.com/CidVonHighwind/microreader) that adds reading statistics, a daily reading goal, a Finished shelf, a chapter progress bar, more sleep screen options and Wi-Fi file transfer. Everything below about Microreader applies to Sami too.
+Sami is a fork of [Microreader](https://github.com/CidVonHighwind/microreader) that adds a cover home page, reading statistics, a daily reading goal, a Finished shelf, a chapter progress bar, more sleep screen options, Wi-Fi file transfer and two more built-in fonts (Literata and Atkinson Hyperlegible). Everything below about Microreader applies to Sami too.
 
 **Installing Sami:** download the firmware from this repository's [Releases](../../releases/latest) page and flash it with the CrossPoint web flasher's **Custom .bin** option (see [Installation](#installation)). Every change to the code builds a new release automatically.
 
@@ -123,13 +123,23 @@ Open **Settings → Reading Stats** for a month calendar of your reading. Each d
 
 **Storage:** one small text file per month in `.microreader/stats/` on the SD card (`YYYY-MM.txt`, one `day seconds pages title` line per reading session). **Clear Cache** does not touch it; delete the folder to reset your stats.
 
+## Home page
+
+Sami starts on a cover home page: **Sami** at the top, a **Finished Books (N)** link, the covers of the three books you opened most recently (finished books are left out) with how far through each you are, and a **Library** link to the full book list. **▲/▼** move through them (the first cover is selected to begin with, and the selected book's title is written out under the covers), **▶** opens the selection and **◀** opens Settings; in the Library, **◀** comes back here. Books without a cover show their title on a plain card. Each cover is decoded once and kept as a small picture in the book's cache folder, so the page draws quickly afterwards.
+
+**Settings → Home Screen** switches between *Covers* and *Book List* (the plain list as the start page, as before).
+
+## Fonts and font size
+
+**Settings → Font** offers four built-in fonts — *Bookerly*, *Alegreya*, *Literata* (serif, cut at its small-text optical size) and *Atkinson Hyperlegible* (sans, designed for legibility) — plus any `.mfb` fonts in the memory card's `fonts` folder. Literata and Atkinson Hyperlegible are under the SIL Open Font License (see `THIRD_PARTY.md`). **Settings → Font Size** sets the text size of books (20–32 px); it's the same setting as *Font Size* in the book menu.
+
 ## Finished Books
 
 While reading, press ▶ to open the book menu and select **Finished: No** to mark the book as finished. It moves off the main book list onto its own shelf: **Finished Books (N)**, the first row of the book list, which lists finished books with the date you finished them, newest first. Select a book there to open it again; select **Finished: Yes** in its menu to put it back on the main list. The shelf is stored in `.microreader/finished.txt` and recognises a book by its title and author, so renaming or moving the file keeps it on the shelf.
 
 ## Book List
 
-The book list (titled **Sami**) starts with **Finished Books (N)**, then your books. **Settings → Book List** chooses how books are shown: *Title*, *Title & Percent Read* (e.g. "The Hobbit · 42%" — the percentage appears once you've opened a book with Sami), *Filename* or *Title & Author*.
+The book list (titled **Library** when opened from the home page, **Sami** when it's the start page) starts with **Finished Books (N)**, then your books. **Settings → Book List** chooses how books are shown: *Title*, *Title & Percent Read* (e.g. "The Hobbit · 42%" — the percentage appears once you've opened a book with Sami), *Filename* or *Title & Author*.
 
 ## Chapter Progress Bar
 

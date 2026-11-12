@@ -16,6 +16,7 @@
 #include "screens/DateTimeScreen.h"
 #include "screens/FileTransferScreen.h"
 #include "screens/FinishedBooksScreen.h"
+#include "screens/HomeScreen.h"
 #include "screens/IScreen.h"
 #include "screens/LinksScreen.h"
 #include "screens/MainMenu.h"
@@ -48,6 +49,7 @@ enum class ScreenId : uint8_t {
   Wifi,
   TextInput,
   FileTransfer,
+  Home,
 };
 
 class Application {
@@ -139,6 +141,25 @@ class Application {
   }
   MainMenu* main_menu() {
     return &menu_;
+  }
+  HomeScreen* home_screen() {
+    return &home_;
+  }
+  // True when `screen` is the bottom of the screen stack (the start page).
+  bool is_root_screen(const IScreen* screen) const {
+    return screen_mgr_.bottom() == screen;
+  }
+
+  // Start page (Settings → Home Screen): the cover home page, or the plain
+  // book list as before.
+  bool home_covers() const {
+    return home_covers_;
+  }
+  void set_home_covers(bool v) {
+    home_covers_ = v;
+    // Settings sits on top of the start page: swap the page underneath.
+    screen_mgr_.replace_bottom(v ? static_cast<IScreen*>(&home_) : static_cast<IScreen*>(&menu_));
+    save_settings_();
   }
   // Reading statistics recorder (fed by ReaderScreen, shown by StatsCalendarScreen).
   ReadingStats& stats() {
@@ -358,6 +379,7 @@ class Application {
   bool goal_enabled_ = false;
   int goal_minutes_ = kDefaultGoalMinutes;
   bool rotate_display_ = false;
+  bool home_covers_ = true;
 
   int menu_font_size_ = 0;
   uint16_t open_counter_ = 0;  // monotonically increasing; incremented each time a book is opened
@@ -373,6 +395,7 @@ class Application {
   ScreenManager screen_mgr_;
 
   MainMenu menu_;
+  HomeScreen home_;
   ReaderScreen reader_;
   SettingsScreen settings_;
   ReaderOptionsScreen reader_options_;

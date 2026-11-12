@@ -44,7 +44,9 @@ static bool ci_less(std::string_view a, std::string_view b) {
 }
 
 void MainMenu::on_start() {
-  title_ = "Sami";
+  // The start page is called Sami; opened from the cover home page, this is
+  // the Library.
+  title_ = (app_ && !app_->is_root_screen(this)) ? "Library" : "Sami";
 
   if (!app_->data_dir_) {
     needs_scan_ = false;
@@ -114,7 +116,12 @@ void MainMenu::stop() {
 }
 
 void MainMenu::on_back() {
-  app_->push_screen(ScreenId::Settings);
+  // As the start page, back opens Settings; as the Library (opened from the
+  // cover home page), back returns there.
+  if (app_->is_root_screen(this))
+    app_->push_screen(ScreenId::Settings);
+  else
+    app_->pop_screen();
 }
 
 void MainMenu::scan_directory_(DrawBuffer& buf) {

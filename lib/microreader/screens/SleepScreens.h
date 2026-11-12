@@ -22,6 +22,7 @@
 namespace microreader {
 
 class DrawBuffer;
+class Epub;
 class IZipFile;
 struct ZipEntry;
 
@@ -51,8 +52,17 @@ bool draw_book_cover(DrawBuffer& buf, const std::string& book_path, const std::s
 // Decode an image ZIP entry (or a plain file wrapped as one) into the box
 // (x, y, w, h), scaled to fit up or down and centred. allow_rotate turns a
 // landscape image 90° when the box is portrait. work/work_size: >= 45 KB.
+// placed (optional, 4 ints): receives the rectangle the image covers within
+// the box (x, y, w, h). crop_pct > 0: when the image's shape is within that
+// many percent of the box's, it fills the box and the overflow is cut off
+// (so near-2:3 book covers all come out the same size).
 bool draw_image_entry(DrawBuffer& buf, IZipFile& file, const ZipEntry& entry, int x, int y, int w, int h,
-                      bool allow_rotate, unsigned char* work, size_t work_size);
+                      bool allow_rotate, unsigned char* work, size_t work_size, int* placed = nullptr,
+                      int crop_pct = 0);
+
+// ZIP index of the book's cover image: the declared cover, or else an image
+// whose name contains "cover". -1 when there is none.
+int find_cover_entry(const Epub& epub);
 
 }  // namespace sleep_screens
 }  // namespace microreader

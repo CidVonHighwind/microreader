@@ -37,3 +37,18 @@ SOFTWARE.
 The X3 hardware details (pins, battery gauge, SD power switch) also follow
 PapyriX's board profiles and an X3 display-driver analysis by CrazyCoder
 (https://gist.github.com/CrazyCoder/82fec0bbd0e515dcc237d3db7451ec6f).
+
+## Reader fonts: Literata and Atkinson Hyperlegible
+
+`resources/fonts/literata.*` and `resources/fonts/atkinson.*` are bitmap
+renderings (made by `tools/make_extra_fonts.py`) of:
+
+- **Literata** (https://github.com/googlefonts/literata), Copyright 2017 The
+  Literata Project Authors, cut at optical size 10 in Regular, Italic, Bold
+  and Bold Italic.
+- **Atkinson Hyperlegible** (https://github.com/googlefonts/atkinson-hyperlegible),
+  Copyright 2020 Braille Institute of America, Inc.
+
+Both are licensed under the SIL Open Font License 1.1; the full licence texts
+are in `resources/fonts/Literata-OFL.txt` and
+`resources/fonts/AtkinsonHyperlegible-OFL.txt`.

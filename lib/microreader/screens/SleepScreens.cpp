@@ -162,11 +162,13 @@ struct DrawTarget {
   int x0, y0;      // top-left of the placed image (logical coordinates)
   int out_h;       // decoded image height (before rotation)
   bool rotate;     // rotate 90° clockwise while drawing
+  int cx0 = -(1 << 30), cy0 = -(1 << 30), cx1 = 1 << 30, cy1 = 1 << 30;  // clip box (cropped covers)
   void plot_black(int x, int y) const {
-    if (rotate)
-      buf->set_pixel(x0 + (out_h - 1 - y), y0 + x, false);
-    else
-      buf->set_pixel(x0 + x, y0 + y, false);
+    const int px = rotate ? x0 + (out_h - 1 - y) : x0 + x;
+    const int py = rotate ? y0 + x : y0 + y;
+    if (px < cx0 || px >= cx1 || py < cy0 || py >= cy1)
+      return;
+    buf->set_pixel(px, py, false);
   }
 };
 
@@ -208,7 +210,7 @@ bool read_entry_image_size(IZipFile& file, const ZipEntry& entry, uint8_t* work,
 }  // namespace
 
 bool draw_image_entry(DrawBuffer& buf, IZipFile& file, const ZipEntry& entry, int x, int y, int w, int h,
-                      bool allow_rotate, unsigned char* work, size_t work_size) {
+                      bool allow_rotate, unsigned char* work, size_t work_size, int* placed, int crop_pct) {
   uint16_t sw = 0, sh = 0;
   if (!read_entry_image_size(file, entry, work, work_size, sw, sh))
     return false;
@@ -217,8 +219,18 @@ bool draw_image_entry(DrawBuffer& buf, IZipFile& file, const ZipEntry& entry, in
   const bool rotate = allow_rotate && sw > sh && h > w;
   const int fit_w = rotate ? h : w;
   const int fit_h = rotate ? w : h;
+  const bool wider = static_cast<int64_t>(sw) * fit_h > static_cast<int64_t>(sh) * fit_w;
+  // Fill the box instead (cropping the overflow) when that cuts off no more
+  // than crop_pct percent of the image.
+  bool fill = false;
+  if (crop_pct > 0) {
+    const int64_t a = static_cast<int64_t>(sw) * fit_h;  // compare sw/sh with fit_w/fit_h
+    const int64_t b = static_cast<int64_t>(sh) * fit_w;
+    const int64_t big = std::max(a, b), small = std::min(a, b);
+    fill = (big - small) * 100 <= big * crop_pct;
+  }
   int ow, oh;
-  if (static_cast<int64_t>(sw) * fit_h > static_cast<int64_t>(sh) * fit_w) {
+  if (wider != fill) {  // fit: wider images span the width; fill: taller ones do
     ow = fit_w;
     oh = std::max(1, static_cast<int>(static_cast<int64_t>(sh) * fit_w / sw));
   } else {
@@ -229,6 +241,18 @@ bool draw_image_entry(DrawBuffer& buf, IZipFile& file, const ZipEntry& entry, in
   const int placed_h = rotate ? ow : oh;
 
   DrawTarget target{&buf, x + (w - placed_w) / 2, y + (h - placed_h) / 2, oh, rotate};
+  if (fill) {
+    target.cx0 = x;
+    target.cy0 = y;
+    target.cx1 = x + w;
+    target.cy1 = y + h;
+  }
+  if (placed) {
+    placed[0] = fill ? x : target.x0;
+    placed[1] = fill ? y : target.y0;
+    placed[2] = fill ? w : placed_w;
+    placed[3] = fill ? h : placed_h;
+  }
   ImageRowSink rows{emit_row, &target};
   ImagePixelSink pixels{emit_pixel, &target};
   DecodedImage out;
@@ -238,6 +262,21 @@ bool draw_image_entry(DrawBuffer& buf, IZipFile& file, const ZipEntry& entry, in
     MR_LOGI("sleep", "image decode failed (%d), %ux%u", static_cast<int>(err), static_cast<unsigned>(sw),
             static_cast<unsigned>(sh));
   return err == ImageError::Ok;
+}
+
+int find_cover_entry(const Epub& epub) {
+  int idx = epub.cover_entry_index();
+  if (idx < 0) {
+    // No declared cover: fall back to an image whose name says "cover".
+    for (size_t i = 0; i < epub.zip().entry_count() && idx < 0; ++i) {
+      std::string lower(epub.zip().entry(i).name);
+      for (char& c : lower)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if (lower.find("cover") != std::string::npos && is_raster_image(lower))
+        idx = static_cast<int>(i);
+    }
+  }
+  return idx;
 }
 
 std::vector<std::string> list_sd_images(bool with_converted) {
@@ -331,17 +370,7 @@ bool draw_book_cover(DrawBuffer& buf, const std::string& book_path, const std::s
       return false;
     }
     const Epub& epub = book.epub();
-    int idx = epub.cover_entry_index();
-    if (idx < 0) {
-      // No declared cover: fall back to an image whose name says "cover".
-      for (size_t i = 0; i < epub.zip().entry_count() && idx < 0; ++i) {
-        std::string lower(epub.zip().entry(i).name);
-        for (char& c : lower)
-          c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-        if (lower.find("cover") != std::string::npos && is_raster_image(lower))
-          idx = static_cast<int>(i);
-      }
-    }
+    const int idx = find_cover_entry(epub);
     if (idx < 0) {
       MR_LOGI("sleep", "cover: none found in %s", book_path.c_str());
       return false;
