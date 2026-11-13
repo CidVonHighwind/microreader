@@ -1,349 +1,393 @@
 # Sami
 
-Sami is a fork of [Microreader](https://github.com/CidVonHighwind/microreader) that adds a cover home page, reading statistics, a daily reading goal, a Finished shelf, a chapter progress bar, more sleep screen options, Wi-Fi file transfer and two more built-in fonts (Literata and Atkinson Hyperlegible). Everything below about Microreader applies to Sami too.
+**A fast, focused EPUB reader for the Xteink X4 and Xteink X3 e-readers** — with a cover home page, reading statistics, sleep screens that change every night, four built-in reading fonts and Wi-Fi book transfer from any phone or computer.
 
-**Installing Sami:** download the firmware from this repository's [Releases](../../releases/latest) page and flash it with the CrossPoint web flasher's **Custom .bin** option (see [Installation](#installation)). Every change to the code builds a new release automatically.
+![Sami on the Xteink: cover home page, Reading Stats, book-cover sleep screen and a page in Literata](images/sami/hero.png)
 
-- `sami-firmware.bin` — Xteink **X4**
-- `sami-firmware-x3.bin` — Xteink **X3** (**experimental**: built for the X3's 792×528 screen, two possible display controllers, battery gauge and SD power switch, but not yet verified on a real X3)
+<p align="center">
+  <a href="../../releases/latest/download/sami-firmware.bin"><b>⬇ Download for Xteink X4</b></a>
+  &nbsp;·&nbsp;
+  <a href="../../releases/latest/download/sami-firmware-x3.bin"><b>⬇ Download for Xteink X3</b></a>
+  &nbsp;·&nbsp;
+  <a href="../../releases">All releases</a>
+  &nbsp;·&nbsp;
+  <a href="#installing">How to install</a>
+</p>
 
 ---
 
-# Microreader
+## About
 
-An EPUB reader for the [Xteink X4](https://xteink.com), written from scratch.
+Sami is custom firmware for the Xteink e-readers, built on top of [Microreader](https://github.com/CidVonHighwind/microreader) by CidVonHighwind. Microreader set out to do one thing very well — render EPUBs beautifully on a small e-ink screen, and stay out of the way — and Sami keeps that core exactly as it is.
 
-Built around one idea: do EPUB rendering really well and nothing else. No Wi-Fi, no Bluetooth, no sync. Just put EPUBs on the SD card and read them.
+What Sami adds is everything around the reading: a home page that opens on the books you're actually reading, a calendar that shows how much you read each day, a daily goal to keep a habit going, a shelf for the books you've finished, a sleep screen that shows something different every time you put the reader down, two extra fonts chosen for small screens, and a way to send books over Wi-Fi without a cable or an app.
 
-The first time you open a book there's a single conversion pass to a compact binary format. After that — changing chapters, adjusting font size, tweaking settings — everything is instant.
+It's a personal project, made for daily reading on a pocket-sized device. Every change is built automatically and published on the [Releases](../../releases) page, so installing or updating is a download and a few clicks in the browser.
 
-**Features**
+## Available for X4 and X3
 
-- EPUB rendering with proportional fonts, bold/italic, and inline images
-- Hyphenation via the Liang/TeX algorithm (EN, DE, FR, ES, IT, NL, PT, PL, RU)
-- Fully configurable reader: font, size, line spacing, margins, justification
-- Multiple built-in and SD card fonts — swap at runtime without reflashing
-- Table of contents navigation with chapter progress display
-- Book position saved and restored automatically per book
-- Customizable sleep screen with looping support
-- Single-pass EPUB → `.mrb` conversion — fast cold open, instant everything after
-- Licensed under GPL v2
+| Device | Firmware file | Status |
+|---|---|---|
+| **Xteink X4** | [`sami-firmware.bin`](../../releases/latest/download/sami-firmware.bin) | Main device, used daily |
+| **Xteink X3** | [`sami-firmware-x3.bin`](../../releases/latest/download/sami-firmware-x3.bin) | **Experimental** — runs on a real X3 (screen, buttons and reading confirmed), still collecting feedback |
 
-**Demo Video**
+Both versions are built from the same code and have the same features. The X3 build drives the X3's 792×528 screen (either of its two display controllers, detected at start-up), its battery gauge and SD card power switch, and stores all four fonts ready to use inside the firmware.
 
-[![Microreader demo](https://img.youtube.com/vi/KPsLV7BLEz0/0.jpg)](https://www.youtube.com/shorts/KPsLV7BLEz0)
+> [!IMPORTANT]
+> The two files are **not interchangeable**. The X4 file on an X3 (or the other way round) gives a scrambled screen. If that happens, just flash the right file — see [Installing](#installing).
 
-https://www.youtube.com/shorts/KPsLV7BLEz0
+## Features
 
-## Installation
+**New in Sami**
+
+- 🏠 **Cover home page** — the covers of your three most recent books with how far through each you are, plus Finished Books and the Library. Prefer a plain list? One setting switches back.
+- 📊 **Reading Stats** — a month calendar of how long you read each day, which books, pages, totals, daily average and streaks.
+- 🎯 **Daily Goal** — pick a target from 10 minutes to 2 hours; days that reach it get a flag and streaks count goal days.
+- ✅ **Finished Books** — mark a book finished and it moves to its own shelf, dated, newest first.
+- 📈 **Percent read in the Library** — e.g. *Pride and Prejudice · 30%*.
+- ▬ **Chapter Bar** — a thin bar along the bottom of the page that fills as you get through the chapter, alongside the usual book progress.
+- 🌙 **Sleep screen randomiser** — a random picture from your own folder every time (never the same twice in a row), or the cover of the book you're reading with its progress, or today's Reading Stats. JPEG, PNG and BMP.
+- 📶 **Wi-Fi Transfer** — add, download, rename and delete books from a phone or computer browser, on your home Wi-Fi or the reader's own hotspot. Remembers your networks.
+- 🔤 **Four built-in fonts** — Bookerly, Alegreya, **Literata** and **Atkinson Hyperlegible**, plus a **Font Size** setting right in Settings.
+- 🕒 **Date & time** — set on the reader, kept through sleep, used to date your reading.
+
+**From Microreader**
+
+- Beautiful EPUB rendering: proportional fonts, bold and italic, inline images, justified text
+- Hyphenation in English, German, French, Spanish, Italian, Dutch, Portuguese, Polish and Russian, picked automatically from the book's language
+- Font, size, line spacing, margins, alignment — all adjustable per reader
+- Table of contents, in-book links, and your place saved for every book
+- Extra fonts from the SD card, swappable without reflashing
+- Portrait or landscape
+- FAT32 and exFAT SD cards
+- USB file manager in the browser, a Calibre plugin, and a command-line tool
+
+---
+
+## A closer look
+
+### ⚡ Speed
+
+Sami is built to feel instant on a small, slow-refreshing screen:
+
+- **Convert once, then everything is immediate.** The first time you open a book it's converted in a single pass into a compact binary format stored on the SD card. After that, opening the book, turning pages, jumping chapters and changing font size don't wait on the EPUB again.
+- **Fast page flipping.** Text is drawn in crisp black and white while you turn pages; the smooth grey edges (anti-aliasing) are added only once you stop, so holding the button flips through pages quickly.
+- **Covers and sleep images are prepared once.** Each book cover is decoded the first time it's shown and kept as a small ready-to-draw picture, so the home page appears straight away. Sleep images and book-cover sleep screens are converted once and cached the same way.
+- **Light on memory.** Hyphenation patterns live in flash, not RAM, and Wi-Fi only turns on when you open Wi-Fi Transfer — it's off the rest of the time and never left running while the reader sleeps.
+
+### 🏠 Home page, Library and Finished Books
+
+The reader starts on your **cover home page**: the three books you opened most recently, how far through each you are, and the selected book's title. **▲/▼** move, **▶** opens, **◀** goes to Settings. Books without a cover get a plain title card.
+
+The **Library** lists everything on the card, and **Settings → Book List** can show *Title*, *Title & Percent Read*, *Filename* or *Title & Author*. Finished books move off the list onto their own **Finished Books** shelf.
+
+**Settings → Home Screen** switches between **Covers** and **Book List** if you'd rather start on the plain list.
+
+![Cover home page, Library with percent read, and the Finished Books shelf](images/sami/home-library.png)
+
+### 📊 Reading Stats and Daily Goal
+
+**Settings → Reading Stats** opens a calendar of the month. Each day shows how long you read with a small bar; select a day to see which books you read. Below: the month's total time, days read (or goals met), pages, daily average, and your current and longest streaks.
+
+Turn on **Settings → Daily Goal** and choose a target (10, 15, 20, 25, 30, 45 minutes, 1, 1½ or 2 hours). Each day's bar then fills at your goal, days that reach it get a flag in the corner, and the day summary says *Goal met*, *18m to go* or *Goal missed*.
+
+Only real reading counts: time on a page is credited when you turn it, capped at 3 minutes, so leaving the reader on doesn't inflate anything, and menus don't count. Stats are kept in small text files on the SD card (`.microreader/stats/`), and **Clear Cache** never touches them.
+
+![Reading Stats calendar with Daily Goal on, and the Settings screen](images/sami/stats-settings.png)
+
+### 🌙 Sleep screen randomiser
+
+**Settings → Sleep Screen** chooses what the reader shows while it sleeps:
+
+| Option | What you see |
+|---|---|
+| **Random image** *(default)* | A random picture from your `sleep` folder every time — never the same one twice in a row |
+| **Book cover** | The cover of the book you're reading, with its title and percent read |
+| **Reading stats** | This month's Reading Stats with today selected |
+
+Drop `.jpg`, `.jpeg`, `.png` or `.bmp` files into a folder called `sleep` on the SD card — or upload them over Wi-Fi. Pictures around **480×800** look best; landscape images are turned sideways to fill the screen. Each image is converted once, the first time it's shown, so later sleeps are quick. Sleep screens show just the picture — no "sleeping…" text on top.
+
+![Sleep screens: book cover with progress, reading stats, and four random images](images/sami/sleep-screens.png)
+
+### 🔤 New fonts
+
+Sami adds two fonts made for reading on small screens, next to Microreader's Bookerly and Alegreya:
+
+- **Literata** — a book serif, in its version cut for small text
+- **Atkinson Hyperlegible** — a clear sans-serif designed for maximum legibility
+
+Choose one in **Settings → Font**, and set the size (20–32) in **Settings → Font Size** — the same setting as *Font Size* in the book menu. Any `.mfb` fonts in the SD card's `fonts` folder show up in the same list.
+
+![The same page in Bookerly, Alegreya, Literata and Atkinson Hyperlegible](images/sami/fonts.png)
+
+### 📶 Wi-Fi Transfer
+
+Send books to the reader from any phone, tablet or computer — no cable, no app.
+
+1. **Settings → Wi-Fi Transfer** (the first item).
+2. Pick your network and type its password once with the on-screen keyboard — Sami remembers it. Or choose **Create a hotspot** and join the network called **Sami Reader** from your phone (handy away from home).
+3. Open **http://sami.local** in a browser — or the number address the reader shows, like `http://192.168.1.42` (on the hotspot it's always `http://192.168.4.1`).
+
+![Wi-Fi Transfer on the reader: network list, password keyboard, connected screen and hotspot](images/sami/wifi-device.png)
+
+Press **◀** when you're done; new books are already in your Library. Wi-Fi also switches itself off after 10 minutes without activity.
+
+> The reader's Wi-Fi works on **2.4 GHz** networks. The page has no password, so use Wi-Fi Transfer at home or on the reader's own hotspot rather than on public Wi-Fi.
+
+### 🖥 Sami Reader Manager (in your browser)
+
+The page you open at **sami.local** is the **Sami Reader** manager: it lists the SD card's folders and files and lets you **upload** (button or drag and drop, several files at once, with progress), **download**, **rename**, **delete** and create **new folders**. It shows free space, hides system files unless you tick *Show hidden*, follows your device's light or dark mode, and fits phone screens.
+
+![Sami Reader manager in a desktop browser](images/sami/web-desktop.png)
+
+![Sami Reader manager in dark mode, and on a phone](images/sami/web-dark-phone.png)
+
+### ▬ Chapter Bar
+
+While reading, press **▶** for the book menu and turn on **Chapter Bar**. An outlined bar along the very bottom of the page fills as you read through the chapter, and your usual progress indicator moves just above it — so you can see both at a glance.
+
+<p align="center"><img src="images/sami/chapter-bar.png" width="420" alt="Chapter bar at the bottom of a page, with book percentage above it"></p>
+
+---
+
+## Installing
 
 > [!WARNING]
-> **Requires an unlocked Xteink X4.** Do not flash this on a locked device — you may be permanently stuck on that firmware.
+> Sami needs an **unlocked** reader — one that already runs Microreader, Sami or CrossPoint. If yours still runs the original Xteink firmware, install CrossPoint first from the same flasher page (step 3), which unlocks it.
 
-Download the latest `.bin` from the **[Releases](https://github.com/CidVonHighwind/microreader/releases)** page.
+You need the reader charged above ~30%, a **USB-C data cable**, and a computer with **Chrome** or **Edge** (Safari and Firefox can't talk to the reader).
 
-Flash using the [Crosspoint flash tool](https://crosspointreader.com/#flash-tools) (browser-based, no install needed), or with [esptool](https://docs.espressif.com/projects/esptool/en/latest/) directly:
+1. **Download** the file for your device: [X4](../../releases/latest/download/sami-firmware.bin) or [X3](../../releases/latest/download/sami-firmware-x3.bin).
+2. Turn the reader on and plug it straight into the computer. Close any other page that's connected to it.
+3. Open the **[CrossPoint web flasher](https://crosspointreader.com/#flash-tools)** and choose your model (**Xteink X4** or **Xteink X3**).
+4. Choose **Custom .bin**, pick the file you downloaded, click **Flash**, select the reader in the pop-up and **Connect**.
+5. Wait until it's done, then restart the reader if it doesn't restart by itself: unplug, press the small **reset** button, then hold **power** for 3–5 seconds. The home page now says **Sami**.
+6. First time only: set the date — on the home page press **◀** for Settings and select **Date**.
 
-```powershell
-python -m esptool --chip esp32c3 --port COM5 --baud 921600 write_flash 0x0 microreader.bin
-```
+Your books, reading positions and settings live on the SD card and are kept.
 
-Replace `COM5` with your device's port (`/dev/ttyUSB0` on Linux, `/dev/cu.usbserial-*` on macOS). Hold BOOT while connecting if the device doesn't enter flash mode automatically.
+**Updating:** download the latest file and repeat steps 2–5. Your stats, finished shelf, Wi-Fi networks and settings stay.
 
-## Managing Content
+**Going back (X4):** the flasher installs Sami next to your previous firmware. **Settings → Switch to app0 / app1** (at the very bottom) restarts into the other one. On the X3, flash the old firmware again with the web flasher.
 
-Books (`.epub`) go anywhere on the SD card — the device scans recursively from the root. Fonts (`.mfb`) go in the `fonts/` folder. Sleep images go in the `.sleep/` folder.
-
-You can copy files directly to the SD card, or transfer them over USB while the device is connected.
-
-### Browser Manager
-
-Open [microreader-manager](https://cidvonhighwind.github.io/microreader/) in Chrome, Edge, or Firefox (Web Serial API). Provides a file browser, EPUB/font/sleep-image upload, and auto-reconnects on page refresh.
-
-![Microreader Manager](images/Microreader%20Manager.png)
-
-Also includes a **Font Generator** for building `.mfb` fonts in the browser with live device preview, size presets, and script/range presets.
-
-![Font Generator](images/Font%20Generator.png)
-
-### Wi-Fi Transfer (Sami)
-
-Manage the SD card from any phone or computer browser, no cable or app needed. Open **Settings** (◀ on the book list) and select **Wi-Fi Transfer**, the first item, then either:
-
-- **Join a Wi-Fi network** — pick your network (type its password once with the on-screen keyboard; Sami remembers it), then open **http://sami.local** — or the address shown on the reader, like `http://192.168.1.42` — on a phone or computer on the same Wi-Fi.
-- **Create a hotspot** — the reader makes its own network called **Sami Reader** and shows its password. Join it from your phone, then open **http://sami.local** or **http://192.168.4.1** (many phones open the page by themselves).
-
-The **Sami Reader** page lists the card's folders and files: upload (button or drag and drop, several at once), download, rename, delete and create folders. Hidden files (starting with `.`) appear with **Show hidden**. Books you upload, rename or delete update the book list when you leave the Wi-Fi screen. Press ◀ to stop Wi-Fi; it also turns itself off after 10 minutes without activity, and while it's on the reader won't fall asleep.
-
-Notes: the reader's Wi-Fi is 2.4 GHz only. The page uses plain HTTP and has no password, so anyone on the same network can open it while Wi-Fi Transfer is on — use it at home or on the hotspot. Remembered networks are kept in `.microreader/wifi.txt` (delete a line to forget one).
-
-### Calibre Plugin
-
-Install the plugin to send books directly from [Calibre](https://calibre-ebook.com):
-
-1. In Calibre: **Preferences → Plugins → Load plugin from file** → select `tools/calibre-plugin/microreader.zip`
-2. Restart Calibre.
-
-The device is detected automatically. Books on the device show checkmarks in the library; you can send and delete books from the Device menu.
-
-> Requires Calibre 5+ and the device connected over USB.
-
-## Sleep Screen
-
-The device shows a sleep screen when it enters deep sleep. Choose it in **Settings → Sleep Screen** (press ▶ to step through the options):
-
-| Option | What it shows |
-|--------|---------------|
-| **Random image** (default) | A random image from your sleep folder each time, never the same one twice in a row |
-| **Book cover** | The cover of the book you're reading, with its title and how far through you are. Books without a cover image fall back to a random image. |
-| **Reading stats** | The Reading Stats calendar with today selected |
-
-Several images are built into the firmware; add your own by putting them in the `sleep/` or `.sleep/` folder on the SD card, or upload them with the browser manager (which uses `sleep/`). When you have your own images, the built-in ones are skipped.
-
-**Supported formats:** JPEG (`.jpg`, `.jpeg`), PNG, and BMP (1 bpp monochrome, 4/8 bpp indexed, 16 bpp RGB565/BGR555, 24 bpp BGR, 32 bpp BGRA). Images are scaled to fit; landscape images are turned sideways to fill the screen. Use 480×800 (or 800×480) for best quality. Very large photos can take a while to convert or fail for lack of memory — resize them first if they don't show.
-
-The first time an image or cover is shown it is converted and cached; later sleeps load the cache directly. Clear the cache via **Settings → Clear Cache**.
-
-## Reading Stats
-
-Open **Settings → Reading Stats** for a month calendar of your reading. Each day shows the time spent reading and a bar that fills at one hour; the selected day lists the books you read, and the panel below shows the month's total time, days read, pages, daily average and current/longest streaks.
-
-| Button | Action |
-|--------|--------|
-| ▲ / ▼ (front, follows *Menu Nav*) | Previous / next day |
-| Side up / down | Previous / next month |
-| ▶ | Set date & time |
-| ◀ | Back |
-
-**How it's counted:** the time a page stays on screen is credited when you turn it, capped at 3 minutes so leaving the device on doesn't count. A forward page turn after at least 2 seconds counts as a page read, so skimming or holding the button doesn't inflate the numbers. Time spent in menus over the book is not counted.
-
-**The clock:** stats are dated with the device clock, which keeps running through sleep. Set it in **Settings → Date & Time** (or press ▶ in the calendar); connecting the browser manager, or running `python tools/serial_cmd.py --sync-time`, sets it from your computer automatically. If the battery is ever fully drained the clock resumes from the last time it was saved — check the date shown on the *Today* line and correct it if needed.
-
-**Daily goal:** turn on **Settings → Daily Goal** and pick a target under it (10 minutes to 2 hours a day). Each day's bar then fills at your goal instead of at one hour, days that reach it get a small flag in the corner, the day summary says whether you met it, "Days read" becomes "Goals met", and streaks only count days that reached the goal.
-
-**Storage:** one small text file per month in `.microreader/stats/` on the SD card (`YYYY-MM.txt`, one `day seconds pages title` line per reading session). **Clear Cache** does not touch it; delete the folder to reset your stats.
-
-## Home page
-
-Sami starts on a cover home page: **Sami** at the top, a **Finished Books (N)** link, the covers of the three books you opened most recently (finished books are left out) with how far through each you are, and a **Library** link to the full book list. **▲/▼** move through them (the first cover is selected to begin with, and the selected book's title is written out under the covers), **▶** opens the selection and **◀** opens Settings; in the Library, **◀** comes back here. Books without a cover show their title on a plain card. Each cover is decoded once and kept as a small picture in the book's cache folder, so the page draws quickly afterwards.
-
-**Settings → Home Screen** switches between *Covers* and *Book List* (the plain list as the start page, as before).
-
-## Fonts and font size
-
-**Settings → Font** offers four built-in fonts — *Bookerly*, *Alegreya*, *Literata* (serif, cut at its small-text optical size) and *Atkinson Hyperlegible* (sans, designed for legibility) — plus any `.mfb` fonts in the memory card's `fonts` folder. Literata and Atkinson Hyperlegible are under the SIL Open Font License (see `THIRD_PARTY.md`). **Settings → Font Size** sets the text size of books (20–32 px); it's the same setting as *Font Size* in the book menu.
-
-## Finished Books
-
-While reading, press ▶ to open the book menu and select **Finished: No** to mark the book as finished. It moves off the main book list onto its own shelf: **Finished Books (N)**, the first row of the book list, which lists finished books with the date you finished them, newest first. Select a book there to open it again; select **Finished: Yes** in its menu to put it back on the main list. The shelf is stored in `.microreader/finished.txt` and recognises a book by its title and author, so renaming or moving the file keeps it on the shelf.
-
-## Book List
-
-The book list (titled **Library** when opened from the home page, **Sami** when it's the start page) starts with **Finished Books (N)**, then your books. **Settings → Book List** chooses how books are shown: *Title*, *Title & Percent Read* (e.g. "The Hobbit · 42%" — the percentage appears once you've opened a book with Sami), *Filename* or *Title & Author*.
-
-## Chapter Progress Bar
-
-In the book menu (▶ while reading), **Chapter Bar: On** adds an outlined bar along the very bottom of the page that fills as you read through the current chapter. It works alongside the regular **Progress** indicator, which moves up above it — for example *Progress: Percent* with *Scope: Book* shows both the whole-book percentage and the chapter bar.
-
-## Building
-
-### Prerequisites
-
-| Tool | Purpose |
-|------|---------|
-| CMake 3.5+ | Build system |
-| SDL2 | Desktop emulator |
-| Python 3 | Tools and scripts |
-| [PlatformIO](https://platformio.org/) | ESP32 firmware build and flash |
-
-### Desktop (emulator)
-
-The desktop build runs the full reader UI in an SDL2 window on Windows, Linux, or macOS — no hardware needed. It uses an `sd/` folder in the working directory as the virtual SD card: drop `.epub` files there to read them, `.mfb` fonts in `sd/fonts/`, and sleep images in `sd/.sleep/`.
-
-```powershell
-cmake -S platforms/desktop -B build/desktop-debug -DCMAKE_BUILD_TYPE=Debug "-DCMAKE_POLICY_VERSION_MINIMUM:STRING=3.5"
-cmake --build build/desktop-debug --config Debug
-.\build\desktop-debug\Debug\microreader_desktop.exe
-```
-
-| | |
-|---|---|
-| ![Book list](images/main%20menu.png) | ![Reader](images/reader.png) |
-
-![Reading options](images/reading%20options.png)
-
-![Settings](images/settings.png)
-
-### ESP32 (PlatformIO)
-
-```powershell
-# Build + flash
-$env:USERPROFILE\.platformio\penv\Scripts\pio.exe run -t upload
-
-# Serial monitor
-$env:USERPROFILE\.platformio\penv\Scripts\pio.exe device monitor --baud 115200
-```
-
-Upload baud: 921600.
-
-### Tests
-
-```powershell
-cd test
-cmake -B build2 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_POLICY_VERSION_MINIMUM:STRING=3.5
-cmake --build build2 --config Debug
-
-.\build2\Debug\unit_tests.exe          # fast (~375 tests, <1s)
-.\build2\Debug\microreader_tests.exe   # includes real EPUB integration tests
-```
-
-### QEMU (no hardware needed)
-
-```powershell
-# Terminal 1
-python tools/run_qemu.py --with-books
-
-# Terminal 2
-python tools/test_books.py --port socket://localhost:4444 --pages 20 --delay 0.1
-```
-
-## Project Structure
-
-```
-lib/microreader/          shared core (platform-agnostic C++20)
-  content/                EPUB parsing, layout, MRB binary format
-  display/                Canvas, DisplayQueue, Font interfaces
-  screens/                UI screen implementations
-platforms/desktop/        SDL2 emulator
-platforms/esp32/          ESP-IDF + PlatformIO firmware
-test/                     Google Test suite
-tools/                    Python scripts and dev tools
-  calibre-plugin/         Calibre device plugin (build.py → microreader.zip)
-docs/                     GitHub Pages — browser-based file manager (Web Serial API)
-resources/                Fonts, sleep images
-```
-
-## Serial Command Line
-
-`tools/serial_cmd.py` talks to the device over USB serial using the same CMND protocol as the browser manager. It has two modes:
-
-**Non-interactive** — pass flags and exit. Useful for scripting and CI:
-
-```powershell
-python tools/serial_cmd.py --port COM5 --upload "book.epub"          # upload an EPUB
-python tools/serial_cmd.py --port COM5 --upload-dir "path/to/dir"    # upload all EPUBs in a folder (skips duplicates)
-python tools/serial_cmd.py --port COM5 --upload-sleep "image.bmp"    # upload a sleep image
-python tools/serial_cmd.py --port COM5 --upload-sd-font "font.mfb"   # upload a font to SD card
-python tools/serial_cmd.py --port COM5 --list                        # list books on device
-python tools/serial_cmd.py --port COM5 --sync-time                   # set the device clock from this PC
-```
-
-**Interactive** — a REPL for manual control:
-
-```powershell
-python tools/serial_cmd.py --port COM5
-```
-
-Interactive commands include `open`, `rm`, `upload`, `btn` (simulate button presses), `test` (open every book and watch for pass/fail), `bench` (conversion benchmark), and more. Type `help` once connected for the full list.
-
-## Font Generation
-
-UI fonts (the bitmap fonts used for the device interface) are built from source using `tools/generate_font.py` and embedded as headers:
-
-```powershell
-python tools/generate_font.py resources/fonts/terminus/Terminus-Bold.ttf 14 --header lib/microreader/display/ui_font_small.h --bw-only --ranges ui
-python tools/generate_font.py resources/fonts/terminus/Terminus-Bold.ttf 18 --header lib/microreader/display/ui_font_medium.h --bw-only --ranges ui
-python tools/generate_font.py resources/fonts/terminus/Terminus-Bold.ttf 24 --header lib/microreader/display/ui_font_large.h --bw-only --ranges ui
-python tools/generate_font.py resources/fonts/terminus/Terminus-Bold.ttf 32 --header lib/microreader/display/ui_font_header.h --bw-only --ranges ui
-```
-
-Reader fonts (`.mfb`) are generated via the browser **Font Generator** in the [microreader-manager](https://cidvonhighwind.github.io/microreader/). SD card fonts must fit within 3.375 MB (`0x360000` bytes including the 4 KB header).
-
-## Hyphenation
-
-Uses the [Liang/TeX algorithm](https://tug.org/docs/liang/) with pattern files compiled into binary tries by [Typst hypher](https://github.com/typst/hypher). Supported languages: EN, DE, FR, ES, IT, NL, PT, PL, RU. Language is detected automatically from the EPUB's `xml:lang` attribute.
-
-Trie data is embedded as `constexpr` byte arrays in `lib/microreader/content/hyphenation/Liang/` — no heap allocation, no flash reads at runtime (placed in DROM on ESP32).
+**Which version do I have?** It's under the title in Settings, e.g. *Build 10 (2.0-dev.390)*.
 
 <details>
-<summary>Adding a new language</summary>
+<summary>Flashing from the command line instead (esptool)</summary>
 
-1. Download the `.bin` from [typst/hypher/tries](https://github.com/typst/hypher/tree/main/tries) into `tools/hyphenation/`
-2. Generate the header: `python tools/generate_trie_header.py tools/hyphenation/<lang>.bin lib/microreader/content/hyphenation/Liang/hyph-<lang>.trie.h <lang>`
-3. Add the new enum value to `HyphenationLang` in `Hyphenation.h`
-4. Add a `#include` + `case` in `Hyphenation.cpp` (`hyphenate_word`) and an `ieq` check in `detect_language`
+Sami's release files are app images for the reader's spare firmware slot. With [esptool](https://docs.espressif.com/projects/esptool/en/latest/), write the file to the slot you want and point the boot record at it:
 
+```bash
+# X4: app0 starts at 0x10000, app1 at 0x650000
+python -m esptool --chip esp32c3 --port /dev/ttyACM0 --baud 921600 write_flash 0x10000 sami-firmware.bin
+python tools/switch_partition.py app0 --port /dev/ttyACM0 --flash
+```
+
+Replace the port with yours (`COM5` on Windows, `/dev/cu.usbmodem*` on macOS).
 </details>
 
-## Firmware Backup & Restore
+## Getting books onto the reader
 
-The default X4 firmware uses two app partitions — `app0` (at `0x10000`) and `app1` (at `0x650000`). A small OTA data sector at `0xE000` records which one to boot. When you flash new firmware directly with esptool, the OTA data may still point to the other partition, causing the device to boot the old firmware — use `switch_partition.py` to fix that.
+| Way | How |
+|---|---|
+| **Wi-Fi Transfer** | Settings → Wi-Fi Transfer, then open **sami.local** in any browser. [Details](#-wi-fi-transfer) |
+| **SD card** | Copy `.epub` files anywhere on the card — Sami finds them in every folder. Fonts go in `fonts/`, sleep images in `sleep/`. |
+| **USB browser manager** | Open the [Microreader Manager](https://cidvonhighwind.github.io/microreader/) in Chrome or Edge with the reader plugged in: upload books, fonts and sleep images over the cable. Connecting it also sets the reader's clock. |
+| **Calibre** | Send books straight from your Calibre library — see below. |
 
-Replace `COM5` with your port (`/dev/ttyUSB0` on Linux, `/dev/cu.usbserial-*` on macOS).
+<p align="center"><img src="images/Microreader%20Manager.png" width="720" alt="USB browser manager"></p>
 
-### Backup
+### Calibre plugin
 
-```powershell
-# Full 16 MB flash
-python -m esptool --chip esp32c3 --port COM5 read_flash 0x0 0x1000000 firmware_backup.bin
+Send and delete books on the reader from [Calibre](https://calibre-ebook.com), over USB.
 
-# app0 only (faster)
+1. In Calibre: **Preferences → Plugins → Load plugin from file** and choose [`tools/calibre-plugin/microreader.zip`](tools/calibre-plugin/microreader.zip).
+2. Restart Calibre and plug in the reader.
+
+The reader is detected automatically (it appears as *Microreader*, since Sami speaks the same USB protocol). Books already on it get a checkmark in your library; use **Send to device** and the Device view as with any e-reader. Requires Calibre 5 or newer, on Windows, macOS or Linux.
+
+### Custom fonts
+
+Make your own `.mfb` reader fonts from any TTF/OTF with the **Font Generator** in the [browser manager](https://cidvonhighwind.github.io/microreader/) — live preview, size presets and character-range presets — and put them in the SD card's `fonts/` folder. A font file can be up to 3.375 MB on the X4; the X3 has less room for SD fonts and says *Font too large!* if one doesn't fit.
+
+<p align="center"><img src="images/Font%20Generator.png" width="720" alt="Font Generator"></p>
+
+## Buttons
+
+| Where | ◀ | ▶ | ▲ / ▼ (front) | Side buttons |
+|---|---|---|---|---|
+| **Home page** | Settings | Open | Move | Move |
+| **Lists & Settings** | Back | Select / change | Move | Move |
+| **Reading** | Back | Book menu | Turn page | Turn page |
+| **Reading Stats** | Back | Set date & time | Previous / next day | Previous / next month |
+| **Wi-Fi keyboard** | Delete | Type key | Move along keys | Row up / down |
+
+Page-turn and menu directions can be flipped in **Settings → Side Paging / Bottom Paging / Menu Nav**. The power button puts the reader to sleep; it also sleeps by itself after 10 minutes.
+
+---
+
+## Building from source
+
+### The easy way: GitHub builds it for you
+
+Every push to this repository runs [`.github/workflows/build-firmware.yml`](.github/workflows/build-firmware.yml), which:
+
+1. builds both firmware files (`esp32c3` for the X4, `esp32c3-x3` for the X3) with exFAT support,
+2. checks each file is a valid app image, that the two differ, and that each fits its device's firmware slot (X4: 6.25 MB, X3: 7.4 MB),
+3. publishes them as a release.
+
+Releases are named from the first line of [`release.txt`](release.txt) — `Build 10 - homepage options and fonts` becomes tag `build-10` — and the lines after it become the release's *What's new*. Pushing again with the same name replaces that release. Nothing needs to be installed on your computer.
+
+### Building locally
+
+| Tool | For |
+|---|---|
+| [PlatformIO](https://platformio.org/) | Firmware for the reader (installs the ESP-IDF toolchain itself) |
+| CMake 3.16+ and a C++ compiler (GCC, Clang or MSVC) | Desktop emulator and tests |
+| Python 3 | Build scripts and tools (`pip install -r tools/requirements.txt`) |
+
+**Firmware:**
+
+```bash
+pio run -e esp32c3            # Xteink X4  → .pio/build/esp32c3/firmware.bin
+pio run -e esp32c3-x3         # Xteink X3  → .pio/build/esp32c3-x3/firmware.bin
+pio run -e esp32c3 -t upload  # build and flash over USB
+pio device monitor -b 115200  # serial log
+```
+
+**Desktop emulator** — the whole reader in a window, no hardware needed (SDL2 is downloaded automatically):
+
+```bash
+cmake -S platforms/desktop -B build/desktop -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+cmake --build build/desktop
+./build/desktop/microreader_desktop        # Windows: build\desktop\Release\microreader_desktop.exe
+```
+
+It uses the repository's `sd/` folder as its SD card: put `.epub` files there, fonts in `sd/fonts/`, sleep images in `sd/sleep/`. Keys: **← →** are ◀ ▶, **↑ ↓** the front buttons, **Q / A** the side buttons, **Enter** is power. The screenshots in this README were taken from the emulator, using public-domain books.
+
+**Tests** (Google Test, downloaded automatically):
+
+```bash
+cmake -S test -B test/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+cmake --build test/build
+./test/build/unit_tests            # fast unit tests
+./test/build/microreader_tests     # also runs real EPUB integration tests
+```
+
+<details>
+<summary>QEMU — run the real firmware without a device</summary>
+
+```bash
+python tools/run_qemu.py --with-books                                          # terminal 1
+python tools/test_books.py --port socket://localhost:4444 --pages 20 --delay 0.1  # terminal 2
+```
+</details>
+
+<details>
+<summary>Serial command line</summary>
+
+`tools/serial_cmd.py` talks to the reader over USB using the same protocol as the browser manager.
+
+```bash
+python tools/serial_cmd.py --port COM5 --upload "book.epub"          # upload a book
+python tools/serial_cmd.py --port COM5 --upload-dir "path/to/books"  # upload a folder (skips duplicates)
+python tools/serial_cmd.py --port COM5 --upload-sleep "image.png"    # upload a sleep image
+python tools/serial_cmd.py --port COM5 --upload-sd-font "font.mfb"   # upload a font
+python tools/serial_cmd.py --port COM5 --list                        # list books
+python tools/serial_cmd.py --port COM5 --sync-time                   # set the reader's clock from this computer
+python tools/serial_cmd.py --port COM5                               # interactive mode — type `help`
+```
+</details>
+
+<details>
+<summary>Backing up and restoring the X4's flash</summary>
+
+The X4 has two firmware slots — `app0` at `0x10000` and `app1` at `0x650000` — and a boot record at `0xE000` that says which one starts.
+
+```bash
+# Back up everything (16 MB) / one slot
+python -m esptool --chip esp32c3 --port COM5 read_flash 0x0 0x1000000 full_backup.bin
 python -m esptool --chip esp32c3 --port COM5 read_flash 0x10000 0x640000 app0_backup.bin
 
-# app1 only
-python -m esptool --chip esp32c3 --port COM5 read_flash 0x650000 0x640000 app1_backup.bin
-```
+# Restore
+python -m esptool --chip esp32c3 --port COM5 write_flash 0x0 full_backup.bin
 
-### Restore
-
-```powershell
-# Full flash
-python -m esptool --chip esp32c3 --port COM5 write_flash 0x0 firmware_backup.bin
-
-# app0 only
-python -m esptool --chip esp32c3 --port COM5 write_flash 0x10000 app0_backup.bin
-
-# app1 only
-python -m esptool --chip esp32c3 --port COM5 write_flash 0x650000 app1_backup.bin
-```
-
-### Switch boot partition
-
-```powershell
+# Choose which slot boots
 python tools/switch_partition.py app0 --port COM5 --flash
-python tools/switch_partition.py app1 --port COM5 --flash
 ```
+</details>
 
-## Calibre Plugin Development
+<details>
+<summary>Calibre plugin development</summary>
 
-The plugin source lives in `tools/calibre-plugin/`. It bundles `pyserial` because Calibre's embedded Python doesn't include it.
-
-### Build
+The plugin lives in `tools/calibre-plugin/` and bundles `pyserial`, which Calibre's Python doesn't include.
 
 ```bash
 cd tools/calibre-plugin
-python build.py             # packages __init__.py + serial/ into microreader.zip
-python build.py --install   # ...and also copies it into Calibre's plugins folder
+python build.py             # → microreader.zip
+python build.py --install   # …and copy it into Calibre's plugins folder
+calibre-debug -g            # run Calibre with the plugin's log in the terminal
+calibre-debug -e test.py    # check device detection and the protocol without the Calibre window
 ```
+</details>
 
-### Debug
+<details>
+<summary>Adding a hyphenation language</summary>
 
-```powershell
-.\launch-debug.ps1   # equivalent to: calibre-debug -g
+Hyphenation uses the [Liang/TeX algorithm](https://tug.org/docs/liang/) with patterns compiled by [Typst hypher](https://github.com/typst/hypher), stored as constant tables in `lib/microreader/content/hyphenation/Liang/`.
+
+1. Download the language's `.bin` from [typst/hypher/tries](https://github.com/typst/hypher/tree/main/tries) into `tools/hyphenation/`.
+2. `python tools/generate_trie_header.py tools/hyphenation/<lang>.bin lib/microreader/content/hyphenation/Liang/hyph-<lang>.trie.h <lang>`
+3. Add the language to `HyphenationLang` in `Hyphenation.h`, and to `hyphenate_word` and `detect_language` in `Hyphenation.cpp`.
+</details>
+
+### Project layout
+
 ```
-
-All `print()` calls in `__init__.py` appear in that terminal, prefixed with `[Microreader]`.
-
-### Protocol smoke test (no Calibre needed)
-
-```powershell
-& "C:\Program Files\Calibre2\calibre-debug.exe" -e test.py
+lib/microreader/        the reader itself — platform-independent C++
+  content/              EPUB parsing, layout, hyphenation, the .mrb book format
+  screens/              every screen: home, library, reader, settings, stats, Wi-Fi…
+  stats/  library/      reading statistics, finished shelf, percent read
+  net/                  Wi-Fi Transfer: file server API and the Sami Reader web page
+platforms/esp32/        firmware for the X4 and X3 (displays, buttons, SD card, Wi-Fi)
+platforms/desktop/      SDL2 desktop emulator
+test/                   unit and integration tests
+tools/                  build scripts, serial tool, Calibre plugin, font tools
+docs/                   USB browser manager and Font Generator (GitHub Pages)
+resources/              fonts and built-in sleep images
 ```
-
-Opens the serial port directly and verifies device detection and the CMND protocol without starting the full Calibre GUI.
 
 ---
 
+## Where Sami keeps things on the SD card
+
+| Path | What |
+|---|---|
+| `*.epub` (any folder) | Your books |
+| `fonts/` | Extra `.mfb` fonts |
+| `sleep/` | Your sleep screen pictures |
+| `.microreader/stats/` | Reading Stats, one file per month |
+| `.microreader/finished.txt` | The Finished Books shelf |
+| `.microreader/wifi.txt` | Remembered Wi-Fi networks |
+| `.microreader/cache/` | Converted books and cover thumbnails — safe to clear with **Settings → Clear Cache** |
+
+## Troubleshooting
+
+- **The flasher can't find the reader** — try another USB-C cable (many are charge-only), another port, and make sure the reader is awake and no other tab is connected to it.
+- **Blank screen after flashing** — press reset, then hold power for 3–5 seconds.
+- **Scrambled or mirrored screen** — the wrong file for the device; flash the other one.
+- **My Wi-Fi isn't listed** — it may be 5 GHz only. Choose the 2.4 GHz network, move closer and *Search again*, or use the hotspot.
+- **sami.local doesn't open** (common on Android) — type the number address shown on the reader instead.
+- **A cover or sleep image looks wrong** — **Settings → Clear Cache** prepares it again. Very large photos may not decode; resize them to about 480×800 and save as a regular (not progressive) JPEG or PNG.
+
+## Credits
+
+- **[Microreader](https://github.com/CidVonHighwind/microreader)** by CidVonHighwind — the reader engine, rendering, browser manager, font generator and Calibre plugin that Sami is built on.
+- **X3 display driver** ported from [PapyriX](https://github.com/bigbag/papyrix-reader) and the FreeInk SDK (MIT) — see [THIRD_PARTY.md](THIRD_PARTY.md).
+- **Fonts:** [Literata](https://github.com/googlefonts/literata) and [Atkinson Hyperlegible](https://github.com/googlefonts/atkinson-hyperlegible) under the SIL Open Font License.
+- **Flashing:** the [CrossPoint](https://crosspointreader.com/#flash-tools) web flasher.
+- Hyphenation patterns via [Typst hypher](https://github.com/typst/hypher).
+
 ## License
 
-GPL v2 — see [LICENSE](LICENSE).
+GPL v2 — see [LICENSE](LICENSE). Third-party components keep their own licenses; see [THIRD_PARTY.md](THIRD_PARTY.md).
